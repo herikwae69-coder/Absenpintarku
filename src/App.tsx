@@ -35,7 +35,8 @@ import {
   ClipboardList,
   BadgeCheck,
   AlertCircle,
-  Menu
+  Menu,
+  History
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -91,11 +92,27 @@ const formatPeriod = (start: Date, end: Date) => {
 };
 
 // --- CALCULATION HELPERS ---
+const toDateSafe = (val: any): Date => {
+  if (!val) return new Date();
+  if (typeof val.toDate === 'function') {
+    const d = val.toDate();
+    return isNaN(d.getTime()) ? new Date() : d;
+  }
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? new Date() : val;
+  }
+  if (typeof val === 'object' && 'seconds' in val) {
+    return new Date(val.seconds * 1000);
+  }
+  const parsed = new Date(val);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
 const calculateMinutesDiff = (scheduledStr: string, actual: any) => {
   if (!actual) return 0;
-  const actualDate = actual.toDate();
+  const actualDate = toDateSafe(actual);
   const [h, m] = scheduledStr.split(':').map(Number);
-  const scheduledDate = new Date(actualDate);
+  const scheduledDate = actualDate instanceof Date ? new Date(actualDate.getTime()) : new Date();
   scheduledDate.setHours(h, m, 0, 0);
   return Math.floor((actualDate.getTime() - scheduledDate.getTime()) / 60000);
 };
@@ -177,15 +194,20 @@ export default function App() {
   }, []);
 
   const handleLogin = (employee: Employee, credential: string) => {
-    // Default password is 123456 if not set
-    const userPassword = employee.password || "123456";
-    const isValid = userPassword === credential;
-    
-    if (isValid) {
-      setCurrentUser(employee);
-      setView('employee');
-    } else {
-      alert("Password Salah! (Default: 123456)");
+    try {
+        // Default password is 123456 if not set
+        const userPassword = employee.password || "123456";
+        const isValid = userPassword === credential;
+        
+        if (isValid) {
+            setCurrentUser(employee);
+            setView('employee');
+        } else {
+            alert("Password Salah! (Default: 123456)");
+        }
+    } catch (e) {
+        console.error("Login error:", e);
+        alert("Terjadi kesalahan saat login.");
     }
   };
 
@@ -270,7 +292,7 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
   const [adminPass, setAdminPass] = useState("");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
-  const selectedEmployee = employees.find(e => e.pin === absenId);
+  const selectedEmployee = employees.find(e => String(e.pin || '').trim() === absenId.trim());
 
   return (
     <div className="h-screen flex flex-col items-center justify-center p-4 overflow-hidden relative">
@@ -371,6 +393,11 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
                       placeholder="••••••••" 
                       value={pin}
                       onChange={(e) => setPin(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && selectedEmployee && pin) {
+                          onLogin(selectedEmployee, pin);
+                        }
+                      }}
                       className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
                     />
                     <p className="text-[9px] text-white/20 text-center italic">Default password: 123456</p>
@@ -385,6 +412,11 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
                   placeholder="Masukkan password..." 
                   value={adminPass}
                   onChange={(e) => setAdminPass(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && adminPass) {
+                      onAdminAuth(adminPass);
+                    }
+                  }}
                   className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
                 />
               </div>
@@ -433,6 +465,21 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState("");
   const [confirmAction, setConfirmAction] = useState<null | 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>(null);
+  const periodOptions = getPeriodOptions();
+  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
+  const [history, setHistory] = useState<Attendance[]>([]);
+
+  useEffect(() => {
+     const q = query(
+        collection(db, 'attendance'),
+        where('employeeId', '==', employee.id),
+        orderBy('date', 'desc')
+     );
+     // Filter by period logic will be applied in render based on start/end dates
+     const unsub = onSnapshot(q, (snap) => setHistory(snap.docs.map(d => ({id: d.id, ...d.data()} as Attendance))));
+     return unsub;
+  }, [employee.id]);
+
   const [activeTab, setActiveTab] = useState('absen');
   const [showChangePass, setShowChangePass] = useState(false);
   const [newPass, setNewPass] = useState("");
@@ -447,15 +494,23 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
     const q = query(collection(db, 'attendance'), where('employeeId', '==', employee.id), where('date', '==', today));
     const unsub = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
-        const data = snapshot.docs[0].data() as Attendance;
-        setAttendance({ id: snapshot.docs[0].id, ...data } as Attendance);
-        setSelectedShiftId(data.shiftId || "");
+        const doc = snapshot.docs[0];
+        const data = doc.data() as Attendance;
+        setAttendance({ id: doc.id, ...data } as Attendance);
+        setSelectedShiftId(data?.shiftId || "");
       } else {
         setAttendance(null);
+        // Auto-select Day Off shift on Sundays
+        if (currentTime.getDay() === 0) {
+          const dayOffShift = shifts.find(s => s.name.toLowerCase().replace(/\s/g, '') === 'dayoff');
+          if (dayOffShift) {
+            setSelectedShiftId(dayOffShift.id);
+          }
+        }
       }
     }, (err) => console.error("Employee attendance error:", err));
     return unsub;
-  }, [employee.id, today]);
+  }, [employee.id, today, currentTime.getDay(), shifts]);
 
   const handleAction = async (action: 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut') => {
     const time = new Date();
@@ -592,7 +647,7 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 glass-panel p-1.5 h-auto md:h-16 bg-white/5 border-white/10 mb-8 rounded-2xl gap-2">
+        <TabsList className="grid w-full grid-cols-4 glass-panel p-1.5 h-auto md:h-16 bg-white/5 border-white/10 mb-8 rounded-2xl gap-2">
           <TabsTrigger value="absen" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
             <Clock className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Absen</span>
           </TabsTrigger>
@@ -601,6 +656,9 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
           </TabsTrigger>
           <TabsTrigger value="ristan" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
             <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan</span>
+          </TabsTrigger>
+          <TabsTrigger value="riwayat" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
+            <History className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Riwayat</span>
           </TabsTrigger>
         </TabsList>
 
@@ -653,7 +711,7 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
                   </div>
                   <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">Masuk</p>
                   <p className="text-2xl font-bold text-white mb-4">
-                    {attendance?.checkIn ? format(attendance.checkIn.toDate(), 'HH:mm') : '--:--'}
+                    {attendance?.checkIn ? format(toDateSafe(attendance.checkIn), 'HH:mm') : '--:--'}
                   </p>
                 </div>
               </CardContent>
@@ -680,7 +738,7 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
                   </div>
                   <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">Istirahat</p>
                   <p className="text-2xl font-bold text-white mb-4">
-                    {attendance?.breakStart ? format(attendance.breakStart.toDate(), 'HH:mm') : '--:--'}
+                    {attendance?.breakStart ? format(toDateSafe(attendance.breakStart), 'HH:mm') : '--:--'}
                   </p>
                 </div>
               </CardContent>
@@ -704,7 +762,7 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
                   </div>
                   <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">Selesai Ist.</p>
                   <p className="text-2xl font-bold text-white mb-4">
-                    {attendance?.breakEnd ? format(attendance.breakEnd.toDate(), 'HH:mm') : '--:--'}
+                    {attendance?.breakEnd ? format(toDateSafe(attendance.breakEnd), 'HH:mm') : '--:--'}
                   </p>
                 </div>
               </CardContent>
@@ -728,7 +786,7 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
                   </div>
                   <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">Pulang</p>
                   <p className="text-2xl font-bold text-white mb-4">
-                    {attendance?.checkOut ? format(attendance.checkOut.toDate(), 'HH:mm') : '--:--'}
+                    {attendance?.checkOut ? format(toDateSafe(attendance.checkOut), 'HH:mm') : '--:--'}
                   </p>
                 </div>
               </CardContent>
@@ -756,7 +814,7 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
               </CardHeader>
               <CardContent className="p-4">
                 <div className="text-xs text-white/40 space-y-1">
-                  <p>Terakhir diperbarui: {attendance.updatedAt ? format(attendance.updatedAt.toDate(), 'HH:mm:ss') : '-'}</p>
+                  <p>Terakhir diperbarui: {attendance.updatedAt ? format(toDateSafe(attendance.updatedAt), 'HH:mm:ss') : '-'}</p>
                   <p className="italic">Data absen tersimpan otomatis di server.</p>
                 </div>
               </CardContent>
@@ -766,6 +824,59 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
 
         <TabsContent value="libur" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
           <EmployeeLeave employee={employee} sections={sections} />
+        </TabsContent>
+
+        <TabsContent value="riwayat" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+          <Card className="glass-panel border-none shadow-lg">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-white">Riwayat Absensi</CardTitle>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white">
+                  <SelectValue placeholder="Pilih Periode" />
+                </SelectTrigger>
+                <SelectContent className="glass-panel border-white/20 text-white">
+                  {periodOptions.map(p => <SelectItem key={p.value} value={p.value} className="hover:bg-white/10">{p.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto no-scrollbar">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
+                      <TableHead className="text-white/40">Tanggal</TableHead>
+                      <TableHead className="text-white/40">Masuk</TableHead>
+                      <TableHead className="text-white/40">Pulang</TableHead>
+                      <TableHead className="text-white/40">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history
+                      .filter(h => {
+                         const p = periodOptions.find(op => op.value === selectedPeriod);
+                         if (!p) return true;
+                         return h.date >= format(p.start, 'yyyy-MM-dd') && h.date <= format(p.end, 'yyyy-MM-dd');
+                      })
+                      .map(a => (
+                      <TableRow key={a.id} className="border-white/5 hover:bg-white/5">
+                        <TableCell className="text-white/70">{a.date ? format(new Date(a.date), 'dd MMM yyyy') : '-'}</TableCell>
+                        <TableCell className="text-white/70 font-mono">{a.checkIn ? format(toDateSafe(a.checkIn), 'HH:mm') : '-'}</TableCell>
+                        <TableCell className="text-white/70 font-mono">{a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '-'}</TableCell>
+                        <TableCell><Badge variant="outline" className="border-white/20 text-white/50">{a.status.toUpperCase()}</Badge></TableCell>
+                      </TableRow>
+                    ))}
+                    {history.filter(h => {
+                         const p = periodOptions.find(op => op.value === selectedPeriod);
+                         if (!p) return true;
+                         return h.date >= format(p.start, 'yyyy-MM-dd') && h.date <= format(p.end, 'yyyy-MM-dd');
+                      }).length === 0 && (
+                      <TableRow><TableCell colSpan={4} className="text-center py-6 text-white/30 italic">Tidak ada data untuk periode ini.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="ristan" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
@@ -814,101 +925,63 @@ function AdminDashboard({
   ];
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-screen overflow-hidden bg-[#0A0F1E] w-full">
-      {/* Sidebar - Desktop Only */}
-      <aside className="w-64 glass-panel border-y-0 border-l-0 rounded-none text-white flex flex-col p-6 hidden lg:flex bg-white/5 shadow-2xl z-20">
-        <div className="flex items-center gap-3 mb-10 px-2">
-          <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30 shadow-sm shadow-primary/20">
-            <Settings className="w-5 h-5 text-primary" />
-          </div>
-          <span className="font-bold text-lg whitespace-nowrap tracking-tight">Admin JOGJA 1</span>
-        </div>
-        
-        <nav className="flex-1 space-y-2 overflow-y-auto no-scrollbar pr-2">
-          <div className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4 px-3 flex items-center gap-2">
-            <div className="h-[1px] flex-1 bg-white/5" />
-            Navigasi
-            <div className="h-[1px] flex-1 bg-white/5" />
-          </div>
-          <TabsList className="flex flex-col h-auto bg-transparent w-full gap-1 items-stretch p-0">
-            {menuItems.map((item) => (
-              <TabsTrigger 
-                key={item.value}
-                value={item.value} 
-                className="justify-start gap-3 h-11 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-primary/20 text-white/40 hover:text-white/80 hover:bg-white/5"
-              >
-                {item.icon}
-                <span className="font-medium">{item.label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </nav>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-screen flex-col overflow-hidden bg-[#0A0F1E] w-full">
+      {/* Header with Integrated Menu */}
+      <header className="h-16 w-full glass-panel border-x-0 border-t-0 rounded-none px-4 md:px-8 flex items-center sticky top-0 z-30 bg-black/40 backdrop-blur-xl shrink-0 gap-4">
+        <Dialog open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+          <DialogTrigger 
+            render={
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
+                <Menu className="w-6 h-6" />
+              </Button>
+            }
+          />
+          <DialogContent className="glass-panel border-white/10 text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl">
+            <div className="flex items-center gap-3 mb-10 px-2">
+              <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
+                <Settings className="w-5 h-5 text-primary" />
+              </div>
+              <span className="font-bold text-lg text-white">Menu Admin</span>
+            </div>
+            <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar">
+              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 items-stretch p-0">
+                {menuItems.map((item) => (
+                  <TabsTrigger 
+                    key={item.value}
+                    value={item.value} 
+                    onClick={() => setIsMobileOpen(false)}
+                    className="justify-start gap-4 h-12 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-white font-semibold text-white/50"
+                  >
+                    <div className={`p-2 rounded-lg ${activeTab === item.value ? 'bg-white/20' : 'bg-white/5'}`}>
+                      {item.icon}
+                    </div>
+                    {item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </nav>
+            <div className="mt-auto pt-6 border-t border-white/10">
+              <Button variant="ghost" onClick={onLogout} className="w-full justify-start text-rose-400 hover:bg-rose-500/10 px-4 h-11 rounded-xl">
+                <LogOut className="w-4 h-4 mr-3" /> Keluar Akun
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
-        <div className="mt-auto pt-6 border-t border-white/5">
-          <Button variant="ghost" onClick={onLogout} className="w-full justify-start text-white/40 hover:text-white hover:bg-rose-500/10 hover:text-rose-400 rounded-xl px-4 h-11 transition-all">
-            <LogOut className="w-4 h-4 mr-3" /> Keluar Akun
-          </Button>
+        <span className="font-bold text-white tracking-tight text-lg">Panel Administrasi</span>
+          
+        <div className="ml-auto">
+          <Button variant="ghost" size="icon" onClick={onLogout} className="text-white/30 hover:text-white hover:bg-rose-500/10 rounded-full h-9 w-9"><LogOut className="w-4 h-4" /></Button>
         </div>
-      </aside>
+      </header>
 
       {/* Main Content */}
       <main className="flex-1 relative flex flex-col min-w-0 bg-[#0A0F1E] overflow-y-auto no-scrollbar">
         <div className="absolute inset-0 bg-gradient-to-br from-[#0A0F1E] to-[#12182B] pointer-events-none" />
         
-        {/* Header Mobile & Desktop Title */}
-        <header className="h-16 glass-panel border-x-0 border-t-0 rounded-none px-4 md:px-8 flex items-center justify-between sticky top-0 z-30 bg-black/40 backdrop-blur-xl shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="lg:hidden">
-              <Dialog open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-                <DialogTrigger 
-                  render={
-                    <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                      <Menu className="w-6 h-6" />
-                    </Button>
-                  }
-                />
-                <DialogContent className="lg:hidden glass-panel border-white/10 text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl">
-                  <div className="flex items-center gap-3 mb-10 px-2">
-                    <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
-                      <Settings className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="font-bold text-lg text-white">Menu Admin</span>
-                  </div>
-                  <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar">
-                    <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 items-stretch p-0">
-                      {menuItems.map((item) => (
-                        <TabsTrigger 
-                          key={item.value}
-                          value={item.value} 
-                          onClick={() => setIsMobileOpen(false)}
-                          className="justify-start gap-4 h-12 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-white font-semibold text-white/50"
-                        >
-                          <div className={`p-2 rounded-lg ${activeTab === item.value ? 'bg-white/20' : 'bg-white/5'}`}>
-                            {item.icon}
-                          </div>
-                          {item.label}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </nav>
-                  <div className="mt-auto pt-6 border-t border-white/10">
-                    <Button variant="ghost" onClick={onLogout} className="w-full justify-start text-rose-400 hover:bg-rose-500/10 px-4 h-11 rounded-xl">
-                      <LogOut className="w-4 h-4 mr-3" /> Keluar Akun
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-            <span className="font-bold text-white tracking-tight text-lg ml-1">Panel Administrasi</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={onLogout} className="text-white/30 hover:text-white hover:bg-rose-500/10 rounded-full h-9 w-9"><LogOut className="w-4 h-4" /></Button>
-          </div>
-        </header>
-
         {/* Content Area */}
         <div className="flex-1 p-4 md:p-8 relative z-0">
-          <div className="max-w-6xl mx-auto space-y-6">
+          <div className="max-w-7xl mx-auto space-y-6">
             <div className="flex flex-col gap-1 mb-8">
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white capitalize">
                 {menuItems.find(i => i.value === activeTab)?.label}
@@ -1075,7 +1148,7 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
   };
 
   return (
-    <Card className="glass-panel border-none shadow-lg">
+    <Card className="glass-panel border-none shadow-lg w-full">
       <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <CardTitle className="text-white">List Karyawan</CardTitle>
@@ -1206,18 +1279,25 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
 function AdminSections({ sections }: { sections: Section[] }) {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
+  const [division, setDivision] = useState<Division>('Depan');
 
   const handleAdd = async () => {
     if (!name) return;
-    await addDoc(collection(db, 'sections'), { name });
+    await addDoc(collection(db, 'sections'), { name, division });
     setShowAdd(false);
     setName('');
+    setDivision('Depan');
   };
 
   const handleDelete = async (id: string) => {
     if (confirm("Hapus bagian ini?")) {
       await deleteDoc(doc(db, 'sections', id));
     }
+  };
+
+  const groupedSections = {
+    Depan: sections.filter(s => s.division === 'Depan' || !s.division),
+    Belakang: sections.filter(s => s.division === 'Belakang')
   };
 
   return (
@@ -1234,6 +1314,18 @@ function AdminSections({ sections }: { sections: Section[] }) {
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
+                <Label className="text-white/70 text-xs">Divisi (Depan / Belakang)</Label>
+                <Select value={division} onValueChange={(v: Division) => setDivision(v)}>
+                  <SelectTrigger className="field-input text-white">
+                    <SelectValue placeholder="Pilih Divisi" />
+                  </SelectTrigger>
+                  <SelectContent className="glass-panel border-white/20 text-white">
+                    <SelectItem value="Depan" className="hover:bg-white/10">Depan</SelectItem>
+                    <SelectItem value="Belakang" className="hover:bg-white/10">Belakang</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">Nama Bagian</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Kasir" className="field-input text-white" />
               </div>
@@ -1243,25 +1335,40 @@ function AdminSections({ sections }: { sections: Section[] }) {
         </Dialog>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto no-scrollbar">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-white/10 hover:bg-transparent text-white/40">
-                <TableHead className="text-white/40 whitespace-nowrap">Nama Bagian</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Aksi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sections.map(s => (
-                <TableRow key={s.id} className="border-white/5 hover:bg-white/5">
-                  <TableCell className="text-white font-medium whitespace-nowrap">{s.name}</TableCell>
-                  <TableCell className="text-right whitespace-nowrap">
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {(['Depan', 'Belakang'] as Division[]).map((div) => (
+             <div key={div} className="glass-panel border-white/10 p-4 rounded-xl">
+               <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                 <div className={`w-2 h-2 rounded-full ${div === 'Depan' ? 'bg-emerald-400' : 'bg-blue-400'}`} />
+                 Divisi {div}
+               </h3>
+               <div className="overflow-x-auto no-scrollbar">
+                 <Table>
+                   <TableHeader>
+                     <TableRow className="border-white/10 hover:bg-transparent text-white/40">
+                       <TableHead className="text-white/40 whitespace-nowrap">Nama Bagian</TableHead>
+                       <TableHead className="text-right whitespace-nowrap">Aksi</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {groupedSections[div].map(s => (
+                       <TableRow key={s.id} className="border-white/5 hover:bg-white/5">
+                         <TableCell className="text-white font-medium whitespace-nowrap">{s.name}</TableCell>
+                         <TableCell className="text-right whitespace-nowrap">
+                           <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                         </TableCell>
+                       </TableRow>
+                     ))}
+                     {groupedSections[div].length === 0 && (
+                       <TableRow>
+                         <TableCell colSpan={2} className="text-center py-6 text-white/30 italic">Belum ada bagian di divisi ini.</TableCell>
+                       </TableRow>
+                     )}
+                   </TableBody>
+                 </Table>
+               </div>
+             </div>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -1452,12 +1559,22 @@ function AdminPeriods() {
   const periodOptions = getPeriodOptions();
   const [controls, setControls] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
       const data: Record<string, any> = {};
-      snap.docs.forEach(d => { data[d.id] = d.data(); });
+      const openPeriods: string[] = [];
+      snap.docs.forEach(d => { 
+        data[d.id] = d.data(); 
+        if (data[d.id].status === 'open') openPeriods.push(d.id);
+      });
       setControls(data);
+      if (openPeriods.length > 0) {
+        setSelectedPeriod(openPeriods[0]);
+      } else {
+        setSelectedPeriod("");
+      }
       setLoading(false);
     });
     return unsub;
@@ -1556,7 +1673,7 @@ function AdminPeriods() {
                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Penutupan</Label>
                           <Input 
                             type="date" 
-                            defaultValue={ctrl.deadlineDate || format(new Date(), 'yyyy-MM-dd')}
+                            defaultValue={ctrl.deadlineDate || ''}
                             onBlur={(e) => updateDeadline(p.value, e.target.value, ctrl.deadlineTime || '17:00')}
                             className="field-input h-9 text-white" 
                           />
@@ -1566,7 +1683,7 @@ function AdminPeriods() {
                           <Input 
                             type="time" 
                             defaultValue={ctrl.deadlineTime || '17:00'}
-                            onBlur={(e) => updateDeadline(p.value, ctrl.deadlineDate || format(new Date(), 'yyyy-MM-dd'), e.target.value)}
+                            onBlur={(e) => updateDeadline(p.value, ctrl.deadlineDate || '', e.target.value)}
                             className="field-input h-9 text-white" 
                           />
                         </div>
@@ -1752,10 +1869,10 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
                     <TableRow key={a.id} className="border-white/5 hover:bg-white/5">
                       <TableCell className="font-semibold text-white whitespace-nowrap">{a.employeeName}</TableCell>
                       <TableCell className="text-white/60 text-xs whitespace-nowrap">{shift?.name || '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.checkIn ? format(a.checkIn.toDate(), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.breakStart ? format(a.breakStart.toDate(), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.breakEnd ? format(a.breakEnd.toDate(), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.checkOut ? format(a.checkOut.toDate(), 'HH:mm') : '-'}</TableCell>
+                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.checkIn ? format(toDateSafe(a.checkIn), 'HH:mm') : '-'}</TableCell>
+                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.breakStart ? format(toDateSafe(a.breakStart), 'HH:mm') : '-'}</TableCell>
+                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.breakEnd ? format(toDateSafe(a.breakEnd), 'HH:mm') : '-'}</TableCell>
+                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '-'}</TableCell>
                       <TableCell className="whitespace-nowrap"><Badge variant="outline" className="border-white/20 text-white/50">{a.status.toUpperCase()}</Badge></TableCell>
                     </TableRow>
                   );
@@ -1806,7 +1923,7 @@ function AdminLeave({ employees, sections }: { employees: Employee[], sections: 
         'Libur 4': r.date4 || '-',
         'Libur 5': r.date5 || '-',
         'Libur 6': r.date6 || '-',
-        'Dibuat Pada': r.createdAt ? format(r.createdAt.toDate(), 'dd/MM/yyyy HH:mm') : '-'
+        'Dibuat Pada': r.createdAt ? format(toDateSafe(r.createdAt), 'dd/MM/yyyy HH:mm') : '-'
       }));
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
@@ -1909,7 +2026,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   const [periodQuota, setPeriodQuota] = useState(0);
   const [periodControl, setPeriodControl] = useState<any>(null);
   const periodOptions = getPeriodOptions();
-  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value); // Default current
+  const [selectedPeriod, setSelectedPeriod] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [formData, setFormData] = useState({ 
     date1: '', date2: '', date3: '', date4: '', date5: '', date6: '',
@@ -1918,12 +2035,22 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   });
 
   useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+      const activePeriods: string[] = [];
+      snap.forEach(d => { 
+        const status = d.data().status;
+        if (status === 'open' || status === 'scheduled') activePeriods.push(d.id);
+      });
+      if (activePeriods.length > 0) setSelectedPeriod(activePeriods[0]);
+      else setSelectedPeriod("");
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
     const unsub = onSnapshot(doc(db, 'periodControls', selectedPeriod), (snap) => {
-      if (snap.exists()) {
-        setPeriodControl(snap.data());
-      } else {
-        setPeriodControl({ status: 'open' }); // Default to open if not set
-      }
+      setPeriodControl(snap.exists() ? snap.data() : { status: 'open' });
     });
     return unsub;
   }, [selectedPeriod]);
@@ -2027,7 +2154,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     const period = periodOptions.find(p => p.value === selectedPeriod);
     if (period) {
       for (const d of selectedDates) {
-        const dateObj = new Date(d);
+        const dateObj = d ? new Date(d) : new Date();
         if (isBefore(dateObj, startOfDay(period.start)) || isAfter(dateObj, endOfDay(period.end))) {
           return alert(`Tanggal ${d} berada di luar periode ${period.label}`);
         }
@@ -2043,7 +2170,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
       ).length;
 
       if (count >= maxLimit) {
-        return alert(`Tanggal ${format(new Date(d), 'dd MMM yyyy')} sudah penuh (maks ${maxLimit} orang di divisi ${employee.division}).`);
+        return alert(`Tanggal ${d ? format(new Date(d), 'dd MMM yyyy') : '-'} sudah penuh (maks ${maxLimit} orang di divisi ${employee.division}).`);
       }
     }
 
@@ -2100,17 +2227,10 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     <div className="space-y-6 mt-8 pb-12 text-white">
       <div className="flex flex-wrap items-center justify-between gap-4 glass-panel p-4 rounded-2xl border-white/5">
         <div>
-          <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Divisi: <span className="text-primary">{employee.division || 'Depan'}</span> | Pilih Periode</p>
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-[300px] glass-panel border-white/10 text-white font-bold">
-              <SelectValue placeholder="Pilih Periode" />
-            </SelectTrigger>
-            <SelectContent className="glass-panel border-white/20 text-white">
-              {periodOptions.map(p => (
-                <SelectItem key={p.value} value={p.value} className="hover:bg-white/10">{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Divisi: <span className="text-primary">{employee.division || 'Depan'}</span> | Periode Aktif</p>
+          <div className="w-[300px] h-12 glass-panel border border-white/10 text-white font-bold flex items-center px-4 rounded-xl">
+             {selectedPeriod ? periodOptions.find(p => p.value === selectedPeriod)?.label || selectedPeriod : "Tidak ada periode aktif"}
+          </div>
           {periodControl && (
             <div className="mt-2 flex items-center gap-2">
               <Badge variant="outline" className={`border-none px-2 py-0 text-[10px] font-bold ${
@@ -2152,13 +2272,20 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
               <Dialog open={showAdd} onOpenChange={setShowAdd}>
                 <DialogTrigger 
                   render={
-                    <Button 
-                      disabled={isClosed}
-                      className={`inline-flex items-center justify-center h-10 px-4 py-2 text-white rounded-xl shadow-lg transition-colors font-bold text-sm gap-2 border-none ${isClosed ? 'bg-white/5 text-white/20' : 'bg-primary hover:bg-primary/80'}`}
-                    >
-                      {isClosed ? <AlertCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                      {isClosed ? 'REQUEST DITUTUP' : 'Buat/Edit Request'}
-                    </Button>
+                    (() => {
+                      if (!selectedPeriod) {
+                        return <Button className="bg-rose-500/20 text-rose-300 rounded-xl px-4 py-2 text-sm font-bold">Belum ada request yang dibuka</Button>
+                      }
+                      return (
+                        <Button 
+                          disabled={isClosed}
+                          className={`inline-flex items-center justify-center h-10 px-4 py-2 text-white rounded-xl shadow-lg transition-colors font-bold text-sm gap-2 border-none ${isClosed ? 'bg-white/5 text-white/20' : 'bg-primary hover:bg-primary/80'}`}
+                        >
+                          {isClosed ? <AlertCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                          {isClosed ? 'REQUEST DITUTUP' : 'Buat/Edit Request'}
+                        </Button>
+                      )
+                    })()
                   }
                 />
                 <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[500px]">
@@ -2176,9 +2303,13 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                     <div className="grid gap-1.5 col-span-2">
                       <Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Bagian (Wajib)</Label>
                       <Select value={formData.sectionId} onValueChange={(val) => setFormData({...formData, sectionId: val})}>
-                        <SelectTrigger className="field-input text-xs text-white border-white/10"><SelectValue placeholder="Pilih Bagian" /></SelectTrigger>
+                        <SelectTrigger className="field-input text-xs text-white border-white/10">
+                          <SelectValue placeholder="Pilih Bagian">
+                            {sections.find(s => s.id === formData.sectionId)?.name}
+                          </SelectValue>
+                        </SelectTrigger>
                         <SelectContent className="glass-panel border-white/10 text-white">
-                          {sections.map(s => <SelectItem key={s.id} value={s.id} className="hover:bg-white/10">{s.name}</SelectItem>)}
+                          {sections.filter(s => (s.division || 'Depan') === (employee.division || 'Depan')).map(s => <SelectItem key={s.id} value={s.id} className="hover:bg-white/10">{s.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -2284,20 +2415,20 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
           <Card className="glass-panel border-none shadow-xl bg-primary/5">
             <CardHeader>
               <CardTitle className="text-white text-md">Tanggal Paling Padat ({employee.division})</CardTitle>
-              <CardDescription className="text-white/40">Batas: 7 orang / hari</CardDescription>
+              <CardDescription className="text-white/40">Batas: {periodControl?.maxRequestsPerDay || 7} orang / hari</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {popularDates.map(([d, count]) => (
                 <div key={d} className="flex flex-col gap-1.5">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-xs font-bold text-white/70">{format(new Date(d), 'dd MMMM yyyy')}</span>
-                    <span className={`text-[10px] font-bold ${count >= 6 ? 'text-rose-400' : 'text-primary'}`}>{count}/7</span>
+                    <span className="text-xs font-bold text-white/70">{d ? format(new Date(d), 'dd MMMM yyyy') : '-'}</span>
+                    <span className={`text-[10px] font-bold ${count >= (periodControl?.maxRequestsPerDay || 7) ? 'text-rose-400' : 'text-primary'}`}>{count}/{periodControl?.maxRequestsPerDay || 7}</span>
                   </div>
                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ width: `${(count / 7) * 100}%` }}
-                      className={`h-full ${count >= 7 ? 'bg-rose-500' : count >= 5 ? 'bg-amber-500' : 'bg-primary'}`} 
+                      animate={{ width: `${(count / (periodControl?.maxRequestsPerDay || 7)) * 100}%` }}
+                      className={`h-full ${count >= (periodControl?.maxRequestsPerDay || 7) ? 'bg-rose-500' : count >= (periodControl?.maxRequestsPerDay || 7) * 0.7 ? 'bg-amber-500' : 'bg-primary'}`} 
                     />
                   </div>
                 </div>
@@ -2313,7 +2444,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
             <CardContent className="space-y-4 text-xs text-white/60">
               <div className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" />
-                <p>Request libur otomatis <span className="text-emerald-500 font-bold uppercase">Berlaku</span> selama kuota tersedia (Maks. 7 orang/hari/divisi).</p>
+                <p>Request libur otomatis <span className="text-emerald-500 font-bold uppercase">Berlaku</span> selama kuota tersedia (Maks. {periodControl?.maxRequestsPerDay || 7} orang/hari/divisi).</p>
               </div>
               <p className="border-t border-white/10 pt-4 text-[10px] italic text-white/30">Daftar di atas hanya menampilkan request dari divisi <span className="text-white/60 font-bold">{employee.division}</span>. Anda tidak dapat melihat atau bersaing kuota dengan divisi lain.</p>
             </CardContent>
@@ -2354,21 +2485,25 @@ function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Sh
         let potonganMins = 0;
 
         if (shift) {
-          // 1. Keterlambatan (Check In > Start Time)
-          if (a.checkIn) {
-            const diffIn = calculateMinutesDiff(shift.startTime, a.checkIn);
-            if (diffIn > 0) potonganMins += diffIn;
-          }
+          const isDayOff = shift.name.toLowerCase().replace(/\s/g, '') === 'dayoff';
+          
+          if (!isDayOff) {
+            // 1. Keterlambatan (Check In > Start Time)
+            if (a.checkIn) {
+              const diffIn = calculateMinutesDiff(shift.startTime, a.checkIn);
+              if (diffIn > 0) potonganMins += diffIn;
+            }
 
-          // 2. Pulang Lebih Awal (Check Out < End Time) & Lembur (Check Out > End Time)
-          if (a.checkOut) {
-            const diffOut = calculateMinutesDiff(shift.endTime, a.checkOut);
-            if (diffOut < 0) {
-              // Pulang lebih awal
-              potonganMins += Math.abs(diffOut);
-            } else if (diffOut >= 15) {
-              // Lembur dengan rounding: 0-14 = 0, 15-29 = 15, dst (floor to nearest 15)
-              lemburMins = Math.floor(diffOut / 15) * 15;
+            // 2. Pulang Lebih Awal (Check Out < End Time) & Lembur (Check Out > End Time)
+            if (a.checkOut) {
+              const diffOut = calculateMinutesDiff(shift.endTime, a.checkOut);
+              if (diffOut < 0) {
+                // Pulang lebih awal
+                potonganMins += Math.abs(diffOut);
+              } else if (diffOut >= 15) {
+                // Lembur dengan rounding: 0-14 = 0, 15-29 = 15, dst (floor to nearest 15)
+                lemburMins = Math.floor(diffOut / 15) * 15;
+              }
             }
           }
         }
@@ -2378,10 +2513,10 @@ function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Sh
           'Nama Karyawan': a.employeeName,
           'Shift': shift?.name || '-',
           'Jam Kerja': shift ? `${shift.startTime} - ${shift.endTime}` : '-',
-          'Masuk': a.checkIn ? format(a.checkIn.toDate(), 'HH:mm') : '-',
-          'Istirahat Mulai': a.breakStart ? format(a.breakStart.toDate(), 'HH:mm') : '-',
-          'Istirahat Selesai': a.breakEnd ? format(a.breakEnd.toDate(), 'HH:mm') : '-',
-          'Pulang': a.checkOut ? format(a.checkOut.toDate(), 'HH:mm') : '-',
+          'Masuk': a.checkIn ? format(toDateSafe(a.checkIn), 'HH:mm') : '-',
+          'Istirahat Mulai': a.breakStart ? format(toDateSafe(a.breakStart), 'HH:mm') : '-',
+          'Istirahat Selesai': a.breakEnd ? format(toDateSafe(a.breakEnd), 'HH:mm') : '-',
+          'Pulang': a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '-',
           'Lembur (HH:mm)': minsToHHMM(lemburMins),
           'Lembur (Decimal)': minsToDecimal(lemburMins),
           'Potongan (HH:mm)': minsToHHMM(potonganMins),
@@ -2405,7 +2540,7 @@ function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Sh
       const attendance = attendances.find(a => a.id === id);
       if (!attendance) return;
       
-      const newTime = parse(newTimeStr, 'HH:mm', new Date(attendance.date));
+      const newTime = parse(newTimeStr, 'HH:mm', attendance.date ? new Date(attendance.date) : new Date());
       await updateDoc(doc(db, 'attendance', id), {
         [field]: newTime,
         updatedAt: serverTimestamp()
@@ -2457,11 +2592,11 @@ function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Sh
                   const shift = shifts.find(s => s.id === a.shiftId);
                   return (
                     <TableRow key={a.id} className="border-white/5 hover:bg-white/5">
-                      <TableCell className="text-xs font-medium text-white/60 whitespace-nowrap">{format(new Date(a.date), 'dd MMM yyyy')}</TableCell>
+                      <TableCell className="text-xs font-medium text-white/60 whitespace-nowrap">{a.date ? format(new Date(a.date), 'dd MMM yyyy') : '-'}</TableCell>
                       <TableCell className="font-semibold text-white whitespace-nowrap">{a.employeeName}</TableCell>
                       <TableCell className="text-white/60 text-xs whitespace-nowrap">{shift?.name || '-'}</TableCell>
-                      <TableCell className="font-mono text-white/70 whitespace-nowrap">{a.checkIn ? format(a.checkIn.toDate(), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="font-mono text-white/70 whitespace-nowrap">{a.checkOut ? format(a.checkOut.toDate(), 'HH:mm') : '-'}</TableCell>
+                      <TableCell className="font-mono text-white/70 whitespace-nowrap">{a.checkIn ? format(toDateSafe(a.checkIn), 'HH:mm') : '-'}</TableCell>
+                      <TableCell className="font-mono text-white/70 whitespace-nowrap">{a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '-'}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         <Dialog open={isEditingAttendance?.id === a.id} onOpenChange={(v) => !v && setIsEditingAttendance(null)}>
                           <DialogTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 hover:bg-white/10 h-8 px-3 text-primary" onClick={() => setIsEditingAttendance(a)}>
@@ -2494,7 +2629,7 @@ function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Sh
 }
 
 function EditTimeField({ label, current, onSave }: { label: string, current: any, onSave: (v: string) => void }) {
-  const [val, setVal] = useState(current ? format(current.toDate(), 'HH:mm') : '');
+  const [val, setVal] = useState(current ? format(toDateSafe(current), 'HH:mm') : '');
   return (
     <div className="flex items-center justify-between gap-4">
       <Label className="text-white/70 w-1/2">{label}</Label>

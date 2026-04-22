@@ -3,6 +3,7 @@ export type Division = 'Depan' | 'Belakang';
 export interface Section {
   id: string;
   name: string;
+  division?: Division;
 }
 
 export interface Employee {
