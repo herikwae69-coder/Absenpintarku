@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Employee record including credentials and role.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "pin": { "type": "string", "description": "4-6 digit entrance pin" },
+        "password": { "type": "string", "description": "Individual login password" },
+        "role": { "type": "string", "enum": ["admin", "employee"] },
+        "shiftId": { "type": "string" },
+        "leaveQuota": { "type": "integer", "description": "Number of allowed leave days" },
+        "division": { "type": "string", "enum": ["Depan", "Belakang"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "pin", "role", "shiftId", "leaveQuota"]
+    },
+    "Shift": {
+      "title": "Shift",
+      "description": "Work schedule definition.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "startTime": { "type": "string", "description": "HH:mm" },
+        "endTime": { "type": "string", "description": "HH:mm" },
+        "breakStart": { "type": "string", "description": "HH:mm" },
+        "breakEnd": { "type": "string", "description": "HH:mm" }
+      },
+      "required": ["name", "startTime", "endTime"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Daily attendance logs.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD" },
+        "checkIn": { "type": "string", "format": "date-time" },
+        "breakStart": { "type": "string", "format": "date-time" },
+        "breakEnd": { "type": "string", "format": "date-time" },
+        "checkOut": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["present", "late", "half-day", "absent"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "date"]
+    },
+    "LeaveRequest": {
+      "title": "Leave Request",
+      "description": "Request for leave by an employee containing multiple dates.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date1": { "type": "string", "description": "YYYY-MM-DD" },
+        "date2": { "type": "string", "description": "YYYY-MM-DD" },
+        "date3": { "type": "string", "description": "YYYY-MM-DD" },
+        "date4": { "type": "string", "description": "YYYY-MM-DD" },
+        "date5": { "type": "string", "description": "YYYY-MM-DD" },
+        "date6": { "type": "string", "description": "YYYY-MM-DD" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "status"]
+    },
+    "PeriodControl": {
+      "title": "Period Control",
+      "description": "Settings for each leave period.",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["open", "closed", "scheduled"] },
+        "deadlineDate": { "type": "string", "description": "YYYY-MM-DD" },
+        "deadlineTime": { "type": "string", "description": "HH:mm" },
+        "maxRequestsPerDay": { "type": "integer", "description": "Limit of people requesting leave on same day" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Employee records."
+    },
+    "/shifts/{shiftId}": {
+      "schema": "Shift",
+      "description": "Shift records."
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "Attendance",
+      "description": "Daily attendance logs."
+    },
+    "/leaveRequests/{requestId}": {
+      "schema": "LeaveRequest",
+      "description": "Employee leave requests."
+    },
+    "/periodControls/{periodId}": {
+      "schema": "PeriodControl",
+      "description": "Settings per period (e.g. 2024-05)."
+    }
+  }
+}
