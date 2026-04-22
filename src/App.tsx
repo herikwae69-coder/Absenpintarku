@@ -36,7 +36,8 @@ import {
   BadgeCheck,
   AlertCircle,
   Menu,
-  History
+  History,
+  Crown
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -145,8 +146,7 @@ const getPeriodOptions = (monthsBefore: number = 3, monthsAfter: number = 12) =>
   return options;
 };
 
-// Admin Password (In a real app, this would be in a protected document or auth)
-const ADMIN_PASSWORD = "adminjosjis"; 
+// Admin Authentication is now handle via Employee roles
 
 import { 
   onAuthStateChanged,
@@ -211,8 +211,14 @@ export default function App() {
     }
   };
 
-  const handleAdminAuth = (password: string) => {
-    if (password === ADMIN_PASSWORD) {
+  const handleAdminAuth = (employee: Employee, credential: string) => {
+    if (employee.role !== 'admin') {
+      alert("Maaf kamu bukan admin!");
+      return;
+    }
+    const userPassword = employee.password || "123456";
+    if (userPassword === credential) {
+      setCurrentUser(employee); // Optionally record who logged in as admin
       setIsAdmin(true);
       setView('admin');
     } else {
@@ -285,14 +291,16 @@ export default function App() {
 function LoginView({ employees, onLogin, onAdminAuth }: { 
   employees: Employee[], 
   onLogin: (e: Employee, pin: string) => void,
-  onAdminAuth: (pwd: string) => void
+  onAdminAuth: (e: Employee, pwd: string) => void
 }) {
   const [absenId, setAbsenId] = useState("");
   const [pin, setPin] = useState("");
+  const [adminAbsenId, setAdminAbsenId] = useState("");
   const [adminPass, setAdminPass] = useState("");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
   const selectedEmployee = employees.find(e => String(e.pin || '').trim() === absenId.trim());
+  const selectedAdmin = employees.find(e => String(e.pin || '').trim() === adminAbsenId.trim());
 
   return (
     <div className="h-screen flex flex-col items-center justify-center p-4 overflow-hidden relative">
@@ -311,19 +319,37 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="w-20 h-20 bg-gradient-to-br from-primary to-primary/40 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-primary/20 relative group"
+            className="w-28 h-28 mx-auto mb-6 relative group"
           >
-            <div className="absolute inset-0 bg-white/20 rounded-[2rem] opacity-0 group-hover:opacity-100 transition-opacity" />
-            <ClipboardList className="w-10 h-10 text-white" />
+            {/* Outer glow */}
+            <div className="absolute inset-0 bg-primary/40 blur-[30px] rounded-full scale-110 animate-pulse" />
+            
+            {/* Cool glassy badge for JG1 */}
+            <div className="w-full h-full bg-gradient-to-br from-slate-900 via-black to-slate-800 rounded-[2rem] border border-white/10 shadow-2xl shadow-black/80 flex items-center justify-center relative overflow-hidden transition-transform duration-500 group-hover:scale-110 group-hover:-translate-y-2">
+              {/* Glass reflection */}
+              <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent rounded-t-[2rem]" />
+              {/* Bottom colored accent light */}
+              <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-primary blur-2xl rounded-full opacity-60" />
+              
+              <div className="relative z-10 flex items-baseline drop-shadow-2xl">
+                <span className="text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
+                  JG
+                </span>
+                <span className="relative text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-amber-400 to-orange-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)] ml-0.5">
+                  <Crown className="absolute -top-5 left-1/2 -translate-x-1/2 w-6 h-6 text-amber-500 fill-amber-500/80 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" strokeWidth={2.5} />
+                  1
+                </span>
+              </div>
+            </div>
           </motion.div>
           
           <motion.h1 
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="text-5xl font-black tracking-tighter text-white mb-2"
+            className="text-4xl md:text-5xl font-black tracking-tighter text-white mb-2 uppercase"
           >
-            JOGJA 1 APP
+            JENGGO 1 APP
           </motion.h1>
           
           <motion.p 
@@ -400,26 +426,82 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
                       }}
                       className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
                     />
-                    <p className="text-[9px] text-white/20 text-center italic">Default password: 123456</p>
+                    <div className="flex items-center justify-between px-1">
+                      <p className="text-[9px] text-white/20 italic">Default password: 123456</p>
+                      <button 
+                         type="button" 
+                         onClick={() => alert('Lupa password? Silakan hubungi Admin Anda untuk melakukan reset password melalui panel Admin.')} 
+                         className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer">
+                        Lupa Password?
+                      </button>
+                    </div>
                   </motion.div>
                 )}
               </>
             ) : (
-              <div className="space-y-3">
-                <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">Password Admin</Label>
-                <Input 
-                  type="password" 
-                  placeholder="Masukkan password..." 
-                  value={adminPass}
-                  onChange={(e) => setAdminPass(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && adminPass) {
-                      onAdminAuth(adminPass);
-                    }
-                  }}
-                  className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
-                />
-              </div>
+              <>
+                <div className="space-y-3">
+                  <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">No. Absen Admin</Label>
+                  <Input 
+                    type="text" 
+                    placeholder="Masukkan No. Absen..." 
+                    value={adminAbsenId}
+                    onChange={(e) => setAdminAbsenId(e.target.value)}
+                    className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white font-bold"
+                  />
+                </div>
+
+                {selectedAdmin && selectedAdmin.role === 'admin' ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex flex-col items-center gap-1"
+                  >
+                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Admin Terdeteksi</span>
+                    <span className="text-lg font-black text-white">{selectedAdmin.name}</span>
+                  </motion.div>
+                ) : (adminAbsenId && selectedAdmin && selectedAdmin.role !== 'admin') ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex flex-col items-center gap-1 text-center"
+                  >
+                    <AlertCircle className="w-6 h-6 text-rose-400 mb-1" />
+                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Akses Ditolak</span>
+                    <span className="text-sm font-semibold text-white/80">Maaf, Anda bukan Admin.</span>
+                  </motion.div>
+                ) : null}
+
+                {selectedAdmin && selectedAdmin.role === 'admin' && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }} 
+                    animate={{ opacity: 1, height: 'auto' }} 
+                    className="space-y-3 overflow-hidden"
+                  >
+                    <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">Password Admin</Label>
+                    <Input 
+                      type="password" 
+                      placeholder="••••••••" 
+                      value={adminPass}
+                      onChange={(e) => setAdminPass(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && selectedAdmin && adminPass) {
+                          onAdminAuth(selectedAdmin, adminPass);
+                        }
+                      }}
+                      className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
+                    />
+                    <div className="flex justify-end px-1">
+                      <button 
+                         type="button" 
+                         onClick={() => alert(`Lupa password Admin?\n\nSilakan minta bantuan pemilik sistem atau developer untuk mengatur ulang password di Master Database.`)} 
+                         className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer">
+                        Lupa Password Admin?
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </>
             )}
           </CardContent>
           <CardFooter className="flex-col gap-4 px-8 pb-10">
@@ -433,8 +515,9 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
               </Button>
             ) : (
               <Button 
-                onClick={() => onAdminAuth(adminPass)}
-                className="w-full h-14 bg-white/10 hover:bg-white/20 text-white border border-white/10 font-bold text-lg rounded-2xl transition-all active:scale-[0.98]"
+                disabled={!selectedAdmin || selectedAdmin.role !== 'admin' || !adminPass}
+                onClick={() => selectedAdmin && onAdminAuth(selectedAdmin, adminPass)}
+                className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white border-none font-bold text-lg rounded-2xl shadow-xl shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-30"
               >
                 KONFIRMASI ADMIN
               </Button>
