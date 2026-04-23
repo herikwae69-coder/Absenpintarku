@@ -3801,6 +3801,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                   <div className="p-3 bg-white/5 rounded-lg border border-white/10 text-[10px] text-white/50 space-y-1">
                     <p className="font-bold text-amber-400 uppercase tracking-tight">Perhatian:</p>
                     <p>Kuota limit libur maksimal {periodControl?.maxRequestsPerDay || 7} orang per hari per divisi.</p>
+                    <p className="mt-2 italic">Jika tanggal yang mau kamu pilih sudah penuh, dan kamu sangat membutuhkan tgl itu (urgent), cobalah diskusikan ke teman2 yg sudah memilih tgl tersebut siapa tau ada yg mau mengalah. #Mengalah bukan berarti kalah ☺️</p>
                   </div>
                   <DialogFooter className="mt-4">
                     <Button onClick={handleSubmit} className="w-full bg-primary hover:bg-primary/80 font-bold shadow-lg">Submit Request Libur</Button>
