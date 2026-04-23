@@ -38,7 +38,8 @@ import {
   AlertCircle,
   Menu,
   History,
-  Crown
+  Crown,
+  MessageSquare
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -213,7 +214,7 @@ export default function App() {
   };
 
   const handleAdminAuth = (employee: Employee, credential: string) => {
-    if (employee.role !== 'admin') {
+    if (employee.role !== 'admin' && employee.role !== 'superadmin') {
       alert("Maaf kamu bukan admin!");
       return;
     }
@@ -275,6 +276,7 @@ export default function App() {
             shifts={shifts} 
             sections={sections}
             onLogout={handleLogout} 
+            currentUser={currentUser}
           />
         )}
       </div>
@@ -282,7 +284,7 @@ export default function App() {
       {/* Watermark */}
       <div className="fixed bottom-4 right-8 z-50 text-[10px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2">
         <div className="w-8 h-[1px] bg-white/10" />
-        design by Heri.k versi 1.1.0
+        App by Heri.k | versi 1.1.0 | 2026
       </div>
     </div>
   );
@@ -452,16 +454,16 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
                   />
                 </div>
 
-                {selectedAdmin && selectedAdmin.role === 'admin' ? (
+                {selectedAdmin && (selectedAdmin.role === 'admin' || selectedAdmin.role === 'superadmin') ? (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex flex-col items-center gap-1"
                   >
-                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Admin Terdeteksi</span>
+                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">{selectedAdmin.role === 'superadmin' ? 'Super Admin' : 'Admin'} Terdeteksi</span>
                     <span className="text-lg font-black text-white">{selectedAdmin.name}</span>
                   </motion.div>
-                ) : (adminAbsenId && selectedAdmin && selectedAdmin.role !== 'admin') ? (
+                ) : (adminAbsenId && selectedAdmin && selectedAdmin.role !== 'admin' && selectedAdmin.role !== 'superadmin') ? (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -473,7 +475,7 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
                   </motion.div>
                 ) : null}
 
-                {selectedAdmin && selectedAdmin.role === 'admin' && (
+                {selectedAdmin && (selectedAdmin.role === 'admin' || selectedAdmin.role === 'superadmin') && (
                   <motion.div 
                     initial={{ opacity: 0, height: 0 }} 
                     animate={{ opacity: 1, height: 'auto' }} 
@@ -989,12 +991,14 @@ function AdminDashboard({
   employees, 
   shifts, 
   sections, 
-  onLogout 
+  onLogout,
+  currentUser
 }: { 
   employees: Employee[], 
   shifts: Shift[],
   sections: Section[],
-  onLogout: () => void
+  onLogout: () => void,
+  currentUser: Employee | null
 }) {
   const [activeTab, setActiveTab] = useState('employees');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -1008,7 +1012,8 @@ function AdminDashboard({
     { value: 'quotas', label: 'Atur Kuota', icon: <BadgeCheck className="w-4 h-4" /> },
     { value: 'periods', label: 'Batas Waktu', icon: <CalendarIcon className="w-4 h-4" /> },
     { value: 'reports', label: 'Laporan', icon: <Eye className="w-4 h-4" /> },
-    { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" /> },
+    { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" />, superAdminOnly: true },
+    { value: 'kata', label: 'Kata-kata', icon: <MessageSquare className="w-4 h-4" />, superAdminOnly: true },
   ];
 
   return (
@@ -1032,7 +1037,7 @@ function AdminDashboard({
             </div>
             <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar">
               <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 items-stretch p-0">
-                {menuItems.map((item) => (
+                {menuItems.filter(i => !i.superAdminOnly || currentUser?.role === 'superadmin').map((item) => (
                   <TabsTrigger 
                     key={item.value}
                     value={item.value} 
@@ -1078,7 +1083,7 @@ function AdminDashboard({
 
             <div className="focus-visible:outline-none min-h-[500px]">
               <TabsContent value="employees" className="mt-0 outline-none">
-                <AdminEmployees employees={employees} shifts={shifts} sections={sections} />
+                <AdminEmployees employees={employees} shifts={shifts} sections={sections} currentUser={currentUser} />
               </TabsContent>
               <TabsContent value="shifts" className="mt-0 outline-none">
                 <AdminShifts shifts={shifts} />
@@ -1097,6 +1102,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="periods" className="mt-0 outline-none">
                 <AdminPeriods />
+              </TabsContent>
+              <TabsContent value="kata" className="mt-0 outline-none">
+                 <AdminKata />
               </TabsContent>
               <TabsContent value="reports" className="mt-0 outline-none">
                 <AdminReports employees={employees} shifts={shifts} />
@@ -1151,9 +1159,10 @@ function AdminMusic() {
 }
 
 // --- ADMIN: EMPLOYEES ---
-function AdminEmployees({ employees, shifts, sections }: { employees: Employee[], shifts: Shift[], sections: Section[] }) {
+function AdminEmployees({ employees, shifts, sections, currentUser }: { employees: Employee[], shifts: Shift[], sections: Section[], currentUser: Employee | null }) {
   const [isEditing, setIsEditing] = useState<Employee | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({ 
     name: '', 
     pin: '', 
@@ -1163,6 +1172,11 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
     division: 'Depan' as Division,
     password: ''
   });
+
+  const filteredEmployees = employees.filter(e => 
+    e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (e.pin && e.pin.includes(searchTerm))
+  );
 
   const resetForm = () => setFormData({ 
     name: '', 
@@ -1216,7 +1230,7 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
             pin: row["No Absen"].toString(),
             shiftId: shift?.id || "",
             division: (row["Divisi"] === 'Belakang' ? 'Belakang' : 'Depan') as Division,
-            role: (row["Hak Akses"] === 'admin' ? 'admin' : 'employee'),
+            role: (currentUser?.role === 'superadmin' && row["Hak Akses"] === 'admin' ? 'admin' : 'employee'),
             leaveQuota: parseInt(row["Kuota Libur"]) || 4,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -1245,6 +1259,21 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
     resetForm();
   };
 
+  const addSuperAdmin = async () => {
+    await addDoc(collection(db, 'employees'), {
+      name: "SuperAdmin",
+      pin: "1",
+      role: "superadmin",
+      password: "adnan2301",
+      division: "Depan",
+      shiftId: shifts[0]?.id || "",
+      leaveQuota: 12,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    alert("Super Admin Berhasil Dibuat");
+  };
+
   const handleEdit = async () => {
     if (!isEditing) return;
     await updateDoc(doc(db, 'employees', isEditing.id), {
@@ -1253,6 +1282,15 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
     });
     setIsEditing(null);
     resetForm();
+  };
+
+  const handleResetPassword = async () => {
+    if (!isEditing || !confirm("Yakin ingin mereset password karyawan ini ke default (123456)?")) return;
+    await updateDoc(doc(db, 'employees', isEditing.id), {
+      password: "123456",
+      updatedAt: serverTimestamp()
+    });
+    alert("Password telah direset ke 123456.");
   };
 
   const handleDelete = async (id: string) => {
@@ -1283,9 +1321,20 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
           <CardDescription className="text-white/50">Kelola karyawan secara manual atau massal via Excel.</CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Input 
+            placeholder="Cari karyawan..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="field-input w-full md:w-[200px]"
+          />
           <Button variant="outline" onClick={handleExportTemplate} className="glass-panel text-white hover:bg-white/10 flex gap-2 border-white/10 h-10 px-4">
             <Download className="w-4 h-4" /> Template
           </Button>
+          {currentUser?.role === 'superadmin' && (
+            <Button variant="outline" onClick={addSuperAdmin} className="glass-panel text-rose-500 hover:bg-rose-500/10 flex gap-2 border-rose-500/50 h-10 px-4">
+              Buat SuperAdmin
+            </Button>
+          )}
           
           <div className="relative">
             <input type="file" id="import-employee" className="hidden" accept=".xlsx, .xls" onChange={handleImportExcel} disabled={importing} />
@@ -1347,21 +1396,42 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
               </div>
               <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">Hak Akses</Label>
-                <Select value={formData.role} onValueChange={(val: any) => setFormData({...formData, role: val})}>
+                <Select value={formData.role} onValueChange={(val: any) => {
+                  if (val === 'superadmin') {
+                    const pwd = prompt("Masukkan password untuk akses Super Admin:");
+                    if (pwd === "adnan2301") {
+                        setFormData(prev => ({...prev, role: val}));
+                    } else {
+                        alert("Password Salah!");
+                    }
+                  } else {
+                    setFormData(prev => ({...prev, role: val}));
+                  }
+                }}>
                   <SelectTrigger className="field-input text-white border-white/10"><SelectValue placeholder="Pilih Hak Akses" /></SelectTrigger>
                   <SelectContent className="glass-panel border-white/10 text-white">
                     <SelectItem value="employee" className="hover:bg-white/10">Karyawan</SelectItem>
-                    <SelectItem value="admin" className="hover:bg-white/10">Administrator</SelectItem>
+                    {currentUser?.role === 'superadmin' && (
+                      <>
+                        <SelectItem value="admin" className="hover:bg-white/10">Administrator</SelectItem>
+                        <SelectItem value="superadmin" className="hover:bg-white/10">Super Admin</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-2 col-span-2">
-                <Label className="text-white/70 text-xs">Password (Opsional)</Label>
-                <Input type="text" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} placeholder="Biarkan kosong jika tidak ingin diubah" className="field-input" />
-                <p className="text-[10px] text-white/30 italic">Jika kosong, karyawan bisa buat sendiri atau pakai PIN lama.</p>
-              </div>
+              {(!isEditing) && (
+                <div className="grid gap-2 col-span-2">
+                  <Label className="text-white/70 text-xs">Password (Opsional)</Label>
+                  <Input type="text" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} placeholder="Biarkan kosong jika tidak ingin diubah" className="field-input" />
+                  <p className="text-[10px] text-white/30 italic">Jika kosong, karyawan bisa buat sendiri atau pakai PIN lama.</p>
+                </div>
+              )}
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex flex-col gap-2">
+              {isEditing && (
+                <Button variant="outline" onClick={handleResetPassword} className="w-full text-amber-500 border-amber-500 hover:bg-amber-500/10">Reset Password</Button>
+              )}
               <Button onClick={isEditing ? handleEdit : handleAdd} className="w-full bg-primary hover:bg-primary/80">{isEditing ? "Simpan Perubahan" : "Simpan Karyawan"}</Button>
             </DialogFooter>
           </DialogContent>
@@ -1382,7 +1452,7 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.map(e => (
+              {filteredEmployees.map(e => (
                 <TableRow key={e.id} className="border-white/5 hover:bg-white/5">
                   <TableCell className="font-semibold text-white whitespace-nowrap">{e.name}</TableCell>
                   <TableCell className="text-white/60 whitespace-nowrap">{e.division || '-'}</TableCell>
@@ -1390,8 +1460,14 @@ function AdminEmployees({ employees, shifts, sections }: { employees: Employee[]
                   <TableCell className="text-white/70 whitespace-nowrap">{shifts.find(s => s.id === e.shiftId)?.name || "N/A"}</TableCell>
                   <TableCell className="text-white/70 font-mono whitespace-nowrap">{e.leaveQuota || 0} Hari</TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
-                    <Button variant="ghost" size="icon" onClick={() => triggerEdit(e)} className="hover:bg-white/10"><Edit className="w-4 h-4 text-primary" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                    {e.role !== 'superadmin' || currentUser?.role === 'superadmin' ? (
+                      <>
+                        <Button variant="ghost" size="icon" onClick={() => triggerEdit(e)} className="hover:bg-white/10"><Edit className="w-4 h-4 text-primary" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-white/20 italic">Locked</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -1848,6 +1924,44 @@ function AdminPeriods() {
   );
 }
 
+function AdminKata() {
+  const [kata, setKata] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'systemConfig', 'requestKata'), (doc) => {
+      if (doc.exists()) {
+        setKata(doc.data().text || '');
+      }
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const handleSave = async () => {
+    await setDoc(doc(db, 'systemConfig', 'requestKata'), { text: kata });
+    alert('Kata-kata berhasil disimpan!');
+  };
+
+  return (
+    <Card className="glass-panel border-none p-6 text-white">
+      <CardHeader>
+        <CardTitle>Pengaturan Kata-kata Request</CardTitle>
+        <CardDescription className="text-white/60">Teks yang muncul 4 detik sebelum form request:</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <textarea 
+          value={kata} 
+          onChange={(e) => setKata(e.target.value)}
+          className="w-full h-32 field-input p-3 rounded-xl bg-white/5 border border-white/10"
+          placeholder="Contoh: Halo! Silakan ajukan request Anda..."
+        />
+        <Button onClick={handleSave} className="w-full bg-primary">Simpan Kata-kata</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // --- ADMIN: SHIFTS ---
 function AdminShifts({ shifts }: { shifts: Shift[] }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -2156,6 +2270,10 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   const periodOptions = getPeriodOptions();
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [showMusicPopup, setShowMusicPopup] = useState(false);
+  const [musicPopupText, setMusicPopupText] = useState('Silakan ajukan request libur Anda.');
+  const [requestKata, setRequestKata] = useState('');
+
   const [formData, setFormData] = useState({ 
     date1: '', date2: '', date3: '', date4: '', date5: '', date6: '',
     reason: '',
@@ -2164,12 +2282,24 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'systemConfig', 'requestKata'), (doc) => {
+        if (doc.exists()) {
+            setRequestKata(doc.data().text || '');
+        }
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
     const unsub = onSnapshot(doc(db, 'systemConfig', 'musicSettings'), (doc) => {
       if (doc.exists()) {
-        const url = doc.data().url;
-        if (url) {
-          audioRef.current = new Audio(url);
+        const data = doc.data();
+        if (data.url) {
+          audioRef.current = new Audio(data.url);
           audioRef.current.loop = true;
+        }
+        if (data.popupText) {
+          setMusicPopupText(data.popupText);
         }
       }
     });
@@ -2178,8 +2308,43 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
   const playMusic = () => {
     if (audioRef.current) {
-      audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+      audioRef.current.play().catch(e => console.error("Error playing music:", e));
     }
+  };
+
+  const stopMusic = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  const handleRequestClick = () => {
+    // Pre-populate form with existing request if it exists
+    if (requests && requests.length > 0) {
+      const r = requests[0];
+      setFormData({
+        date1: r.date1 || '',
+        date2: r.date2 || '',
+        date3: r.date3 || '',
+        date4: r.date4 || '',
+        date5: r.date5 || '',
+        date6: r.date6 || '',
+        reason: r.reason || '',
+        sectionId: r.sectionId || ''
+      });
+    } else {
+      setFormData({ date1: '', date2: '', date3: '', date4: '', date5: '', date6: '', reason: '', sectionId: '' });
+    }
+
+    setShowMusicPopup(true);
+    setMusicPopupText(requestKata || 'Silakan ajukan request libur Anda.');
+    playMusic();
+    
+    setTimeout(() => {
+      setShowMusicPopup(false);
+      setShowAdd(true);
+    }, 6000);
   };
 
   useEffect(() => {
@@ -2333,6 +2498,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
       createdAt: serverTimestamp()
     });
     setShowAdd(false);
+    stopMusic();
     setFormData({ date1: '', date2: '', date3: '', date4: '', date5: '', date6: '', reason: '', sectionId: '' });
   };
 
@@ -2373,6 +2539,45 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
   return (
     <div className="space-y-6 mt-8 pb-12 text-white">
+      {/* Improved Music & Words Popup using motion for reliability */}
+      <AnimatePresence>
+        {showMusicPopup && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="glass-panel p-10 rounded-3xl border border-white/20 max-w-md w-full text-center shadow-2xl"
+            >
+              <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center mb-8 mx-auto ring-4 ring-primary/10">
+                  <Music className="w-10 h-10 text-primary animate-bounce" />
+              </div>
+              <h2 className="text-2xl md:text-3xl font-black text-white mb-4 leading-tight italic decoration-primary underline decoration-4 underline-offset-8">
+                {musicPopupText}
+              </h2>
+              <div className="flex flex-col items-center gap-3 mt-8">
+                <div className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <motion.div
+                      key={i}
+                      animate={{ scale: [1, 1.5, 1], opacity: [0.3, 1, 0.3] }}
+                      transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                      className="w-2 h-2 bg-primary rounded-full"
+                    />
+                  ))}
+                </div>
+                <p className="text-white/40 uppercase tracking-[0.3em] text-[10px] font-bold">Harap tunggu sebentar</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex flex-wrap items-center justify-between gap-4 glass-panel p-4 rounded-2xl border-white/5">
         <div>
           <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Divisi: <span className="text-primary">{employee.division || 'Depan'}</span> | Periode Aktif</p>
@@ -2417,26 +2622,27 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                 <CardTitle className="text-white text-lg">Input Tanggal Libur Saya</CardTitle>
                 <CardDescription className="text-white/40">Isi tanggal libur yang diinginkan (Maks. 6 hari)</CardDescription>
               </div>
-              <Dialog open={showAdd} onOpenChange={setShowAdd}>
-                <DialogTrigger 
-                  render={
-                    (() => {
-                      if (!selectedPeriod) {
-                        return <Button className="bg-rose-500/20 text-rose-300 rounded-xl px-4 py-2 text-sm font-bold">Belum ada request yang dibuka</Button>
-                      }
-                      return (
-                        <Button 
-                          disabled={isClosed}
-                          onClick={playMusic}
-                          className={`inline-flex items-center justify-center h-10 px-4 py-2 text-white rounded-xl shadow-lg transition-colors font-bold text-sm gap-2 border-none ${isClosed ? 'bg-white/5 text-white/20' : 'bg-primary hover:bg-primary/80'}`}
-                        >
-                          {isClosed ? <AlertCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                          {isClosed ? 'REQUEST DITUTUP' : 'Buat/Edit Request'}
-                        </Button>
-                      )
-                    })()
-                  }
-                />
+              <Dialog open={showAdd} onOpenChange={(val) => {
+                setShowAdd(val);
+                if (!val) stopMusic();
+              }}>
+                 {/* No DialogTrigger here, we open it via handleRequestClick after 4s */}
+                 {(() => {
+                    if (!selectedPeriod) {
+                      return <Button className="bg-rose-500/20 text-rose-300 rounded-xl px-4 py-2 text-sm font-bold">Belum ada request yang dibuka</Button>
+                    }
+                    return (
+                      <Button 
+                        disabled={isClosed}
+                        onClick={handleRequestClick}
+                        className={`inline-flex items-center justify-center h-10 px-4 py-2 text-white rounded-xl shadow-lg transition-colors font-bold text-sm gap-2 border-none ${isClosed ? 'bg-white/5 text-white/20' : 'bg-primary hover:bg-primary/80'}`}
+                      >
+                        {isClosed ? <AlertCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                        {isClosed ? 'REQUEST DITUTUP' : 'Buat/Edit Request'}
+                      </Button>
+                    )
+                  })()}
+                
                 <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[500px]">
                   <DialogHeader>
                     <DialogTitle className="text-white">Form Request Libur</DialogTitle>
