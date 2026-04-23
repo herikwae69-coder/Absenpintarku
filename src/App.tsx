@@ -2669,10 +2669,8 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
             </Dialog>
 
             <Dialog open={showLibur} onOpenChange={setShowLibur}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="glass-panel border-white/10 text-white flex gap-2 h-10 hover:bg-white/10 px-4 rounded-md">
-                  <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
-                </Button>
+              <DialogTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm h-10">
+                <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
               </DialogTrigger>
             <DialogContent className="bg-black/95 text-white border-white/20 sm:max-w-md">
                 <DialogHeader>
