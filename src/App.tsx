@@ -805,6 +805,8 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
   const [confirmAction, setConfirmAction] = useState<null | 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>(null);
   const [showCamera, setShowCamera] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | { action: any, location: string }>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const periodOptions = getPeriodOptions();
   const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
   const [history, setHistory] = useState<Attendance[]>([]);
@@ -853,13 +855,20 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
   }, [employee.id, today, currentTime.getDay(), shifts]);
 
   const handleAction = async (action: 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut', photoData?: string) => {
+    setIsProcessing(true);
+    setStatusMessage("Menyiapkan koordinat...");
+    
     let location = "";
     
     // Geolocation check for specific actions
     if (action === 'checkIn' || action === 'checkOut' || action === 'breakEnd') {
       try {
         const position: any = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+            navigator.geolocation.getCurrentPosition(resolve, reject, { 
+                timeout: 15000, 
+                enableHighAccuracy: true,
+                maximumAge: 0 
+            });
         });
         
         // Anti-spoofing check: Check distance if office config exists
@@ -868,13 +877,16 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
           const config = officeSnap.data();
           const dist = calculateDistance(position.coords.latitude, position.coords.longitude, config.lat, config.lng);
           if (dist > config.radius) {
+            setIsProcessing(false);
             alert(`Anda berada di luar radius kantor! (Jarak: ${Math.round(dist)}m, Max: ${config.radius}m)`);
             return;
           }
         }
         location = JSON.stringify({ lat: position.coords.latitude, lng: position.coords.longitude });
-      } catch (e) {
-        alert("Gagal mendapatkan lokasi. Pastikan GPS aktif dan izin diberikan.");
+      } catch (e: any) {
+        setIsProcessing(false);
+        console.error("Geolocation error:", e);
+        alert(`Gagal mendapatkan lokasi: ${e.message || 'Izin ditolak atau timeout'}. Pastikan GPS aktif!`);
         return;
       }
     }
@@ -883,33 +895,49 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
     if ((action === 'checkIn' || action === 'checkOut' || action === 'breakEnd') && !photoData) {
       setPendingAction({ action, location });
       setShowCamera(true);
+      setIsProcessing(false);
       return;
     }
 
+    setStatusMessage("Menyimpan data...");
     const time = new Date();
     setConfirmAction(null);
-    if (!attendance && action === 'checkIn') {
-      if (!selectedShiftId) return alert("Pilih shift terlebih dahulu!");
-      await addDoc(collection(db, 'attendance'), {
-        employeeId: employee.id,
-        employeeName: employee.name,
-        shiftId: selectedShiftId,
-        date: today,
-        checkIn: time,
-        status: 'present',
-        location: location || (pendingAction?.location || ""),
-        photoUrl: photoData || "",
-        updatedAt: serverTimestamp()
-      });
-    } else if (attendance) {
-      await updateDoc(doc(db, 'attendance', attendance.id), {
-        [action]: time,
-        location: location || (pendingAction?.location || attendance.location || ""),
-        photoUrl: photoData || (attendance.photoUrl || ""),
-        updatedAt: serverTimestamp()
-      });
+    try {
+        if (!attendance && action === 'checkIn') {
+          if (!selectedShiftId) {
+             setIsProcessing(false);
+             return alert("Pilih shift terlebih dahulu!");
+          }
+          await addDoc(collection(db, 'attendance'), {
+            employeeId: employee.id,
+            employeeName: employee.name,
+            shiftId: selectedShiftId,
+            date: today,
+            checkIn: time,
+            status: 'present',
+            location: location || (pendingAction?.location || ""),
+            photoUrl: photoData || "",
+            updatedAt: serverTimestamp()
+          });
+        } else if (attendance) {
+          await updateDoc(doc(db, 'attendance', attendance.id), {
+            [action]: time,
+            location: location || (pendingAction?.location || attendance.location || ""),
+            photoUrl: photoData || (attendance.photoUrl || ""),
+            updatedAt: serverTimestamp()
+          });
+        }
+        setStatusMessage("Berhasil!");
+    } catch (e) {
+        setStatusMessage("Gagal menyimpan data!");
+        console.error(e);
+    } finally {
+        setPendingAction(null);
+        setTimeout(() => {
+            setIsProcessing(false);
+            setStatusMessage(null);
+        }, 2000);
     }
-    setPendingAction(null);
   };
 
   const handleUpdatePassword = async () => {
@@ -1253,6 +1281,16 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
               }
             }}
           />
+
+          {/* Processing Dialog */}
+          <Dialog open={isProcessing}>
+            <DialogContent className="glass-panel text-white border-white/20 p-8 max-w-sm rounded-[2rem] outline-none">
+                <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="w-12 h-12 border-4 border-primary border-t-white rounded-full animate-spin" />
+                    <p className="text-center font-bold text-lg">{statusMessage || "Memproses..."}</p>
+                </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="libur" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
@@ -1423,22 +1461,21 @@ function AdminDashboard({
   const isSuper = currentUser?.role === 'superadmin';
 
   useEffect(() => {
-    // Auto-Delete records older than 2 months (60 days)
+    // Clear photoUrl for records older than 2 months (60 days)
     if (isSuper) {
       const cleanupOldData = async () => {
         const twoMonthsAgo = subMonths(new Date(), 2);
         const twoMonthsAgoStr = format(twoMonthsAgo, 'yyyy-MM-dd');
         
-        // This is a simple cleanup. In a real intensive app, this should be a Cloud Function.
-        const q = query(collection(db, 'attendance'), where('date', '<', twoMonthsAgoStr));
+        const q = query(collection(db, 'attendance'), where('date', '<', twoMonthsAgoStr), where('photoUrl', '>', ''));
         const snap = await getDocs(q);
         
         if (!snap.empty) {
-          console.log(`Cleaning up ${snap.size} old attendance records...`);
-          const batchSize = 25; // Smaller batch to avoid UI freeze
+          console.log(`Cleaning up ${snap.size} old photo records...`);
+          const batchSize = 25;
           for (let i = 0; i < snap.docs.length; i += batchSize) {
             const chunk = snap.docs.slice(i, i + batchSize);
-            await Promise.all(chunk.map(d => deleteDoc(doc(db, 'attendance', d.id))));
+            await Promise.all(chunk.map(d => updateDoc(doc(db, 'attendance', d.id), { photoUrl: "" })));
           }
         }
       };
@@ -2756,6 +2793,19 @@ function AdminActivityLog({ employees }: { employees: Employee[] }) {
   const [loading, setLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
+  const getActionName = (log: Attendance) => {
+    // Determine the most recent action based on timestamps
+    const actions: { label: string, time: any, order: number }[] = [];
+    if (log.checkIn) actions.push({ label: 'Masuk', time: log.checkIn, order: 1 });
+    if (log.breakStart) actions.push({ label: 'Istirahat', time: log.breakStart, order: 2 });
+    if (log.breakEnd) actions.push({ label: 'Selesai Ist.', time: log.breakEnd, order: 3 });
+    if (log.checkOut) actions.push({ label: 'Pulang', time: log.checkOut, order: 4 });
+    
+    // Sort by time descending to find latest
+    actions.sort((a, b) => b.time.seconds - a.time.seconds);
+    return actions[0]?.label || 'Lainnya';
+  };
+
   useEffect(() => {
     const q = query(collection(db, 'attendance'), orderBy('updatedAt', 'desc'), limit(100));
     const unsub = onSnapshot(q, (snap) => {
@@ -2777,6 +2827,7 @@ function AdminActivityLog({ employees }: { employees: Employee[] }) {
           <TableHeader>
             <TableRow className="border-white/10 hover:bg-transparent">
               <TableHead className="text-white/40">Karyawan</TableHead>
+              <TableHead className="text-white/40">Aksi</TableHead>
               <TableHead className="text-white/40">Waktu</TableHead>
               <TableHead className="text-white/40">Lokasi</TableHead>
               <TableHead className="text-white/40">Foto</TableHead>
@@ -2788,6 +2839,7 @@ function AdminActivityLog({ employees }: { employees: Employee[] }) {
               return (
                 <TableRow key={log.id} className="border-white/5 hover:bg-white/5">
                   <TableCell className="font-medium text-white">{log.employeeName}</TableCell>
+                  <TableCell className="text-white/80 font-bold">{getActionName(log)}</TableCell>
                   <TableCell className="text-white/60 text-xs">
                     {log.date}<br/>
                     <span className="text-[10px] text-white/30 uppercase font-black">
@@ -2816,7 +2868,7 @@ function AdminActivityLog({ employees }: { employees: Employee[] }) {
 
       <Dialog open={!!selectedPhoto} onOpenChange={() => setSelectedPhoto(null)}>
         <DialogContent className="glass-panel p-2 border-white/20 max-w-xs rounded-3xl overflow-hidden aspect-[3/4]">
-          <img src={selectedPhoto || ''} alt="Selfie" className="w-full h-full object-cover rounded-2xl" />
+          <img src={selectedPhoto || undefined} alt="Selfie" className="w-full h-full object-cover rounded-2xl" />
         </DialogContent>
       </Dialog>
     </DialogContent>
@@ -3057,8 +3109,8 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
             </Popover>
 
             <Dialog open={showActivity} onOpenChange={setShowActivity}>
-              <DialogTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary/20 border border-primary/20 rounded-md text-sm font-bold text-primary hover:bg-primary/30 transition-all">
-                <History className="w-4 h-4" /> Cek Activity
+              <DialogTrigger className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-primary/20 border border-primary/20 rounded-md text-xs font-bold text-primary hover:bg-primary/30 transition-all whitespace-nowrap">
+                <History className="w-3 h-3" /> Cek Activity
               </DialogTrigger>
               <AdminActivityLog employees={employees} />
             </Dialog>
