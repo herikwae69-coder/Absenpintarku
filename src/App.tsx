@@ -13,7 +13,8 @@ import {
   serverTimestamp,
   addDoc,
   deleteDoc,
-  orderBy
+  orderBy,
+  Timestamp
 } from 'firebase/firestore';
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse } from 'date-fns';
 import { 
@@ -39,7 +40,8 @@ import {
   Menu,
   History,
   Crown,
-  MessageSquare
+  MessageSquare,
+  Layers
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -159,6 +161,7 @@ export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [view, setView] = useState<'login' | 'employee' | 'admin'>('login');
@@ -188,10 +191,17 @@ export default function App() {
       console.error("Section snapshot error:", err);
     });
 
+    const unsubDivisions = onSnapshot(collection(db, 'divisions'), (snapshot) => {
+      setDivisions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Division)));
+    }, (err) => {
+      console.error("Division snapshot error:", err);
+    });
+
     return () => {
       unsubEmployees();
       unsubShifts();
       unsubSections();
+      unsubDivisions();
     };
   }, []);
 
@@ -267,6 +277,7 @@ export default function App() {
             employee={currentUser} 
             shifts={shifts}
             sections={sections}
+            divisions={divisions}
             onLogout={handleLogout} 
           />
         )}
@@ -275,6 +286,7 @@ export default function App() {
             employees={employees} 
             shifts={shifts} 
             sections={sections}
+            divisions={divisions}
             onLogout={handleLogout} 
             currentUser={currentUser}
           />
@@ -541,10 +553,11 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
 }
 
 // --- EMPLOYEE VIEW ---
-function EmployeeView({ employee, shifts, sections, onLogout }: { 
+function EmployeeView({ employee, shifts, sections, divisions, onLogout }: { 
   employee: Employee, 
   shifts: Shift[],
   sections: Section[],
+  divisions: Division[],
   onLogout: () => void 
 }) {
   const [attendance, setAttendance] = useState<Attendance | null>(null);
@@ -991,12 +1004,14 @@ function AdminDashboard({
   employees, 
   shifts, 
   sections, 
+  divisions,
   onLogout,
   currentUser
 }: { 
   employees: Employee[], 
   shifts: Shift[],
   sections: Section[],
+  divisions: Division[],
   onLogout: () => void,
   currentUser: Employee | null
 }) {
@@ -1006,6 +1021,7 @@ function AdminDashboard({
   const menuItems = [
     { value: 'employees', label: 'Karyawan', icon: <Users className="w-4 h-4" /> },
     { value: 'shifts', label: 'Shift', icon: <Clock className="w-4 h-4" /> },
+    { value: 'divisions', label: 'Divisi', icon: <Layers className="w-4 h-4" /> },
     { value: 'sections', label: 'Bagian', icon: <Settings className="w-4 h-4" /> },
     { value: 'live', label: 'Live Absen', icon: <ClipboardList className="w-4 h-4" /> },
     { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
@@ -1083,19 +1099,22 @@ function AdminDashboard({
 
             <div className="focus-visible:outline-none min-h-[500px]">
               <TabsContent value="employees" className="mt-0 outline-none">
-                <AdminEmployees employees={employees} shifts={shifts} sections={sections} currentUser={currentUser} />
+                <AdminEmployees employees={employees} shifts={shifts} sections={sections} divisions={divisions} currentUser={currentUser} />
               </TabsContent>
               <TabsContent value="shifts" className="mt-0 outline-none">
                 <AdminShifts shifts={shifts} />
               </TabsContent>
+              <TabsContent value="divisions" className="mt-0 outline-none">
+                <AdminDivisions divisions={divisions} />
+              </TabsContent>
               <TabsContent value="sections" className="mt-0 outline-none">
-                <AdminSections sections={sections} />
+                <AdminSections sections={sections} divisions={divisions} />
               </TabsContent>
               <TabsContent value="live" className="mt-0 outline-none">
                 <AdminLive employees={employees} shifts={shifts} />
               </TabsContent>
               <TabsContent value="leaves" className="mt-0 outline-none">
-                <AdminLeave employees={employees} sections={sections} />
+                <AdminLeave employees={employees} sections={sections} divisions={divisions} />
               </TabsContent>
               <TabsContent value="quotas" className="mt-0 outline-none">
                 <AdminQuota employees={employees} />
@@ -1159,7 +1178,7 @@ function AdminMusic() {
 }
 
 // --- ADMIN: EMPLOYEES ---
-function AdminEmployees({ employees, shifts, sections, currentUser }: { employees: Employee[], shifts: Shift[], sections: Section[], currentUser: Employee | null }) {
+function AdminEmployees({ employees, shifts, sections, divisions, currentUser }: { employees: Employee[], shifts: Shift[], sections: Section[], divisions: Division[], currentUser: Employee | null }) {
   const [isEditing, setIsEditing] = useState<Employee | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1169,7 +1188,7 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
     shiftId: '', 
     role: 'employee' as const, 
     leaveQuota: 0,
-    division: 'Depan' as Division,
+    division: divisions?.[0]?.name || 'Depan',
     password: ''
   });
 
@@ -1184,7 +1203,7 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
     shiftId: '', 
     role: 'employee', 
     leaveQuota: 4,
-    division: 'Depan',
+    division: divisions?.[0]?.name || 'Depan',
     password: ''
   });
 
@@ -1229,7 +1248,7 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
             name: row["Nama"].toString(),
             pin: row["No Absen"].toString(),
             shiftId: shift?.id || "",
-            division: (row["Divisi"] === 'Belakang' ? 'Belakang' : 'Depan') as Division,
+            division: row["Divisi"] || 'Depan',
             role: (currentUser?.role === 'superadmin' && row["Hak Akses"] === 'admin' ? 'admin' : 'employee'),
             leaveQuota: parseInt(row["Kuota Libur"]) || 4,
             createdAt: serverTimestamp(),
@@ -1376,8 +1395,15 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
                 <Select value={formData.division} onValueChange={(val: any) => setFormData({...formData, division: val})}>
                   <SelectTrigger className="field-input text-white border-white/10"><SelectValue placeholder="Pilih Divisi" /></SelectTrigger>
                   <SelectContent className="glass-panel border-white/10 text-white">
-                    <SelectItem value="Depan" className="hover:bg-white/10">Depan</SelectItem>
-                    <SelectItem value="Belakang" className="hover:bg-white/10">Belakang</SelectItem>
+                    {divisions.map(d => (
+                      <SelectItem key={d.id} value={d.name} className="hover:bg-white/10">{d.name}</SelectItem>
+                    ))}
+                    {divisions.length === 0 && (
+                       <>
+                        <SelectItem value="Depan" className="hover:bg-white/10">Depan</SelectItem>
+                        <SelectItem value="Belakang" className="hover:bg-white/10">Belakang</SelectItem>
+                       </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1480,18 +1506,111 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
   );
 }
 
-// --- ADMIN: SECTIONS ---
-function AdminSections({ sections }: { sections: Section[] }) {
+// --- ADMIN: DIVISIONS ---
+function AdminDivisions({ divisions }: { divisions: Division[] }) {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
-  const [division, setDivision] = useState<Division>('Depan');
+  const [isEditing, setIsEditing] = useState<Division | null>(null);
+
+  const handleSave = async () => {
+    if (!name) return;
+    if (isEditing) {
+      await updateDoc(doc(db, 'divisions', isEditing.id), { name });
+    } else {
+      await addDoc(collection(db, 'divisions'), { name });
+    }
+    setShowAdd(false);
+    setName('');
+    setIsEditing(null);
+  };
+
+  const triggerEdit = (d: Division) => {
+    setIsEditing(d);
+    setName(d.name);
+    setShowAdd(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm("Hapus divisi ini? Semua bagian di divisi ini mungkin akan terdampak.")) {
+      await deleteDoc(doc(db, 'divisions', id));
+    }
+  };
+
+  return (
+    <Card className="glass-panel border-none shadow-lg text-white">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-white">Daftar Divisi</CardTitle>
+        <Dialog open={showAdd} onOpenChange={(val) => { setShowAdd(val); if (!val) { setIsEditing(null); setName(''); } }}>
+          <DialogTrigger 
+            render={
+              <Button className="rounded-xl flex items-center justify-center gap-2 bg-primary hover:bg-primary/80 transition-colors h-10 px-4 py-2 font-medium text-white shadow-sm">
+                <Plus className="w-4 h-4" /> Divisi Baru
+              </Button>
+            }
+          />
+          <DialogContent className="glass-panel text-white border-white/20">
+            <DialogHeader>
+              <DialogTitle className="text-white">{isEditing ? 'Edit Divisi' : 'Tambah Divisi'}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label className="text-white/70 text-xs">Nama Divisi</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Contoh: Depan" className="field-input text-white" />
+              </div>
+            </div>
+            <DialogFooter><Button onClick={handleSave} className="w-full bg-primary hover:bg-primary/80">Simpan Divisi</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto no-scrollbar">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/10 hover:bg-transparent text-white/40">
+                <TableHead className="text-white/40 whitespace-nowrap">Nama Divisi</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {divisions.map(d => (
+                <TableRow key={d.id} className="border-white/5 hover:bg-white/5">
+                  <TableCell className="text-white font-medium whitespace-nowrap">{d.name}</TableCell>
+                  <TableCell className="text-right space-x-2 whitespace-nowrap">
+                    <Button variant="ghost" size="icon" onClick={() => triggerEdit(d)} className="hover:bg-white/10"><Edit className="w-4 h-4 text-primary" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(d.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {divisions.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center py-6 text-white/30 italic">Belum ada divisi. Silakan tambah divisi baru.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- ADMIN: SECTIONS ---
+function AdminSections({ sections, divisions }: { sections: Section[], divisions: Division[] }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState('');
+  const [division, setDivision] = useState<string>(divisions?.[0]?.name || 'Depan');
+
+  useEffect(() => {
+    if (divisions.length > 0 && !divisions.find(d => d.name === division)) {
+      setDivision(divisions[0].name);
+    }
+  }, [divisions]);
 
   const handleAdd = async () => {
     if (!name) return;
     await addDoc(collection(db, 'sections'), { name, division });
     setShowAdd(false);
     setName('');
-    setDivision('Depan');
   };
 
   const handleDelete = async (id: string) => {
@@ -1500,33 +1619,46 @@ function AdminSections({ sections }: { sections: Section[] }) {
     }
   };
 
-  const groupedSections = {
-    Depan: sections.filter(s => s.division === 'Depan' || !s.division),
-    Belakang: sections.filter(s => s.division === 'Belakang')
-  };
+  const groupedSections: Record<string, Section[]> = {};
+  divisions.forEach(div => {
+    groupedSections[div.name] = sections.filter(s => s.division === div.name);
+  });
+  // Handle fallback for legacy or mismatched ones
+  const otherSections = sections.filter(s => !divisions.map(d => d.name).includes(s.division || ''));
+  if (otherSections.length > 0) {
+    groupedSections['Lainnya'] = otherSections;
+  }
 
   return (
     <Card className="glass-panel border-none shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-white">Daftar Bagian</CardTitle>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
-          <DialogTrigger className="rounded-xl flex items-center justify-center gap-2 bg-primary hover:bg-primary/80 transition-colors h-10 px-4 py-2 font-medium text-white shadow-sm">
-            <Plus className="w-4 h-4" /> Bagian Baru
-          </DialogTrigger>
+          <DialogTrigger 
+            render={
+              <Button className="rounded-xl flex items-center justify-center gap-2 bg-primary hover:bg-primary/80 transition-colors h-10 px-4 py-2 font-medium text-white shadow-sm">
+                <Plus className="w-4 h-4" /> Bagian Baru
+              </Button>
+            }
+          />
           <DialogContent className="glass-panel text-white border-white/20">
             <DialogHeader>
               <DialogTitle className="text-white">Tambah Bagian</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label className="text-white/70 text-xs">Divisi (Depan / Belakang)</Label>
-                <Select value={division} onValueChange={(v: Division) => setDivision(v)}>
+                <Label className="text-white/70 text-xs">Pilih Divisi</Label>
+                <Select value={division} onValueChange={(v: string) => setDivision(v)}>
                   <SelectTrigger className="field-input text-white">
                     <SelectValue placeholder="Pilih Divisi" />
                   </SelectTrigger>
                   <SelectContent className="glass-panel border-white/20 text-white">
-                    <SelectItem value="Depan" className="hover:bg-white/10">Depan</SelectItem>
-                    <SelectItem value="Belakang" className="hover:bg-white/10">Belakang</SelectItem>
+                    {divisions.map(d => (
+                      <SelectItem key={d.id} value={d.name} className="hover:bg-white/10">{d.name}</SelectItem>
+                    ))}
+                    {divisions.length === 0 && (
+                      <SelectItem value="Depan" className="hover:bg-white/10">Depan (Default)</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -1541,11 +1673,11 @@ function AdminSections({ sections }: { sections: Section[] }) {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {(['Depan', 'Belakang'] as Division[]).map((div) => (
-             <div key={div} className="glass-panel border-white/10 p-4 rounded-xl">
+          {Object.keys(groupedSections).map((divName) => (
+             <div key={divName} className="glass-panel border-white/10 p-4 rounded-xl">
                <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                 <div className={`w-2 h-2 rounded-full ${div === 'Depan' ? 'bg-emerald-400' : 'bg-blue-400'}`} />
-                 Divisi {div}
+                 <div className="w-2 h-2 rounded-full bg-primary" />
+                 Divisi {divName}
                </h3>
                <div className="overflow-x-auto no-scrollbar">
                  <Table>
@@ -1556,7 +1688,7 @@ function AdminSections({ sections }: { sections: Section[] }) {
                      </TableRow>
                    </TableHeader>
                    <TableBody>
-                     {groupedSections[div].map(s => (
+                     {groupedSections[divName].map(s => (
                        <TableRow key={s.id} className="border-white/5 hover:bg-white/5">
                          <TableCell className="text-white font-medium whitespace-nowrap">{s.name}</TableCell>
                          <TableCell className="text-right whitespace-nowrap">
@@ -1564,7 +1696,7 @@ function AdminSections({ sections }: { sections: Section[] }) {
                          </TableCell>
                        </TableRow>
                      ))}
-                     {groupedSections[div].length === 0 && (
+                     {groupedSections[divName].length === 0 && (
                        <TableRow>
                          <TableCell colSpan={2} className="text-center py-6 text-white/30 italic">Belum ada bagian di divisi ini.</TableCell>
                        </TableRow>
@@ -2057,6 +2189,15 @@ function AdminShifts({ shifts }: { shifts: Shift[] }) {
 function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift[] }) {
   const [liveAttendance, setLiveAttendance] = useState<Attendance[]>([]);
   const [date, setDate] = useState<Date>(new Date());
+  const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editData, setEditData] = useState({
+    checkIn: '',
+    breakStart: '',
+    breakEnd: '',
+    checkOut: '',
+    status: 'present' as Attendance['status']
+  });
   
   useEffect(() => {
     const formattedDate = format(date, 'yyyy-MM-dd');
@@ -2066,6 +2207,53 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
     }, (err) => console.error("Live attendance error:", err));
     return unsub;
   }, [date]);
+
+  const handleDelete = async (id: string) => {
+    if (confirm("Hapus data absen ini?")) {
+      await deleteDoc(doc(db, 'attendance', id));
+    }
+  };
+
+  const triggerEdit = (a: Attendance) => {
+    setEditingAttendance(a);
+    setEditData({
+      checkIn: a.checkIn ? format(toDateSafe(a.checkIn), 'HH:mm') : '',
+      breakStart: a.breakStart ? format(toDateSafe(a.breakStart), 'HH:mm') : '',
+      breakEnd: a.breakEnd ? format(toDateSafe(a.breakEnd), 'HH:mm') : '',
+      checkOut: a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '',
+      status: a.status
+    });
+    setShowEdit(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingAttendance) return;
+    
+    const updatePayload: any = {
+      status: editData.status,
+      updatedAt: serverTimestamp()
+    };
+
+    const baseDateString = editingAttendance.date; // already YYYY-MM-DD
+    
+    const setTime = (timeStr: string) => {
+      if (!timeStr) return null;
+      // timeStr is HH:mm
+      const [h, m] = timeStr.split(':').map(Number);
+      const d = parse(baseDateString, 'yyyy-MM-dd', new Date());
+      d.setHours(h, m, 0, 0);
+      return Timestamp.fromDate(d);
+    };
+
+    updatePayload.checkIn = setTime(editData.checkIn);
+    updatePayload.breakStart = setTime(editData.breakStart);
+    updatePayload.breakEnd = setTime(editData.breakEnd);
+    updatePayload.checkOut = setTime(editData.checkOut);
+
+    await updateDoc(doc(db, 'attendance', editingAttendance.id), updatePayload);
+    setShowEdit(false);
+    setEditingAttendance(null);
+  };
 
   const stats = {
     total: employees.length,
@@ -2084,12 +2272,55 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
       <Card className="glass-panel border-none shadow-lg">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-white">Log Kehadiran: <span className="text-white/60 font-medium">{format(date, 'd MMMM yyyy')}</span></CardTitle>
-          <Popover>
-            <PopoverTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm">
-              <CalendarIcon className="w-4 h-4" /> Ganti Tanggal
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 glass-panel border-white/20"><Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} className="text-white" /></PopoverContent>
-          </Popover>
+          <div className="flex gap-2">
+            <Dialog open={showEdit} onOpenChange={setShowEdit}>
+              <DialogContent className="glass-panel text-white border-white/20">
+                <DialogHeader>
+                  <DialogTitle className="text-white font-bold">Edit Absensi: {editingAttendance?.employeeName}</DialogTitle>
+                </DialogHeader>
+                <div className="grid grid-cols-2 gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label className="text-white/70 text-xs">Jam Masuk</Label>
+                    <Input type="time" value={editData.checkIn} onChange={(e) => setEditData({...editData, checkIn: e.target.value})} className="field-input" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-white/70 text-xs">Mulai Istirahat</Label>
+                    <Input type="time" value={editData.breakStart} onChange={(e) => setEditData({...editData, breakStart: e.target.value})} className="field-input" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-white/70 text-xs">Selesai Istirahat</Label>
+                    <Input type="time" value={editData.breakEnd} onChange={(e) => setEditData({...editData, breakEnd: e.target.value})} className="field-input" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-white/70 text-xs">Jam Pulang</Label>
+                    <Input type="time" value={editData.checkOut} onChange={(e) => setEditData({...editData, checkOut: e.target.value})} className="field-input" />
+                  </div>
+                  <div className="grid gap-2 col-span-2">
+                    <Label className="text-white/70 text-xs">Status</Label>
+                    <Select value={editData.status} onValueChange={(v: any) => setEditData({...editData, status: v})}>
+                      <SelectTrigger className="field-input text-white border-white/10"><SelectValue /></SelectTrigger>
+                      <SelectContent className="glass-panel border-white/10 text-white">
+                        <SelectItem value="present">HADIR</SelectItem>
+                        <SelectItem value="late">TERLAMBAT</SelectItem>
+                        <SelectItem value="half-day">STENGAH HARI</SelectItem>
+                        <SelectItem value="absent">ALPHA</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={handleUpdate} className="w-full bg-primary hover:bg-primary/80">SIMPAN PERUBAHAN</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Popover>
+              <PopoverTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm">
+                <CalendarIcon className="w-4 h-4" /> Ganti Tanggal
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0 glass-panel border-white/20"><Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} className="text-white" /></PopoverContent>
+            </Popover>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto no-scrollbar">
@@ -2103,6 +2334,7 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
                   <TableHead className="text-white/40 whitespace-nowrap">Selesai Ist.</TableHead>
                   <TableHead className="text-white/40 whitespace-nowrap">Pulang</TableHead>
                   <TableHead className="text-white/40 whitespace-nowrap">Status</TableHead>
+                  <TableHead className="text-right text-white/40 whitespace-nowrap">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2117,11 +2349,19 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
                       <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.breakEnd ? format(toDateSafe(a.breakEnd), 'HH:mm') : '-'}</TableCell>
                       <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '-'}</TableCell>
                       <TableCell className="whitespace-nowrap"><Badge variant="outline" className="border-white/20 text-white/50">{a.status.toUpperCase()}</Badge></TableCell>
+                      <TableCell className="text-right space-x-2 whitespace-nowrap">
+                        <Button variant="ghost" size="icon" onClick={() => triggerEdit(a)} className="hover:bg-white/10 transition-colors">
+                          <Edit className="w-4 h-4 text-primary" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(a.id)} className="hover:bg-white/10 transition-colors">
+                          <Trash2 className="w-4 h-4 text-rose-500" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
                 {liveAttendance.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center py-10 text-white/30 italic">Belum ada data absensi untuk tanggal ini.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-white/30 italic">Belum ada data absensi untuk tanggal ini.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -2133,12 +2373,18 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
 }
 
 // --- ADMIN: LEAVE REQUESTS ---
-function AdminLeave({ employees, sections }: { employees: Employee[], sections: Section[] }) {
+function AdminLeave({ employees, sections, divisions }: { employees: Employee[], sections: Section[], divisions: Division[] }) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
   const periodOptions = getPeriodOptions();
   const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value); // Default to current
-  const [selectedDivision, setSelectedDivision] = useState<Division>('Depan');
+  const [selectedDivision, setSelectedDivision] = useState<string>(divisions[0]?.name || 'Depan');
+
+  useEffect(() => {
+    if (divisions.length > 0 && !divisions.find(d => d.name === selectedDivision)) {
+      setSelectedDivision(divisions[0].name);
+    }
+  }, [divisions]);
 
   useEffect(() => {
     const q = query(
@@ -2185,11 +2431,17 @@ function AdminLeave({ employees, sections }: { employees: Employee[], sections: 
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-center mb-2">
-        <Tabs value={selectedDivision} onValueChange={(v: any) => setSelectedDivision(v)} className="w-full max-w-md">
-          <TabsList className="grid w-full grid-cols-2 glass-panel border-white/10 p-1 h-12 bg-black/20">
-            <TabsTrigger value="Depan" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-xs">Request Libur Depan</TabsTrigger>
-            <TabsTrigger value="Belakang" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-xs">Request Libur Belakang</TabsTrigger>
+      <div className="flex justify-center mb-2 overflow-x-auto no-scrollbar">
+        <Tabs value={selectedDivision} onValueChange={(v: any) => setSelectedDivision(v)} className="w-full">
+          <TabsList className={`grid w-full glass-panel border-white/10 p-1 h-12 bg-black/20`} style={{ gridTemplateColumns: `repeat(${Math.max(divisions.length, 1)}, 1fr)` }}>
+            {divisions.map(div => (
+              <TabsTrigger key={div.id} value={div.name} className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-[10px] sm:text-xs">
+                {div.name}
+              </TabsTrigger>
+            ))}
+            {divisions.length === 0 && (
+              <TabsTrigger value="Depan" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-xs">Depan</TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
       </div>

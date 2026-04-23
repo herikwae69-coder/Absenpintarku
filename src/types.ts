@@ -1,9 +1,12 @@
-export type Division = 'Depan' | 'Belakang';
+export interface Division {
+  id: string;
+  name: string;
+}
 
 export interface Section {
   id: string;
   name: string;
-  division?: Division;
+  division?: string; // Name of the division
 }
 
 export interface Employee {
@@ -11,9 +14,9 @@ export interface Employee {
   name: string;
   pin: string;
   password?: string;
-  role: 'admin' | 'employee';
+  role: 'admin' | 'employee' | 'superadmin';
   shiftId: string;
-  division: Division;
+  division: string;
   leaveQuota: number;
   createdAt: any;
   updatedAt: any;
@@ -44,9 +47,10 @@ export interface Attendance {
 
 export interface LeaveRequest {
   id: string;
+  name?: string; // some have name instead of employeeName if older? No, it's employeeName usually
   employeeId: string;
   employeeName: string;
-  division: Division;
+  division: string;
   sectionId: string;
   period: string; 
   date1?: string;
