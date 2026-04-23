@@ -1260,8 +1260,9 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
   };
 
   const addSuperAdmin = async () => {
+    const adminName = prompt("Masukkan Nama Super Admin:", "Super Admin") || "Super Admin";
     await addDoc(collection(db, 'employees'), {
-      name: "SuperAdmin",
+      name: adminName,
       pin: "1",
       role: "superadmin",
       password: "adnan2301",
@@ -1271,7 +1272,7 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
-    alert("Super Admin Berhasil Dibuat");
+    alert(`Super Admin ${adminName} Berhasil Dibuat`);
   };
 
   const handleEdit = async () => {
@@ -1330,7 +1331,7 @@ function AdminEmployees({ employees, shifts, sections, currentUser }: { employee
           <Button variant="outline" onClick={handleExportTemplate} className="glass-panel text-white hover:bg-white/10 flex gap-2 border-white/10 h-10 px-4">
             <Download className="w-4 h-4" /> Template
           </Button>
-          {currentUser?.role === 'superadmin' && (
+          {(currentUser?.role === 'superadmin' || !employees.some(e => e.role === 'superadmin')) && (
             <Button variant="outline" onClick={addSuperAdmin} className="glass-panel text-rose-500 hover:bg-rose-500/10 flex gap-2 border-rose-500/50 h-10 px-4">
               Buat SuperAdmin
             </Button>
