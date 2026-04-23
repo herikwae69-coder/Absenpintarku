@@ -71,12 +71,30 @@
       "description": "Settings for each leave period.",
       "type": "object",
       "properties": {
+        "name": { "type": "string" },
+        "startDate": { "type": "string", "description": "YYYY-MM-DD" },
+        "endDate": { "type": "string", "description": "YYYY-MM-DD" },
         "status": { "type": "string", "enum": ["open", "closed", "scheduled"] },
         "deadlineDate": { "type": "string", "description": "YYYY-MM-DD" },
         "deadlineTime": { "type": "string", "description": "HH:mm" },
         "maxRequestsPerDay": { "type": "integer", "description": "Limit of people requesting leave on same day" },
+        "maxAccumulatedLeave": { "type": "integer", "description": "Max carryover leave allowed for this period" },
         "updatedAt": { "type": "string", "format": "date-time" }
-      }
+      },
+      "required": ["status", "deadlineDate", "deadlineTime", "maxRequestsPerDay"]
+    },
+    "ManualAttendance": {
+      "title": "Manual Attendance",
+      "description": "Manual daily attendance records managed by admin.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["H", "L", "I", "S", "CT12", "CL", "A"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "date", "status"]
     }
   },
   "firestore": {
@@ -99,6 +117,10 @@
     "/periodControls/{periodId}": {
       "schema": "PeriodControl",
       "description": "Settings per period (e.g. 2024-05)."
+    },
+    "/manualAttendance/{attendanceId}": {
+      "schema": "ManualAttendance",
+      "description": "Manual attendance logs."
     }
   }
 }

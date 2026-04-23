@@ -66,8 +66,22 @@ export interface LeaveRequest {
 
 export interface PeriodControl {
   id: string; // The period value
+  name?: string;
+  startDate?: string;
+  endDate?: string;
   status: 'open' | 'closed' | 'scheduled';
   deadlineDate?: string;
   deadlineTime?: string;
+  maxRequestsPerDay?: number;
+  maxAccumulatedLeave?: number;
+  updatedAt: any;
+}
+
+export interface ManualAttendance {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  status: 'H' | 'L' | 'I' | 'S' | 'CT12' | 'CL' | 'A';
   updatedAt: any;
 }

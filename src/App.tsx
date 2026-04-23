@@ -41,7 +41,10 @@ import {
   History,
   Crown,
   MessageSquare,
-  Layers
+  Layers,
+  Search,
+  ClipboardCheck,
+  Zap
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -70,7 +73,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
-import { Employee, Shift, Attendance, LeaveRequest, Section, Division } from './types';
+import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
 
 // Helper for Period Calculation (24th to 23rd)
@@ -133,6 +136,47 @@ const minsToDecimal = (mins: number) => {
   return (Math.abs(mins) / 60).toFixed(2);
 };
 
+const calculateAttendanceStats = (attendance: any, shift: any) => {
+  if (!attendance.checkIn || !shift) return { late: 0, earlyLeave: 0, overtime: 0 };
+  
+  const checkIn = toDateSafe(attendance.checkIn);
+  const checkOut = attendance.checkOut ? toDateSafe(attendance.checkOut) : null;
+  
+  const [startH, startM] = shift.startTime.split(':').map(Number);
+  const [endH, endM] = shift.endTime.split(':').map(Number);
+  
+  const shiftStart = new Date(checkIn);
+  shiftStart.setHours(startH, startM, 0, 0);
+  
+  const shiftEnd = new Date(checkIn);
+  shiftEnd.setHours(endH, endM, 0, 0);
+
+  let late = 0;
+  if (checkIn > shiftStart) {
+    late = Math.floor((checkIn.getTime() - shiftStart.getTime()) / 60000);
+  }
+
+  let early = 0;
+  let ot = 0;
+  if (checkOut) {
+    if (checkOut < shiftEnd) {
+      early = Math.floor((shiftEnd.getTime() - checkOut.getTime()) / 60000);
+    } else if (checkOut > shiftEnd) {
+      ot = Math.floor((checkOut.getTime() - shiftEnd.getTime()) / 60000);
+    }
+  }
+
+  return { late, earlyLeave: early, overtime: ot };
+};
+
+const formatDuration = (minutes: number) => {
+  if (minutes <= 0) return '-';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0) return `${h}j ${m}m`;
+  return `${m}m`;
+};
+
 // Generate a list of periods for selectors
 const getPeriodOptions = (monthsBefore: number = 3, monthsAfter: number = 12) => {
   const options = [];
@@ -148,6 +192,32 @@ const getPeriodOptions = (monthsBefore: number = 3, monthsAfter: number = 12) =>
     });
   }
   return options;
+};
+
+const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
+  const auto = getPeriodOptions();
+  const custom = Object.entries(firestoreControls)
+    .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate && id.startsWith('custom_'))
+    .map(([id, data]) => ({
+      label: data.name,
+      value: id,
+      start: new Date(data.startDate),
+      end: new Date(data.endDate)
+    }));
+  
+  const merged = auto
+    .filter(p => !firestoreControls[p.value]?.hidden)
+    .map(p => {
+      const fire = firestoreControls[p.value];
+      if (fire && fire.name) return { ...p, label: fire.name };
+      return p;
+    });
+
+  custom.forEach(cp => {
+    if (!merged.find(m => m.value === cp.value)) merged.push(cp);
+  });
+
+  return merged.sort((a,b) => b.start.getTime() - a.start.getTime()); // Newest first
 };
 
 // Admin Authentication is now handle via Employee roles
@@ -170,6 +240,27 @@ export default function App() {
 
 // Initialize Listeners
   useEffect(() => {
+    // Check for persisted login
+    const persistedUser = localStorage.getItem('jg1_user');
+    const persistedIsAdmin = localStorage.getItem('jg1_isAdmin');
+    
+    if (persistedUser) {
+      try {
+        const user = JSON.parse(persistedUser);
+        setCurrentUser(user);
+        if (persistedIsAdmin === 'true') {
+          setIsAdmin(true);
+          setView('admin');
+        } else {
+          setView('employee');
+        }
+      } catch (e) {
+        console.error("Error parsing persisted user:", e);
+        localStorage.removeItem('jg1_user');
+        localStorage.removeItem('jg1_isAdmin');
+      }
+    }
+
     // Start listeners immediately
     const unsubEmployees = onSnapshot(collection(db, 'employees'), (snapshot) => {
       setEmployees(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
@@ -214,6 +305,8 @@ export default function App() {
         if (isValid) {
             setCurrentUser(employee);
             setView('employee');
+            localStorage.setItem('jg1_user', JSON.stringify(employee));
+            localStorage.setItem('jg1_isAdmin', 'false');
         } else {
             alert("Password Salah! (Default: 123456)");
         }
@@ -233,6 +326,8 @@ export default function App() {
       setCurrentUser(employee); // Optionally record who logged in as admin
       setIsAdmin(true);
       setView('admin');
+      localStorage.setItem('jg1_user', JSON.stringify(employee));
+      localStorage.setItem('jg1_isAdmin', 'true');
     } else {
       alert("Password Admin Salah!");
     }
@@ -242,6 +337,8 @@ export default function App() {
     setCurrentUser(null);
     setIsAdmin(false);
     setView('login');
+    localStorage.removeItem('jg1_user');
+    localStorage.removeItem('jg1_isAdmin');
   };
 
   if (loading) return (
@@ -296,7 +393,7 @@ export default function App() {
       {/* Watermark */}
       <div className="fixed bottom-4 right-8 z-50 text-[10px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2">
         <div className="w-8 h-[1px] bg-white/10" />
-        App by Heri.k | versi 1.1.0 | 2026
+        App by Heri.k | versi 1.2.1 | 2026
       </div>
     </div>
   );
@@ -654,6 +751,8 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
 
   const currentShift = shifts.find(s => s.id === (attendance?.shiftId || selectedShiftId));
 
+  const attendanceStats = attendance && currentShift ? calculateAttendanceStats(attendance, currentShift) : { late: 0, earlyLeave: 0, overtime: 0 };
+
   const getActionLabel = (type: string | null) => {
     switch(type) {
       case 'checkIn': return 'Masuk Kerja';
@@ -747,12 +846,15 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 glass-panel p-1.5 h-auto md:h-16 bg-white/5 border-white/10 mb-8 rounded-2xl gap-2">
+        <TabsList className="grid w-full grid-cols-5 glass-panel p-1.5 h-auto md:h-16 bg-white/5 border-white/10 mb-8 rounded-2xl gap-2">
           <TabsTrigger value="absen" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
             <Clock className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Absen</span>
           </TabsTrigger>
           <TabsTrigger value="libur" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
             <CalendarIcon className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Libur</span>
+          </TabsTrigger>
+          <TabsTrigger value="bonus" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
+            <Zap className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Bonus</span>
           </TabsTrigger>
           <TabsTrigger value="ristan" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
             <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan</span>
@@ -772,17 +874,19 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
             </div>
             {!attendance ? (
               <Select value={selectedShiftId} onValueChange={setSelectedShiftId}>
-                <SelectTrigger className="w-[180px] glass-panel border-white/10 text-white text-[10px] h-8">
-                  <SelectValue placeholder="Pilih Shift" />
+                <SelectTrigger className="w-[180px] glass-panel border-white/10 text-white text-[10px] h-10 px-4 rounded-xl">
+                  <SelectValue placeholder="Pilih Shift">
+                    {selectedShiftId ? shifts.find(s => s.id === selectedShiftId)?.name : "Pilih Shift"}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="glass-panel border-white/20 text-white">
+                <SelectContent className="glass-panel border-white/20 text-white rounded-xl">
                   {shifts.map(s => (
                     <SelectItem key={s.id} value={s.id} className="hover:bg-white/10">{`${s.name} (${s.startTime}-${s.endTime})`}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
-              <Badge variant="outline" className="glass-panel border-white/10 text-white text-[10px] py-1 border-none bg-white/5">
+              <Badge variant="outline" className="glass-panel border-white/10 text-white text-[10px] px-3 py-1.5 border-none bg-white/5 rounded-full">
                 Shift: {currentShift?.name || 'Reguler'}
               </Badge>
             )}
@@ -902,6 +1006,51 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
             </Card>
           </div>
 
+          {/* Stats Summary */}
+          {attendance && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4"
+            >
+              <div className="glass-panel p-4 rounded-2xl flex items-center gap-4 border-white/5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                  <Clock className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest leading-none mb-1">Keterlambatan</p>
+                  <p className={`text-lg font-black ${attendanceStats.late > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {attendanceStats.late > 0 ? formatDuration(attendanceStats.late) : 'Tepat Waktu'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="glass-panel p-4 rounded-2xl flex items-center gap-4 border-white/5">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
+                  <LogOut className="w-5 h-5 text-rose-400" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest leading-none mb-1">Pulang Awal</p>
+                  <p className={`text-lg font-black ${attendanceStats.earlyLeave > 0 ? 'text-rose-400' : 'text-white/20'}`}>
+                    {attendanceStats.earlyLeave > 0 ? formatDuration(attendanceStats.earlyLeave) : '-'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="glass-panel p-4 rounded-2xl flex items-center gap-4 border-white/5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                  <Zap className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest leading-none mb-1">Lembur</p>
+                  <p className={`text-lg font-black ${attendanceStats.overtime > 0 ? 'text-emerald-400' : 'text-white/20'}`}>
+                    {attendanceStats.overtime > 0 ? formatDuration(attendanceStats.overtime) : '-'}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {attendance && (
             <Card className="mt-8 glass-panel border-none shadow-xl overflow-hidden">
               <CardHeader className="bg-white/5 py-3 px-4">
@@ -979,6 +1128,21 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
           </Card>
         </TabsContent>
 
+        <TabsContent value="bonus" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+          <Card className="glass-panel border-none py-20 bg-emerald-500/5 border-dashed border-emerald-500/20">
+            <CardContent className="flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/30 animate-pulse">
+                <Zap className="w-10 h-10 text-emerald-400" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-2">Menu Bonus</h3>
+              <p className="text-white/40 max-w-sm">
+                Dalam proses tunggu update selanjutnya. Fitur ini akan tersedia pada versi aplikasi mendatang.
+              </p>
+              <Badge className="mt-6 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border-none px-4 py-1">SOON</Badge>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="ristan" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
           <Card className="glass-panel border-none py-20 bg-orange-500/5 border-dashed border-orange-500/20">
             <CardContent className="flex flex-col items-center justify-center text-center">
@@ -1024,6 +1188,7 @@ function AdminDashboard({
     { value: 'divisions', label: 'Divisi', icon: <Layers className="w-4 h-4" /> },
     { value: 'sections', label: 'Bagian', icon: <Settings className="w-4 h-4" /> },
     { value: 'live', label: 'Live Absen', icon: <ClipboardList className="w-4 h-4" /> },
+    { value: 'manual', label: 'Absensi Manual', icon: <ClipboardCheck className="w-4 h-4" /> },
     { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
     { value: 'quotas', label: 'Atur Kuota', icon: <BadgeCheck className="w-4 h-4" /> },
     { value: 'periods', label: 'Batas Waktu', icon: <CalendarIcon className="w-4 h-4" /> },
@@ -1112,6 +1277,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="live" className="mt-0 outline-none">
                 <AdminLive employees={employees} shifts={shifts} />
+              </TabsContent>
+              <TabsContent value="manual" className="mt-0 outline-none">
+                <AdminManualAttendance employees={employees} divisions={divisions} />
               </TabsContent>
               <TabsContent value="leaves" className="mt-0 outline-none">
                 <AdminLeave employees={employees} sections={sections} divisions={divisions} />
@@ -1268,9 +1436,10 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   };
 
   const handleAdd = async () => {
-    if (!formData.name || !formData.pin || !formData.shiftId) return alert("Lengkapi data!");
+    if (!formData.name || !formData.pin) return alert("Lengkapi data!");
     await addDoc(collection(db, 'employees'), {
       ...formData,
+      shiftId: formData.shiftId || (shifts[0]?.id || ""),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -1314,6 +1483,11 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   };
 
   const handleDelete = async (id: string) => {
+    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
     if (confirm("Hapus karyawan ini?")) {
       await deleteDoc(doc(db, 'employees', id));
     }
@@ -1408,19 +1582,6 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
                 </Select>
               </div>
 
-              <div className="grid gap-2">
-                <Label className="text-white/70 text-xs">Shift</Label>
-                <Select value={formData.shiftId} onValueChange={(val) => setFormData({...formData, shiftId: val})}>
-                  <SelectTrigger className="field-input text-white border-white/10">
-                    <SelectValue>
-                      {shifts.find(s => s.id === formData.shiftId) ? `${shifts.find(s => s.id === formData.shiftId)?.name} (${shifts.find(s => s.id === formData.shiftId)?.startTime}-${shifts.find(s => s.id === formData.shiftId)?.endTime})` : "Pilih Shift"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="glass-panel border-white/10 text-white">
-                    {shifts.map(s => <SelectItem key={s.id} value={s.id} className="hover:bg-white/10">{`${s.name} (${s.startTime}-${s.endTime})`}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">Hak Akses</Label>
                 <Select value={formData.role} onValueChange={(val: any) => {
@@ -1531,6 +1692,11 @@ function AdminDivisions({ divisions }: { divisions: Division[] }) {
   };
 
   const handleDelete = async (id: string) => {
+    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
     if (confirm("Hapus divisi ini? Semua bagian di divisi ini mungkin akan terdampak.")) {
       await deleteDoc(doc(db, 'divisions', id));
     }
@@ -1614,6 +1780,11 @@ function AdminSections({ sections, divisions }: { sections: Section[], divisions
   };
 
   const handleDelete = async (id: string) => {
+    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
     if (confirm("Hapus bagian ini?")) {
       await deleteDoc(doc(db, 'sections', id));
     }
@@ -1893,29 +2064,22 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
 
 // --- ADMIN: PERIODS ---
 function AdminPeriods() {
-  const periodOptions = getPeriodOptions();
   const [controls, setControls] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newPeriod, setNewPeriod] = useState({ name: '', startDate: '', endDate: '', maxAccumulatedLeave: 6 });
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
       const data: Record<string, any> = {};
-      const openPeriods: string[] = [];
-      snap.docs.forEach(d => { 
-        data[d.id] = d.data(); 
-        if (data[d.id].status === 'open') openPeriods.push(d.id);
-      });
+      snap.docs.forEach(d => { data[d.id] = d.data(); });
       setControls(data);
-      if (openPeriods.length > 0) {
-        setSelectedPeriod(openPeriods[0]);
-      } else {
-        setSelectedPeriod("");
-      }
       setLoading(false);
     });
     return unsub;
   }, []);
+
+  const combinedPeriods = getCombinedPeriods(controls);
 
   const updateStatus = async (periodId: string, status: string) => {
     await setDoc(doc(db, 'periodControls', periodId), {
@@ -1940,18 +2104,111 @@ function AdminPeriods() {
     }, { merge: true });
   };
 
+  const updateMaxAccumulated = async (periodId: string, limit: number) => {
+    await setDoc(doc(db, 'periodControls', periodId), {
+      maxAccumulatedLeave: limit,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  };
+
+  const handleAddCustom = async () => {
+    if (!newPeriod.name || !newPeriod.startDate || !newPeriod.endDate) {
+      alert("Lengkapi nama dan rentang tanggal!");
+      return;
+    }
+    const id = `custom_${newPeriod.startDate}_${newPeriod.endDate}_${Date.now()}`;
+    await setDoc(doc(db, 'periodControls', id), {
+      name: newPeriod.name,
+      startDate: newPeriod.startDate,
+      endDate: newPeriod.endDate,
+      status: 'closed',
+      deadlineDate: format(new Date(), 'yyyy-MM-dd'),
+      deadlineTime: '17:00',
+      maxRequestsPerDay: 7,
+      maxAccumulatedLeave: newPeriod.maxAccumulatedLeave,
+      updatedAt: serverTimestamp()
+    });
+    setShowAdd(false);
+    setNewPeriod({ name: '', startDate: '', endDate: '', maxAccumulatedLeave: 6 });
+  };
+
+  const handleDelete = async (id: string) => {
+    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
+    if (confirm("Hapus pengaturan periode ini?")) {
+      if (id.startsWith('custom_')) {
+        await deleteDoc(doc(db, 'periodControls', id));
+      } else {
+        await setDoc(doc(db, 'periodControls', id), {
+          hidden: true,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+    }
+  }
+
   if (loading) return <div className="text-white p-10 text-center">Memuat pengaturan periode...</div>;
 
   return (
     <Card className="glass-panel border-none shadow-lg">
-      <CardHeader>
-        <CardTitle className="text-white">Pengaturan Batas Waktu Request</CardTitle>
-        <CardDescription className="text-white/50">Atur kapan karyawan boleh melakukan request libur untuk setiap periode.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-white">Pengaturan Batas Waktu Request</CardTitle>
+          <CardDescription className="text-white/50">Atur kapan karyawan boleh melakukan request libur untuk setiap periode.</CardDescription>
+        </div>
+        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+          <DialogTrigger render={
+            <Button className="bg-primary hover:bg-primary/80 flex gap-2">
+              <Plus className="w-4 h-4" /> Tambah Periode Manual
+            </Button>
+          } />
+          <DialogContent className="glass-panel text-white border-white/20">
+            <DialogHeader>
+              <DialogTitle>Buat Periode Baru</DialogTitle>
+              <DialogDescription>Tentukan nama dan rentang tanggal untuk periode request ini.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nama Periode</Label>
+                <Input placeholder="Contoh: Periode Lebaran / Mei 2024" value={newPeriod.name} onChange={(e) => setNewPeriod({...newPeriod, name: e.target.value})} className="field-input" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tgl Mulai</Label>
+                  <Input type="date" value={newPeriod.startDate} onChange={(e) => setNewPeriod({...newPeriod, startDate: e.target.value})} className="field-input" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tgl Selesai</Label>
+                  <Input type="date" value={newPeriod.endDate} onChange={(e) => setNewPeriod({...newPeriod, endDate: e.target.value})} className="field-input" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Batas Tabungan Libur (Max Accumulation)</Label>
+                <div className="flex items-center gap-2">
+                  <Input 
+                    type="number" 
+                    value={newPeriod.maxAccumulatedLeave || 6} 
+                    onChange={(e) => setNewPeriod({...newPeriod, maxAccumulatedLeave: parseInt(e.target.value) || 6} as any)} 
+                    className="field-input w-24" 
+                  />
+                  <span className="text-xs text-white/40 italic">Hari</span>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={handleAddCustom} className="w-full bg-emerald-600 hover:bg-emerald-500">Buat Periode Sekarang</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {periodOptions.map(p => {
+          {combinedPeriods.map(p => {
             const ctrl = controls[p.value] || { status: 'open' };
+            const isCustom = p.value.startsWith('custom_');
             return (
               <div key={p.value} className="glass-panel p-4 border-white/5 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -1965,8 +2222,12 @@ function AdminPeriods() {
                      <Clock className="w-5 h-5" />}
                   </div>
                   <div>
-                    <h4 className="text-white font-bold">{p.label}</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-white font-bold">{p.label}</h4>
+                      {isCustom && <Badge className="bg-white/10 text-white/40 border-none text-[8px]">Custom</Badge>}
+                    </div>
                     <p className="text-xs text-white/40">Status: <span className="uppercase font-bold tracking-wider">{ctrl.status === 'scheduled' ? 'Terjadwal' : ctrl.status === 'open' ? 'Terbuka' : 'Ditutup'}</span></p>
+                    {isCustom && <p className="text-[10px] text-white/20">{ctrl.startDate} s/d {ctrl.endDate}</p>}
                   </div>
                 </div>
 
@@ -2044,9 +2305,38 @@ function AdminPeriods() {
                             <span className="text-[10px] text-white/30 italic">Orang / Hari</span>
                           </div>
                         </div>
+
+                        <div className="pt-2 border-t border-white/5 space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Tabungan Libur</Label>
+                          <div className="flex items-center gap-2">
+                            <Input 
+                              type="number" 
+                              defaultValue={ctrl.maxAccumulatedLeave || 6}
+                              onBlur={(e) => updateMaxAccumulated(p.value, parseInt(e.target.value) || 6)}
+                              className="field-input h-9 text-white w-20" 
+                            />
+                            <span className="text-[10px] text-white/30 italic">Hari / Periode</span>
+                          </div>
+                        </div>
+                        
+                        <div className="pt-2 border-t border-white/5 space-y-1">
+                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Custom Nama Periode</Label>
+                           <Input 
+                             defaultValue={ctrl.name || ''}
+                             placeholder={p.label}
+                             onBlur={async (e) => {
+                               await setDoc(doc(db, 'periodControls', p.value), { name: e.target.value }, { merge: true });
+                             }}
+                             className="field-input h-9 text-white"
+                           />
+                        </div>
                       </div>
                     </PopoverContent>
                   </Popover>
+
+                  <Button size="sm" variant="ghost" className="text-white/20 hover:text-rose-400 hover:bg-rose-500/10" onClick={() => handleDelete(p.value)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
             );
@@ -2108,6 +2398,11 @@ function AdminShifts({ shifts }: { shifts: Shift[] }) {
   };
 
   const handleDelete = async (id: string) => {
+    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
     if (confirm("Hapus shift ini?")) {
       await deleteDoc(doc(db, 'shifts', id));
     }
@@ -2191,12 +2486,15 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
   const [date, setDate] = useState<Date>(new Date());
   const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
   const [showEdit, setShowEdit] = useState(false);
+  const [showLibur, setShowLibur] = useState(false);
+  const [liburData, setLiburData] = useState({ employeeId: '', date: format(new Date(), 'yyyy-MM-dd') });
   const [editData, setEditData] = useState({
     checkIn: '',
     breakStart: '',
     breakEnd: '',
     checkOut: '',
-    status: 'present' as Attendance['status']
+    status: 'present' as Attendance['status'],
+    shiftId: ''
   });
   
   useEffect(() => {
@@ -2209,6 +2507,11 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
   }, [date]);
 
   const handleDelete = async (id: string) => {
+    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
     if (confirm("Hapus data absen ini?")) {
       await deleteDoc(doc(db, 'attendance', id));
     }
@@ -2221,7 +2524,8 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
       breakStart: a.breakStart ? format(toDateSafe(a.breakStart), 'HH:mm') : '',
       breakEnd: a.breakEnd ? format(toDateSafe(a.breakEnd), 'HH:mm') : '',
       checkOut: a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '',
-      status: a.status
+      status: a.status,
+      shiftId: a.shiftId || ''
     });
     setShowEdit(true);
   };
@@ -2231,6 +2535,7 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
     
     const updatePayload: any = {
       status: editData.status,
+      shiftId: editData.shiftId,
       updatedAt: serverTimestamp()
     };
 
@@ -2253,6 +2558,41 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
     await updateDoc(doc(db, 'attendance', editingAttendance.id), updatePayload);
     setShowEdit(false);
     setEditingAttendance(null);
+  };
+
+  const handleSetLibur = async () => {
+    if (!liburData.employeeId || !liburData.date) return alert("Pilih karyawan dan tanggal!");
+    
+    // Check if record already exists for this employee and date
+    const q = query(
+      collection(db, 'attendance'), 
+      where('employeeId', '==', liburData.employeeId),
+      where('date', '==', liburData.date)
+    );
+    const snap = await getDocs(q);
+    const emp = employees.find(e => e.id === liburData.employeeId);
+    
+    if (!snap.empty) {
+      await updateDoc(doc(db, 'attendance', snap.docs[0].id), {
+        status: 'day-off',
+        checkIn: null,
+        checkOut: null,
+        breakStart: null,
+        breakEnd: null,
+        updatedAt: serverTimestamp()
+      });
+    } else {
+      await addDoc(collection(db, 'attendance'), {
+        employeeId: liburData.employeeId,
+        employeeName: emp?.name || 'Unknown',
+        date: liburData.date,
+        status: 'day-off',
+        updatedAt: serverTimestamp()
+      });
+    }
+    
+    setShowLibur(false);
+    setLiburData({ employeeId: '', date: format(new Date(), 'yyyy-MM-dd') });
   };
 
   const stats = {
@@ -2279,6 +2619,19 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
                   <DialogTitle className="text-white font-bold">Edit Absensi: {editingAttendance?.employeeName}</DialogTitle>
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-4 py-4">
+                  <div className="grid gap-2 col-span-2">
+                    <Label className="text-white/70 text-xs text-left">Pilih Shift</Label>
+                    <Select value={editData.shiftId} onValueChange={(v) => setEditData({...editData, shiftId: v})}>
+                      <SelectTrigger className="field-input text-white border-white/10 h-14 rounded-2xl px-4">
+                        <SelectValue placeholder="Pilih Shift">
+                          {editData.shiftId ? shifts.find(s => s.id === editData.shiftId)?.name : "Pilih Shift"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="glass-panel border-white/10 text-white rounded-2xl">
+                        {shifts.map(s => <SelectItem key={s.id} value={s.id} className="hover:bg-white/10 py-3">{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="grid gap-2">
                     <Label className="text-white/70 text-xs">Jam Masuk</Label>
                     <Input type="time" value={editData.checkIn} onChange={(e) => setEditData({...editData, checkIn: e.target.value})} className="field-input" />
@@ -2304,12 +2657,46 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
                         <SelectItem value="late">TERLAMBAT</SelectItem>
                         <SelectItem value="half-day">STENGAH HARI</SelectItem>
                         <SelectItem value="absent">ALPHA</SelectItem>
+                        <SelectItem value="day-off">LIBUR</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 <DialogFooter>
                   <Button onClick={handleUpdate} className="w-full bg-primary hover:bg-primary/80">SIMPAN PERUBAHAN</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={showLibur} onOpenChange={setShowLibur}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="glass-panel border-white/10 text-white flex gap-2 h-10 hover:bg-white/10 px-4 rounded-md">
+                  <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="glass-panel text-white border-white/20">
+                <DialogHeader>
+                  <DialogTitle className="text-white">Atur Karyawan Libur</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label className="text-white/70 text-xs">Pilih Karyawan</Label>
+                    <Select value={liburData.employeeId} onValueChange={(v) => setLiburData({...liburData, employeeId: v})}>
+                      <SelectTrigger className="field-input text-white border-white/10 h-12 rounded-xl">
+                        <SelectValue placeholder="Pilih Karyawan" />
+                      </SelectTrigger>
+                      <SelectContent className="glass-panel border-white/10 text-white max-h-[300px]">
+                        {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label className="text-white/70 text-xs">Tanggal Libur</Label>
+                    <Input type="date" value={liburData.date} onChange={(e) => setLiburData({...liburData, date: e.target.value})} className="field-input h-12 rounded-xl" />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={handleSetLibur} className="w-full bg-blue-600 hover:bg-blue-700 h-12 font-bold">TETAPKAN LIBUR</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -2331,24 +2718,64 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
                   <TableHead className="text-white/40 whitespace-nowrap">Shift</TableHead>
                   <TableHead className="text-white/40 whitespace-nowrap">Masuk</TableHead>
                   <TableHead className="text-white/40 whitespace-nowrap">Istirahat</TableHead>
-                  <TableHead className="text-white/40 whitespace-nowrap">Selesai Ist.</TableHead>
                   <TableHead className="text-white/40 whitespace-nowrap">Pulang</TableHead>
-                  <TableHead className="text-white/40 whitespace-nowrap">Status</TableHead>
-                  <TableHead className="text-right text-white/40 whitespace-nowrap">Aksi</TableHead>
+                  <TableHead className="text-white/40 whitespace-nowrap">Statistik</TableHead>
+                  <TableHead className="text-white/40 whitespace-nowrap text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {liveAttendance.map(a => {
                   const shift = shifts.find(s => s.id === a.shiftId);
+                  const statsData = shift ? calculateAttendanceStats(a, shift) : { late: 0, earlyLeave: 0, overtime: 0 };
+                  
                   return (
                     <TableRow key={a.id} className="border-white/5 hover:bg-white/5">
-                      <TableCell className="font-semibold text-white whitespace-nowrap">{a.employeeName}</TableCell>
+                      <TableCell className="font-semibold text-white whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span>{a.employeeName}</span>
+                          <span className="text-[9px] text-white/30 uppercase tracking-tighter">
+                            {a.status === 'day-off' ? 'LIBUR' : a.status === 'present' ? 'HADIR' : a.status === 'late' ? 'TERLAMBAT' : a.status}
+                          </span>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-white/60 text-xs whitespace-nowrap">{shift?.name || '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.checkIn ? format(toDateSafe(a.checkIn), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.breakStart ? format(toDateSafe(a.breakStart), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.breakEnd ? format(toDateSafe(a.breakEnd), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="text-white/70 font-mono whitespace-nowrap">{a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '-'}</TableCell>
-                      <TableCell className="whitespace-nowrap"><Badge variant="outline" className="border-white/20 text-white/50">{a.status.toUpperCase()}</Badge></TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-white/70 font-mono">{a.checkIn ? format(toDateSafe(a.checkIn), 'HH:mm') : '-'}</span>
+                          {statsData.late > 0 && <span className="text-[9px] text-rose-400 font-bold">Telat: {formatDuration(statsData.late)}</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex flex-col text-[10px]">
+                          <span className="text-white/40">S: {a.breakStart ? format(toDateSafe(a.breakStart), 'HH:mm') : '-'}</span>
+                          <span className="text-white/40">E: {a.breakEnd ? format(toDateSafe(a.breakEnd), 'HH:mm') : '-'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-white/70 font-mono">{a.checkOut ? format(toDateSafe(a.checkOut), 'HH:mm') : '-'}</span>
+                          {statsData.earlyLeave > 0 && <span className="text-[9px] text-rose-400 font-bold">P.Awal: {formatDuration(statsData.earlyLeave)}</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex flex-col gap-1">
+                          {statsData.overtime > 0 && (
+                            <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 text-[9px] px-1 h-4">
+                              Lembur: {formatDuration(statsData.overtime)}
+                            </Badge>
+                          )}
+                          {statsData.late === 0 && a.checkIn && (
+                            <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 text-[9px] px-1 h-4">
+                              Tepat Waktu
+                            </Badge>
+                          )}
+                          {a.status === 'day-off' && (
+                            <Badge variant="outline" className="bg-blue-500/10 border-blue-500/30 text-blue-400 text-[9px] px-1 h-4">
+                              LIBUR
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right space-x-2 whitespace-nowrap">
                         <Button variant="ghost" size="icon" onClick={() => triggerEdit(a)} className="hover:bg-white/10 transition-colors">
                           <Edit className="w-4 h-4 text-primary" />
@@ -2376,9 +2803,28 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
 function AdminLeave({ employees, sections, divisions }: { employees: Employee[], sections: Section[], divisions: Division[] }) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
-  const periodOptions = getPeriodOptions();
-  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value); // Default to current
+  const [controls, setControls] = useState<Record<string, any>>({});
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const [selectedPeriod, setSelectedPeriod] = useState(""); 
   const [selectedDivision, setSelectedDivision] = useState<string>(divisions[0]?.name || 'Depan');
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+      const data: Record<string, any> = {};
+      snap.forEach(d => { data[d.id] = d.data(); });
+      setControls(data);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPeriod && periodOptions.length > 0) {
+      // Find current month if possible
+      const now = format(new Date(), 'yyyy-MM-dd');
+      const current = periodOptions.find(p => now >= format(p.start, 'yyyy-MM-dd') && now <= format(p.end, 'yyyy-MM-dd'));
+      setSelectedPeriod(current ? current.value : periodOptions[0].value);
+    }
+  }, [periodOptions]);
 
   useEffect(() => {
     if (divisions.length > 0 && !divisions.find(d => d.name === selectedDivision)) {
@@ -2424,6 +2870,11 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
   };
 
   const handleDelete = async (id: string) => {
+    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
     if (confirm("Hapus request libur ini?")) {
       await deleteDoc(doc(db, 'leaveRequests', id));
     }
@@ -2520,9 +2971,19 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
   const [periodQuota, setPeriodQuota] = useState(0);
   const [periodControl, setPeriodControl] = useState<any>(null);
-  const periodOptions = getPeriodOptions();
+  const [controls, setControls] = useState<Record<string, any>>({});
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+      const data: Record<string, any> = {};
+      snap.forEach(d => { data[d.id] = d.data(); });
+      setControls(data);
+    });
+    return unsub;
+  }, []);
   const [showMusicPopup, setShowMusicPopup] = useState(false);
   const [musicPopupText, setMusicPopupText] = useState('Silakan ajukan request libur Anda.');
   const [requestKata, setRequestKata] = useState('');
@@ -2628,18 +3089,21 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
     const fetchQuota = async () => {
       // To calculate carryover with accumulation, we need to process periods sequentially from oldest to current
-      const allPeriodsToProcess = periodOptions.slice(0, currentIndex + 1);
+      // Since periodOptions is newest first, we slice from currentIndex to the end (oldest) and reverse it
+      const allPeriodsToProcess = periodOptions.slice(currentIndex).reverse();
       
       let runningCarryover = 0;
-      let finalEffectiveQuota = 4;
+      let finalEffectiveQuota = employee.leaveQuota || 4;
 
       for (const p of allPeriodsToProcess) {
         // 1. Get base quota for this period
         const quotaSnap = await getDoc(doc(db, 'periodQuotas', `${employee.id}_${p.value}`));
-        const baseQuota = quotaSnap.exists() ? (quotaSnap.data()?.quota ?? 4) : 4;
+        const baseQuota = quotaSnap.exists() ? (quotaSnap.data()?.quota ?? (employee.leaveQuota || 4)) : (employee.leaveQuota || 4);
         
-        // 2. Effective quota (Base + Carryover), capped at 6
-        const effectiveQuota = Math.min(baseQuota + runningCarryover, 6);
+        // 2. Effective quota (Base + Carryover), capped at custom max or 6
+        const pCtrl = controls[p.value];
+        const maxStored = pCtrl?.maxAccumulatedLeave ?? 6;
+        const effectiveQuota = Math.min(baseQuota + runningCarryover, maxStored);
         
         // If this is the selected period, we stop here and set this as the available quota
         if (p.value === selectedPeriod) {
@@ -2686,7 +3150,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     return () => {
       unsub();
     };
-  }, [employee.id, selectedPeriod, employee.division]);
+  }, [employee.id, selectedPeriod, employee.division, controls, periodOptions]);
 
   const handleSubmit = async () => {
     // Validate period status
@@ -2857,12 +3321,13 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
           )}
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="flex gap-4">
+          <div className="flex flex-wrap justify-end gap-4">
             <StatCard label="Total Kuota" value={periodQuota} icon={<CalendarIcon className="text-blue-400 w-4 h-4" />} size="sm" />
             <StatCard label="Digunakan" value={usedDays} icon={<BadgeCheck className="text-emerald-400 w-4 h-4" />} size="sm" />
+            <StatCard label="Sisa Kuota" value={Math.max(0, periodQuota - usedDays)} icon={<Clock className="text-amber-400 w-4 h-4" />} size="sm" />
           </div>
-          <p className="text-[9px] text-white/30 italic mr-2">
-            * Default: 4, Maksimal: 6 (termasuk sisa lalu)
+          <p className="text-[9px] text-white/30 italic mr-2 text-right">
+            * Maksimal Kuota: 6 hari (termasuk sisa periode lalu yang terakumulasi otomatis).
           </p>
         </div>
       </div>
@@ -3059,6 +3524,335 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+// --- ADMIN: REPORTS ---
+function AdminManualAttendance({ employees, divisions }: { employees: Employee[], divisions: Division[] }) {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [manualData, setManualData] = useState<Record<string, string>>({});
+  const [exportStart, setExportStart] = useState<Date>(new Date());
+  const [exportEnd, setExportEnd] = useState<Date>(new Date());
+  const [isExporting, setIsExporting] = useState(false);
+  
+  // States for each input column
+  const [inputs, setInputs] = useState<Record<string, string>>({
+    L: '', I: '', S: '', CT12: '', CL: '', A: '', H: ''
+  });
+
+  const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+  useEffect(() => {
+    const q = query(collection(db, 'manualAttendance'), where('date', '==', dateStr));
+    const unsub = onSnapshot(q, (snap) => {
+      const data: Record<string, string> = {};
+      snap.docs.forEach(doc => {
+        const item = doc.data();
+        data[item.employeeId] = item.status;
+      });
+      setManualData(data);
+    });
+    return unsub;
+  }, [dateStr]);
+
+  const updateStatus = async (emp: Employee, status: string) => {
+    const docId = `${dateStr}_${emp.id}`;
+    try {
+      if (status === 'H') {
+        await deleteDoc(doc(db, 'manualAttendance', docId));
+      } else {
+        await setDoc(doc(db, 'manualAttendance', docId), {
+          id: docId,
+          date: dateStr,
+          employeeId: emp.id,
+          employeeName: emp.name,
+          status: status,
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error("Error updating manual attendance:", error);
+    }
+  };
+
+  const handleQuickEntry = async (status: string) => {
+    const value = inputs[status].trim().toLowerCase();
+    if (!value) return;
+
+    // Find employee by PIN (exact) or Name (exact then partial)
+    let emp = employees.find(e => e.pin === value);
+    if (!emp) {
+      emp = employees.find(e => e.name.toLowerCase() === value);
+    }
+    if (!emp) {
+      emp = employees.find(e => e.name.toLowerCase().includes(value));
+    }
+
+    if (!emp) {
+      alert(`Karyawan dengan identitas "${value}" tidak ditemukan.`);
+      return;
+    }
+
+    await updateStatus(emp, status);
+
+    // Clear input after success
+    setInputs(prev => ({ ...prev, [status]: '' }));
+  };
+
+  const getMatchedEmployee = (val: string) => {
+    const value = val.trim().toLowerCase();
+    if (value.length < 2) return null; // Minimum 2 characters to show preview
+    let emp = employees.find(e => e.pin === value);
+    if (!emp) {
+      emp = employees.find(e => e.name.toLowerCase() === value);
+    }
+    if (!emp) {
+      emp = employees.find(e => e.name.toLowerCase().includes(value));
+    }
+    return emp;
+  };
+
+  const totals = {
+    A: Object.values(manualData).filter(s => s === 'A').length,
+    I: Object.values(manualData).filter(s => s === 'I').length,
+    S: Object.values(manualData).filter(s => s === 'S').length,
+    L: Object.values(manualData).filter(s => s === 'L').length,
+    CT12: Object.values(manualData).filter(s => s === 'CT12').length,
+    CL: Object.values(manualData).filter(s => s === 'CL').length,
+    H: employees.length - Object.keys(manualData).length,
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const start = format(exportStart, 'yyyy-MM-dd');
+      const end = format(exportEnd, 'yyyy-MM-dd');
+      
+      const q = query(
+        collection(db, 'manualAttendance'), 
+        where('date', '>=', start),
+        where('date', '<=', end)
+      );
+      const snap = await getDocs(q);
+      const allRecords = snap.docs.map(d => d.data());
+
+      const dates: string[] = [];
+      let tempDate = new Date(exportStart);
+      while (tempDate <= exportEnd) {
+        dates.push(format(tempDate, 'yyyy-MM-dd'));
+        tempDate.setDate(tempDate.getDate() + 1);
+      }
+
+      const exportRows = employees.map(emp => {
+        const row: any = { 'Nama': emp.name, 'No Absen': emp.pin, 'Divisi': emp.division };
+        let count = { A: 0, I: 0, S: 0, L: 0, CT: 0, CL: 0, H: 0 };
+        
+        dates.forEach(d => {
+          const record = allRecords.find(r => r.employeeId === emp.id && r.date === d);
+          const status = record ? record.status : 'H';
+          row[d] = status;
+          if (status === 'A') count.A++;
+          else if (status === 'I') count.I++;
+          else if (status === 'S') count.S++;
+          else if (status === 'L') count.L++;
+          else if (status === 'CT12') count.CT++;
+          else if (status === 'CL') count.CL++;
+          else count.H++;
+        });
+
+        row['Total A'] = count.A; row['Total I'] = count.I; row['Total S'] = count.S;
+        row['Total L'] = count.L; row['Total CT'] = count.CT; row['Total CL'] = count.CL;
+        row['Total H'] = count.H;
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi Manual");
+      XLSX.writeFile(wb, `Rekap_Manual_${start}_${end}.xlsx`);
+    } catch (err) {
+       console.error(err);
+       alert("Gagal ekspor.");
+    } finally {
+       setIsExporting(false);
+    }
+  };
+
+  const statusColors: Record<string, string> = {
+    L: 'text-white/40 bg-white/5',
+    I: 'text-sky-400 bg-sky-500/10',
+    S: 'text-amber-400 bg-amber-500/10',
+    CT12: 'text-purple-400 bg-purple-500/10',
+    CL: 'text-pink-400 bg-pink-500/10',
+    A: 'text-rose-400 bg-rose-500/10',
+    H: 'text-emerald-400 bg-emerald-500/10'
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <Popover>
+          <PopoverTrigger render={
+            <Button variant="outline" className="glass-panel border-white/10 text-white flex gap-2 h-12 px-6 rounded-xl min-w-[240px] justify-start shadow-lg">
+              <CalendarIcon className="w-5 h-5 text-primary" /> 
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-[10px] text-white/40 uppercase font-bold">Tanggal Input</span>
+                <span className="text-sm font-bold">{format(selectedDate, 'EEEE, dd MMMM yyyy')}</span>
+              </div>
+            </Button>
+          } />
+          <PopoverContent className="glass-panel border-white/20 p-0 shadow-2xl">
+            <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)} className="bg-[#0A0F1E]" />
+          </PopoverContent>
+        </Popover>
+
+        <Dialog>
+          <DialogTrigger render={
+            <Button className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl flex gap-2 h-12 px-6 shadow-xl shadow-emerald-600/20 border-none">
+              <Download className="w-4 h-4" /> Ekspor Hasil Rekap
+            </Button>
+          } />
+          <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[425px]">
+            <DialogHeader><DialogTitle>Download Laporan Excel</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-white/40">DARI TANGGAL</Label>
+                <Input type="date" value={format(exportStart, 'yyyy-MM-dd')} onChange={(e) => setExportStart(new Date(e.target.value))} className="field-input h-11" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-white/40">SAMPAI TANGGAL</Label>
+                <Input type="date" value={format(exportEnd, 'yyyy-MM-dd')} onChange={(e) => setExportEnd(new Date(e.target.value))} className="field-input h-11" />
+              </div>
+            </div>
+            <Button onClick={handleExport} disabled={isExporting} className="bg-primary hover:bg-primary/80 w-full h-12 rounded-xl font-bold">
+              {isExporting ? "Memproses..." : "Download Sekarang"}
+            </Button>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Stats Quick View */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3">
+        {Object.entries(totals).map(([status, count]) => (
+          <div key={status} className={`glass-panel p-4 rounded-2xl flex flex-col items-center border-white/5 transition-all duration-300 ${statusColors[status]}`}>
+            <span className="text-[10px] uppercase font-black tracking-widest mb-1">{status === 'H' ? 'Hadir' : status === 'A' ? 'Alpha' : status}</span>
+            <span className="text-2xl font-black">{count}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Input Columns Panel */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {['A', 'I', 'S', 'L', 'CT12', 'CL', 'H'].map((status) => (
+          <Card key={status} className="glass-panel border-none shadow-xl bg-black/20 overflow-hidden group/card">
+            <CardHeader className={`p-4 border-b border-white/5 ${statusColors[status]}`}>
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-current" />
+                  Input {status === 'H' ? 'Hadir / Reset' : status}
+                </CardTitle>
+                <Badge variant="outline" className="border-current/20 bg-current/5 text-[10px]">
+                  {status}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within/card:text-primary transition-colors" />
+                  <Input 
+                    placeholder="Nama / PIN" 
+                    value={inputs[status]}
+                    onChange={(e) => setInputs(prev => ({ ...prev, [status]: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleQuickEntry(status)}
+                    className="field-input pl-10 h-11 rounded-xl border-white/5 focus:border-primary/50 transition-all bg-white/5"
+                  />
+                </div>
+                <Button 
+                  size="icon" 
+                  onClick={() => handleQuickEntry(status)}
+                  className={`shrink-0 rounded-xl transition-all ${statusColors[status]} border-none hover:scale-105 active:scale-95`}
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+              </div>
+              
+              {/* Employee Preview */}
+              {inputs[status] && (
+                <div className="mt-2 min-h-[24px]">
+                  {getMatchedEmployee(inputs[status]) ? (
+                    <div className="flex items-center gap-2 px-2 py-1 bg-primary/20 rounded-lg border border-primary/40 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <User className="w-3 h-3 text-white" />
+                      <span className="text-[10px] font-bold text-white truncate max-w-full">
+                        {getMatchedEmployee(inputs[status])?.name} ({getMatchedEmployee(inputs[status])?.pin})
+                      </span>
+                    </div>
+                  ) : inputs[status].length >= 2 ? (
+                    <p className="text-[10px] text-white/40 italic px-2">Karyawan tidak ditemukan...</p>
+                  ) : null}
+                </div>
+              )}
+
+              <p className="mt-1 text-[10px] text-white/20 italic font-medium px-1">
+                {status === 'H' ? 'Menghapus status khusus.' : `Tekan Enter atau + untuk set ${status}.`}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Entries List */}
+      <Card className="glass-panel border-none shadow-2xl bg-black/40 overflow-hidden">
+        <CardHeader className="border-b border-white/5">
+          <CardTitle className="text-white text-md flex items-center gap-2">
+            <History className="w-5 h-5 text-primary" /> Daftar Perubahan Status Hari Ini
+          </CardTitle>
+          <CardDescription className="text-white/40">Karyawan yang tidak berstatus hadir pada tanggal ini.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-white/5 hover:bg-transparent bg-white/5">
+                <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6">Karyawan</TableHead>
+                <TableHead className="text-white/40 font-bold uppercase text-[10px]">PIN</TableHead>
+                <TableHead className="text-white/40 font-bold uppercase text-[10px]">Status</TableHead>
+                <TableHead className="text-white/40 font-bold uppercase text-[10px] pr-6 text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(Object.entries(manualData) as [string, string][]).map(([empId, status]) => {
+                const emp = employees.find(e => e.id === empId);
+                if (!emp) return null;
+                return (
+                  <TableRow key={empId} className="border-white/5 hover:bg-white/5 transition-colors">
+                    <TableCell className="font-bold text-white pl-6">{emp.name}</TableCell>
+                    <TableCell className="text-white/30 font-mono text-xs">{emp.pin}</TableCell>
+                    <TableCell>
+                      <Badge className={`${statusColors[status] || ''} border-none font-black text-[10px]`}>{status}</Badge>
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-rose-400 hover:bg-rose-500/10 h-8 rounded-lg"
+                        onClick={() => updateStatus(emp, 'H')}
+                      >
+                        Hapus
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {Object.keys(manualData).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-20 text-white/20 italic">Semua karyawan terdata hadir (Default).</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
