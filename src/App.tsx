@@ -2261,7 +2261,7 @@ function AdminPeriods() {
                         </Button>
                       }
                     />
-                    <PopoverContent className="glass-panel border-white/20 p-4 w-72">
+                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72">
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 mb-1">
                           <Clock className="w-4 h-4 text-amber-400" />
