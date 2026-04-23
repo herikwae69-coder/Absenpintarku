@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse } from 'date-fns';
 import { 
+  Music,
   User, 
   Clock, 
   Coffee, 
@@ -303,7 +304,7 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
   const selectedAdmin = employees.find(e => String(e.pin || '').trim() === adminAbsenId.trim());
 
   return (
-    <div className="h-screen flex flex-col items-center justify-center p-4 overflow-hidden relative">
+    <div className="min-h-screen flex flex-col items-center justify-center py-10 px-4 overflow-y-auto relative">
       {/* Decorative atmospheric elements */}
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[120px] rounded-full animate-pulse" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/10 blur-[100px] rounded-full" />
@@ -649,7 +650,8 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:pt-10">
+    <div className="h-screen overflow-y-auto p-4 md:p-10">
+      <div className="max-w-4xl mx-auto pb-20">
       {/* Change Password Dialog */}
       <Dialog open={showChangePass} onOpenChange={setShowChangePass}>
         <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[400px]">
@@ -978,6 +980,7 @@ function EmployeeView({ employee, shifts, sections, onLogout }: {
         </TabsContent>
       </Tabs>
     </div>
+  </div>
   );
 }
 
@@ -1005,6 +1008,7 @@ function AdminDashboard({
     { value: 'quotas', label: 'Atur Kuota', icon: <BadgeCheck className="w-4 h-4" /> },
     { value: 'periods', label: 'Batas Waktu', icon: <CalendarIcon className="w-4 h-4" /> },
     { value: 'reports', label: 'Laporan', icon: <Eye className="w-4 h-4" /> },
+    { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" /> },
   ];
 
   return (
@@ -1097,11 +1101,52 @@ function AdminDashboard({
               <TabsContent value="reports" className="mt-0 outline-none">
                 <AdminReports employees={employees} shifts={shifts} />
               </TabsContent>
+              <TabsContent value="music" className="mt-0 outline-none">
+                <AdminMusic />
+              </TabsContent>
             </div>
           </div>
         </div>
       </main>
     </Tabs>
+  );
+}
+
+function AdminMusic() {
+  const [musicUrl, setMusicUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'systemConfig', 'musicSettings'), (doc) => {
+      if (doc.exists()) {
+        setMusicUrl(doc.data().url || '');
+      }
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const handleSave = async () => {
+    await setDoc(doc(db, 'systemConfig', 'musicSettings'), { url: musicUrl });
+    alert('Musik URL berhasil disimpan!');
+  };
+
+  return (
+    <Card className="glass-panel border-none p-6 text-white">
+      <CardHeader>
+        <CardTitle>Pengaturan Musik Request Libur</CardTitle>
+        <CardDescription className="text-white/60">Masukkan URL audio (MP3) untuk background music request libur:</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Input 
+          value={musicUrl} 
+          onChange={(e) => setMusicUrl(e.target.value)} 
+          placeholder="https://example.com/musik.mp3"
+          className="field-input text-white"
+        />
+        <Button onClick={handleSave} className="bg-primary w-full h-12 font-bold">SIMPAN URL MUSIK</Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -2116,6 +2161,26 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     reason: '',
     sectionId: ''
   });
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'systemConfig', 'musicSettings'), (doc) => {
+      if (doc.exists()) {
+        const url = doc.data().url;
+        if (url) {
+          audioRef.current = new Audio(url);
+          audioRef.current.loop = true;
+        }
+      }
+    });
+    return unsub;
+  }, []);
+
+  const playMusic = () => {
+    if (audioRef.current) {
+      audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+    }
+  };
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
@@ -2362,6 +2427,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                       return (
                         <Button 
                           disabled={isClosed}
+                          onClick={playMusic}
                           className={`inline-flex items-center justify-center h-10 px-4 py-2 text-white rounded-xl shadow-lg transition-colors font-bold text-sm gap-2 border-none ${isClosed ? 'bg-white/5 text-white/20' : 'bg-primary hover:bg-primary/80'}`}
                         >
                           {isClosed ? <AlertCircle className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
