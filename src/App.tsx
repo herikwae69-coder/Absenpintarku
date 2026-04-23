@@ -2674,21 +2674,27 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
                   <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
                 </Button>
               </DialogTrigger>
-              <DialogContent className="glass-panel text-white border-white/20">
+            <DialogContent className="bg-black/95 text-white border-white/20 sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle className="text-white">Atur Karyawan Libur</DialogTitle>
+                  <DialogTitle className="text-white text-xl">Atur Karyawan Libur</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label className="text-white/70 text-xs">Pilih Karyawan</Label>
-                    <Select value={liburData.employeeId} onValueChange={(v) => setLiburData({...liburData, employeeId: v})}>
-                      <SelectTrigger className="field-input text-white border-white/10 h-12 rounded-xl">
-                        <SelectValue placeholder="Pilih Karyawan" />
-                      </SelectTrigger>
-                      <SelectContent className="glass-panel border-white/10 text-white max-h-[300px]">
-                        {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-white/70 text-xs">Cari Karyawan (Nama / PIN)</Label>
+                    <div className="relative">
+                      <Input 
+                        placeholder="Ketik nama atau PIN..." 
+                        className="field-input h-12 rounded-xl pl-4 pr-10"
+                        onChange={(e) => {
+                          const val = e.target.value.toLowerCase();
+                          const found = employees.find(e => e.name.toLowerCase().includes(val) || (e as any).pin?.includes(val));
+                          if (found) setLiburData({...liburData, employeeId: found.id});
+                        }}
+                      />
+                      <div className="absolute right-3 top-3 text-white/50 text-xs font-mono">
+                        {employees.find(e => e.id === liburData.employeeId)?.name || '...'}
+                      </div>
+                    </div>
                   </div>
                   <div className="grid gap-2">
                     <Label className="text-white/70 text-xs">Tanggal Libur</Label>
