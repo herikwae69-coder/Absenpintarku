@@ -132,6 +132,47 @@ const formatPeriod = (start: Date, end: Date) => {
 };
 
 // --- CALCULATION HELPERS ---
+const calculateEffectiveQuota = (
+  employeeId: string,
+  selectedPeriodId: string,
+  periodOptions: any[],
+  controls: Record<string, any>,
+  allQuotas: any[],
+  allLeaveRequests: any[]
+) => {
+  const currentIndex = periodOptions.findIndex(p => p.value === selectedPeriodId);
+  if (currentIndex === -1) return 4;
+
+  const chain = periodOptions.slice(currentIndex).reverse();
+  let carryover = 0;
+  let finalQuota = 4;
+
+  for (const p of chain) {
+    const pCtrl = controls[p.value];
+    const maxStored = pCtrl?.maxAccumulatedLeave ?? 6;
+    const qDoc = allQuotas.find(q => q.employeeId === employeeId && q.period === p.value);
+    const base = qDoc?.quota ?? 4;
+    const effective = Math.min(base + carryover, maxStored);
+    
+    if (p.value === selectedPeriodId) {
+      finalQuota = effective;
+      break;
+    }
+
+    const used = allLeaveRequests
+      .filter(r => r.employeeId === employeeId && r.period === p.value && (r.status === 'approved' || r.status === 'pending'))
+      .reduce((acc, req) => {
+        let count = 0;
+        if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
+        if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
+        return acc + count;
+      }, 0);
+    
+    carryover = Math.max(0, effective - used);
+  }
+  return finalQuota;
+};
+
 const toDateSafe = (val: any): Date => {
   if (!val) return new Date();
   if (typeof val.toDate === 'function') {
@@ -2193,18 +2234,42 @@ function AdminSections({ sections, divisions }: { sections: Section[], divisions
 
 // --- ADMIN: QUOTA MANAGEMENT ---
 function AdminQuota({ employees }: { employees: Employee[] }) {
-  const periodOptions = getPeriodOptions();
-  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
+  const [controls, setControls] = useState<Record<string, any>>({});
+  const periodOptions = getCombinedPeriods(controls);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [quotas, setQuotas] = useState<any[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'periodQuotas'), where('period', '==', selectedPeriod));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+      const data: Record<string, any> = {};
+      snap.docs.forEach(d => { data[d.id] = d.data(); });
+      setControls(data);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPeriod && periodOptions.length > 0) {
+      const nowStr = format(new Date(), 'yyyy-MM-dd');
+      const current = periodOptions.find(p => nowStr >= format(p.start, 'yyyy-MM-dd') && nowStr <= format(p.end, 'yyyy-MM-dd'));
+      setSelectedPeriod(current ? current.value : periodOptions[0].value);
+    }
+  }, [periodOptions, selectedPeriod]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'leaveRequests'), where('status', 'in', ['approved', 'pending']));
+    const unsub = onSnapshot(q, (snap) => setLeaveRequests(snap.docs.map(d => ({id: d.id, ...d.data()}))));
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'periodQuotas'), (snap) => {
       setQuotas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return unsub;
-  }, [selectedPeriod]);
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2251,16 +2316,27 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
     reader.readAsBinaryString(file);
   };
 
-  const handleDownloadTemplate = () => {
-    const data = employees.filter(e => e.role === 'employee').map(e => ({
-      'Nama Karyawan': e.name,
-      'No. Absen': e.pin,
-      'Kuota': ''
-    }));
+  const handleDownloadQuota = () => {
+    const data = employees.filter(e => e.role !== 'superadmin').map(e => {
+        const currentQuota = calculateEffectiveQuota(e.id, selectedPeriod, periodOptions, controls, quotas, leaveRequests);
+        const usedLeave = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod).reduce((sum, req) => {
+          const dates = [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
+          return sum + dates.filter(d => d).length;
+        }, 0);
+        const remaining = Math.max(0, currentQuota - usedLeave);
+        
+        return {
+          'No. Absen': e.pin,
+          'Nama Karyawan': e.name,
+          'Kuota': currentQuota,
+          'Diambil': usedLeave,
+          'Sisa': remaining
+        };
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template Kuota");
-    XLSX.writeFile(wb, "Template_Kuota_Libur.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Data Kuota Libur");
+    XLSX.writeFile(wb, `Data_Kuota_Libur_${selectedPeriod}.xlsx`);
   };
 
   return (
@@ -2268,18 +2344,18 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle className="text-white">Pengaturan Kuota Libur</CardTitle>
-          <CardDescription className="text-white/50">
+        <CardDescription className="text-white/50">
             Jatah default: <span className="text-white/80 font-bold">4 Hari</span>. 
-            Maksimal total (Jatah + Sisa Lalu): <span className="text-white/80 font-bold">6 Hari</span>.
+            Maksimal total (Jatah + Sisa Lalu): <span className="text-white/80 font-bold">{controls[selectedPeriod]?.maxAccumulatedLeave || 6} Hari</span>.
           </CardDescription>
         </div>
         <div className="flex gap-2">
           <Button 
             variant="outline" 
-            onClick={handleDownloadTemplate}
+            onClick={handleDownloadQuota}
             className="rounded-xl flex items-center justify-center gap-2 glass-panel border-white/10 text-white hover:bg-white/10 h-10 px-4 py-2 font-medium shadow-sm"
           >
-            <Download className="w-4 h-4" /> Template
+            <Download className="w-4 h-4" /> Export Data
           </Button>
           <input 
             type="file" 
@@ -2314,31 +2390,40 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
 
         <div className="overflow-x-auto no-scrollbar">
           <Table>
-            <TableHeader>
+             <TableHeader>
               <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
                 <TableHead className="text-white/40 whitespace-nowrap">Nama Karyawan</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">No. Absen</TableHead>
-                <TableHead className="text-right text-white/40 whitespace-nowrap">Kuota Jatah</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Kuota</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Diambil</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Sisa</TableHead>
+                <TableHead className="text-right text-white/40 whitespace-nowrap">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.filter(e => e.role === 'employee').map(e => {
-                const quotaEntry = quotas.find(q => q.employeeId === e.id);
-                const currentQuota = quotaEntry?.quota ?? 4;
+              {employees.filter(e => e.role !== 'superadmin').map(e => {
+                const currentQuota = calculateEffectiveQuota(e.id, selectedPeriod, periodOptions, controls, quotas, leaveRequests);
+                
+                // Calculate used quota from 'leaveRequests' collection
+                const employeeRequests = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod);
+                const usedLeave = employeeRequests.reduce((sum, req) => {
+                  const dates = [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
+                  return sum + dates.filter(d => d).length;
+                }, 0);
+                const remaining = Math.max(0, currentQuota - usedLeave);
                 
                 return (
                   <TableRow key={e.id} className="border-white/5 hover:bg-white/5">
                     <TableCell className="font-semibold text-white whitespace-nowrap">{e.name}</TableCell>
                     <TableCell className="text-white/40 font-mono text-xs whitespace-nowrap">{e.pin}</TableCell>
+                    <TableCell className="text-white/40">{currentQuota} Hari</TableCell>
+                    <TableCell className="text-amber-400 font-bold">{usedLeave} Hari</TableCell>
+                    <TableCell className="text-emerald-400 font-bold">{remaining} Hari</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
-                      <div className="flex justify-end items-center gap-3">
-                        <Badge className="bg-primary/20 text-primary border-primary/30 font-mono px-3 py-1 text-sm">
-                          {currentQuota} Hari
-                        </Badge>
                         <Button 
-                          size="icon" 
+                          size="sm"
                           variant="ghost" 
-                          className="h-8 w-8 text-white/30 hover:text-white hover:bg-white/10"
+                          className="text-white/30 hover:text-white hover:bg-white/10"
                           onClick={async () => {
                             const newVal = prompt(`Update Kuota untuk ${e.name}:`, String(currentQuota));
                             if (newVal !== null) {
@@ -2355,9 +2440,8 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
                             }
                           }}
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="w-4 h-4 mr-2" /> Edit
                         </Button>
-                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -2415,6 +2499,14 @@ function AdminPeriods() {
   const updateMaxAccumulated = async (periodId: string, limit: number) => {
     await setDoc(doc(db, 'periodControls', periodId), {
       maxAccumulatedLeave: limit,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  };
+
+  const updatePeriodName = async (periodId: string, name: string) => {
+    if (!name) return;
+    await setDoc(doc(db, 'periodControls', periodId), {
+      name,
       updatedAt: serverTimestamp()
     }, { merge: true });
   };
@@ -2530,10 +2622,30 @@ function AdminPeriods() {
                      <Clock className="w-5 h-5" />}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-white font-bold">{p.label}</h4>
-                      {isCustom && <Badge className="bg-white/10 text-white/40 border-none text-[8px]">Custom</Badge>}
-                    </div>
+          <div className="flex items-center gap-2">
+            <h4 className="text-white font-bold">{p.label}</h4>
+            {isCustom && <Badge className="bg-white/10 text-white/40 border-none text-[8px]">Custom</Badge>}
+            <Popover>
+              <PopoverTrigger render={<Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-white/10"><Edit className="w-3 h-3 text-white/30" /></Button>} />
+              <PopoverContent className="bg-black/95 text-white border-white/20 p-2 w-64">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold text-white/40">Ubah Nama Periode</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="Nama baru..."
+                      className="field-input h-8 text-xs"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          updatePeriodName(p.value, e.currentTarget.value);
+                          (e.target as any).blur();
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
                     <p className="text-xs text-white/40">Status: <span className="uppercase font-bold tracking-wider">{ctrl.status === 'scheduled' ? 'Terjadwal' : ctrl.status === 'open' ? 'Terbuka' : 'Ditutup'}</span></p>
                     {isCustom && <p className="text-[10px] text-white/20">{ctrl.startDate} s/d {ctrl.endDate}</p>}
                   </div>
@@ -2579,7 +2691,8 @@ function AdminPeriods() {
                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Penutupan</Label>
                           <Input 
                             type="date" 
-                            defaultValue={ctrl.deadlineDate || ''}
+                            value={ctrl.deadlineDate || ''}
+                            onChange={(e) => {/* Add local state if necessary or use onBlur */}}
                             onBlur={(e) => updateDeadline(p.value, e.target.value, ctrl.deadlineTime || '17:00')}
                             className="field-input h-9 text-white" 
                           />
@@ -2588,7 +2701,7 @@ function AdminPeriods() {
                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Jam Penutupan</Label>
                           <Input 
                             type="time" 
-                            defaultValue={ctrl.deadlineTime || '17:00'}
+                            value={ctrl.deadlineTime || '17:00'}
                             onBlur={(e) => updateDeadline(p.value, ctrl.deadlineDate || '', e.target.value)}
                             className="field-input h-9 text-white" 
                           />
@@ -2606,7 +2719,7 @@ function AdminPeriods() {
                           <div className="flex items-center gap-2">
                             <Input 
                               type="number" 
-                              defaultValue={ctrl.maxRequestsPerDay || 7}
+                              value={ctrl.maxRequestsPerDay || 7}
                               onBlur={(e) => updateMaxLimit(p.value, parseInt(e.target.value) || 7)}
                               className="field-input h-9 text-white w-20" 
                             />
@@ -2619,7 +2732,7 @@ function AdminPeriods() {
                           <div className="flex items-center gap-2">
                             <Input 
                               type="number" 
-                              defaultValue={ctrl.maxAccumulatedLeave || 6}
+                              value={ctrl.maxAccumulatedLeave || 6}
                               onBlur={(e) => updateMaxAccumulated(p.value, parseInt(e.target.value) || 6)}
                               className="field-input h-9 text-white w-20" 
                             />
@@ -2630,8 +2743,9 @@ function AdminPeriods() {
                         <div className="pt-2 border-t border-white/5 space-y-1">
                            <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Custom Nama Periode</Label>
                            <Input 
-                             defaultValue={ctrl.name || ''}
+                             value={ctrl.name || ''}
                              placeholder={p.label}
+                             onChange={(e) => {}}
                              onBlur={async (e) => {
                                await setDoc(doc(db, 'periodControls', p.value), { name: e.target.value }, { merge: true });
                              }}
@@ -3376,7 +3490,6 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
 function EmployeeLeave({ employee, sections }: { employee: Employee, sections: Section[] }) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
-  const [periodQuota, setPeriodQuota] = useState(0);
   const [periodControl, setPeriodControl] = useState<any>(null);
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
@@ -3490,61 +3603,8 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   }, [selectedPeriod]);
 
   useEffect(() => {
-    // 1. Calculate Period Quota with Carryover
-    const currentIndex = periodOptions.findIndex(p => p.value === selectedPeriod);
-    const prevPeriod = currentIndex > 0 ? periodOptions[currentIndex - 1] : null;
-
-    const fetchQuota = async () => {
-      // To calculate carryover with accumulation, we need to process periods sequentially from oldest to current
-      // Since periodOptions is newest first, we slice from currentIndex to the end (oldest) and reverse it
-      const allPeriodsToProcess = periodOptions.slice(currentIndex).reverse();
-      
-      let runningCarryover = 0;
-      let finalEffectiveQuota = employee.leaveQuota || 4;
-
-      for (const p of allPeriodsToProcess) {
-        // 1. Get base quota for this period
-        const quotaSnap = await getDoc(doc(db, 'periodQuotas', `${employee.id}_${p.value}`));
-        const baseQuota = quotaSnap.exists() ? (quotaSnap.data()?.quota ?? (employee.leaveQuota || 4)) : (employee.leaveQuota || 4);
-        
-        // 2. Effective quota (Base + Carryover), capped at custom max or 6
-        const pCtrl = controls[p.value];
-        const maxStored = pCtrl?.maxAccumulatedLeave ?? 6;
-        const effectiveQuota = Math.min(baseQuota + runningCarryover, maxStored);
-        
-        // If this is the selected period, we stop here and set this as the available quota
-        if (p.value === selectedPeriod) {
-          finalEffectiveQuota = effectiveQuota;
-          break;
-        }
-
-        // 3. Calculate used days in THIS period to find carryover for NEXT period
-        const requestsSnap = await getDocs(query(
-          collection(db, 'leaveRequests'),
-          where('employeeId', '==', employee.id),
-          where('period', '==', p.value)
-        ));
-
-        const used = requestsSnap.docs.reduce((acc, d) => {
-          const r = d.data();
-          let count = 0;
-          if (r.date1) count++; if (r.date2) count++; if (r.date3) count++;
-          if (r.date4) count++; if (r.date5) count++; if (r.date6) count++;
-          return acc + count;
-        }, 0);
-
-        // 4. Carryover to next month is whatever is left from 'effectiveQuota'
-        runningCarryover = Math.max(0, effectiveQuota - used);
-      }
-
-      setPeriodQuota(finalEffectiveQuota);
-    };
-
-    fetchQuota();
-
     const q = query(
       collection(db, 'leaveRequests'), 
-      where('period', '==', selectedPeriod),
       where('division', '==', employee.division || 'Depan'),
       orderBy('createdAt', 'desc')
     );
@@ -3557,7 +3617,24 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     return () => {
       unsub();
     };
-  }, [employee.id, selectedPeriod, employee.division, controls, periodOptions]);
+  }, [employee.id, employee.division]);
+
+  const [allQuotas, setAllQuotas] = useState<any[]>([]);
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'periodQuotas'), (snap) => {
+      setAllQuotas(snap.docs.map(d => ({id: d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  const periodEffectiveQuota = calculateEffectiveQuota(employee.id, selectedPeriod, periodOptions, controls, allQuotas, allRequests);
+  const usedCurrent = requests.filter(r => r.period === selectedPeriod).reduce((acc, req) => {
+    let count = 0;
+    if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
+    if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
+    return acc + count;
+  }, 0);
+  const remainingInPeriod = Math.max(0, periodEffectiveQuota - usedCurrent);
 
   const handleSubmit = async () => {
     // Validate period status
@@ -3583,8 +3660,8 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     if (selectedDates.length === 0) return alert("Pilih setidaknya satu tanggal libur!");
 
     // Check if enough quota
-    if (selectedDates.length > periodQuota) {
-      return alert(`Jatah libur Anda tidak mencukupi (Sisa: ${periodQuota} hari).`);
+    if (selectedDates.length > periodEffectiveQuota) {
+      return alert(`Jatah libur Anda tidak mencukupi (Sisa: ${periodEffectiveQuota} hari).`);
     }
 
     // Validate dates belong to the selected period
@@ -3729,9 +3806,9 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex flex-wrap justify-end gap-4">
-            <StatCard label="Total Kuota" value={periodQuota} icon={<CalendarIcon className="text-blue-400 w-4 h-4" />} size="sm" />
+            <StatCard label="Total Kuota" value={periodEffectiveQuota} icon={<CalendarIcon className="text-blue-400 w-4 h-4" />} size="sm" />
             <StatCard label="Digunakan" value={usedDays} icon={<BadgeCheck className="text-emerald-400 w-4 h-4" />} size="sm" />
-            <StatCard label="Sisa Kuota" value={Math.max(0, periodQuota - usedDays)} icon={<Clock className="text-amber-400 w-4 h-4" />} size="sm" />
+            <StatCard label="Sisa Kuota" value={Math.max(0, periodEffectiveQuota - usedDays)} icon={<Clock className="text-amber-400 w-4 h-4" />} size="sm" />
           </div>
           <p className="text-[9px] text-white/30 italic mr-2 text-right">
             * Maksimal Kuota: 6 hari (termasuk sisa periode lalu yang terakumulasi otomatis).
