@@ -43,6 +43,8 @@
         "breakEnd": { "type": "string", "format": "date-time" },
         "checkOut": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["present", "late", "half-day", "absent"] },
+        "location": { "type": "string", "description": "JSON string {lat: number, lng: number}" },
+        "photoUrl": { "type": "string", "description": "URL of the selfie" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["employeeId", "date"]
@@ -95,6 +97,17 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["employeeId", "date", "status"]
+    },
+    "OfficeConfig": {
+      "title": "OfficeConfig",
+      "description": "Office location and geofencing settings.",
+      "type": "object",
+      "properties": {
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "radius": { "type": "number", "description": "Radius in meters" }
+      },
+      "required": ["lat", "lng", "radius"]
     }
   },
   "firestore": {
@@ -121,6 +134,10 @@
     "/manualAttendance/{attendanceId}": {
       "schema": "ManualAttendance",
       "description": "Manual attendance logs."
+    },
+    "/config/office": {
+      "schema": "OfficeConfig",
+      "description": "Office location configuration."
     }
   }
 }

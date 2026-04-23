@@ -1,4 +1,16 @@
+import 'leaflet/dist/leaflet.css';
 import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+
+L.Marker.prototype.options.icon = L.icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
 import { db, auth } from './lib/firebase';
 import { 
   collection, 
@@ -14,6 +26,7 @@ import {
   addDoc,
   deleteDoc,
   orderBy,
+  limit,
   Timestamp
 } from 'firebase/firestore';
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse } from 'date-fns';
@@ -44,7 +57,11 @@ import {
   Layers,
   Search,
   ClipboardCheck,
-  Zap
+  Zap,
+  MapPin,
+  Camera,
+  Map,
+  Locate
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,6 +92,21 @@ import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
+
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // meters
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lon2-lon1) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // in meters
+};
 
 // Helper for Period Calculation (24th to 23rd)
 const getPeriodDates = (date: Date) => {
@@ -649,6 +681,116 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
   );
 }
 
+function CameraDialog({ 
+  onCapture, 
+  isOpen, 
+  onClose 
+}: { 
+  onCapture: (blob: string) => void, 
+  isOpen: boolean, 
+  onClose: () => void 
+}) {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    if (isOpen) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+        .then(s => {
+          stream = s;
+          if (videoRef.current) videoRef.current.srcObject = s;
+        })
+        .catch(err => {
+          console.error("Camera error:", err);
+          alert("Gagal mengakses kamera!");
+          onClose();
+        });
+    }
+    return () => {
+      stream?.getTracks().forEach(track => track.stop());
+    };
+  }, [isOpen]);
+
+  const capture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const context = canvasRef.current.getContext('2d');
+      if (context) {
+        const width = 320;
+        const height = (videoRef.current.videoHeight / videoRef.current.videoWidth) * width;
+        canvasRef.current.width = width;
+        canvasRef.current.height = height;
+        context.drawImage(videoRef.current, 0, 0, width, height);
+        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.6);
+        onCapture(dataUrl);
+        onClose();
+      }
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="glass-panel text-white border-white/20 p-4 md:p-6 max-w-sm rounded-[2rem] outline-none">
+        <DialogHeader>
+          <DialogTitle className="text-white">Selfie Absensi</DialogTitle>
+        </DialogHeader>
+        <div className="relative aspect-[3/4] bg-black rounded-3xl overflow-hidden border border-white/10 shadow-inner">
+          <video ref={videoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" style={{ transform: 'scaleX(-1)' }} />
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+        <div className="flex justify-center pt-4">
+          <Button onClick={capture} size="lg" className="w-16 h-16 rounded-full bg-white text-black hover:bg-white/90 active:scale-90 transition-all border-none shadow-2xl">
+            <Camera className="w-8 h-8" />
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BreakSlider({ 
+  onComplete, 
+  isBreak, 
+  disabled 
+}: { 
+  onComplete: () => void, 
+  isBreak: boolean, 
+  disabled: boolean 
+}) {
+  return (
+    <div className={`relative h-14 rounded-full border border-white/10 transition-all overflow-hidden ${disabled ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}
+         style={{ background: isBreak ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)' }}>
+      <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-[0.2em] pointer-events-none transition-all ${isBreak ? 'text-blue-400/40' : 'text-amber-400/40'}`}>
+        {isBreak ? 'Geser ke kiri untuk Selesai' : 'Geser ke kanan untuk Istirahat'}
+      </div>
+      <div className="absolute inset-2 flex items-center">
+        <div className="relative w-full h-full">
+           <motion.div
+            drag="x"
+            dragConstraints={{ left: 0, right: 260 }} // Assume max drag 260px
+            dragElastic={0.1}
+            dragSnapToOrigin={true}
+            onDragEnd={(_, info) => {
+              if (!isBreak && info.offset.x > 150) {
+                onComplete();
+              } else if (isBreak && info.offset.x < -150) {
+                onComplete();
+              }
+            }}
+            animate={{ 
+              x: isBreak ? 260 : 0 // Shift initial position
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className={`absolute w-10 h-10 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing shadow-xl z-20 ${isBreak ? 'bg-blue-500' : 'bg-amber-500'}`}
+          >
+            <Coffee className="w-5 h-5 text-white" />
+          </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- EMPLOYEE VIEW ---
 function EmployeeView({ employee, shifts, sections, divisions, onLogout }: { 
   employee: Employee, 
@@ -661,6 +803,8 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedShiftId, setSelectedShiftId] = useState("");
   const [confirmAction, setConfirmAction] = useState<null | 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut'>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [pendingAction, setPendingAction] = useState<null | { action: any, location: string }>(null);
   const periodOptions = getPeriodOptions();
   const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
   const [history, setHistory] = useState<Attendance[]>([]);
@@ -708,7 +852,40 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
     return unsub;
   }, [employee.id, today, currentTime.getDay(), shifts]);
 
-  const handleAction = async (action: 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut') => {
+  const handleAction = async (action: 'checkIn' | 'breakStart' | 'breakEnd' | 'checkOut', photoData?: string) => {
+    let location = "";
+    
+    // Geolocation check for specific actions
+    if (action === 'checkIn' || action === 'checkOut' || action === 'breakEnd') {
+      try {
+        const position: any = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+        });
+        
+        // Anti-spoofing check: Check distance if office config exists
+        const officeSnap = await getDoc(doc(db, 'config', 'office'));
+        if (officeSnap.exists()) {
+          const config = officeSnap.data();
+          const dist = calculateDistance(position.coords.latitude, position.coords.longitude, config.lat, config.lng);
+          if (dist > config.radius) {
+            alert(`Anda berada di luar radius kantor! (Jarak: ${Math.round(dist)}m, Max: ${config.radius}m)`);
+            return;
+          }
+        }
+        location = JSON.stringify({ lat: position.coords.latitude, lng: position.coords.longitude });
+      } catch (e) {
+        alert("Gagal mendapatkan lokasi. Pastikan GPS aktif dan izin diberikan.");
+        return;
+      }
+    }
+
+    // Selfie requirement check
+    if ((action === 'checkIn' || action === 'checkOut' || action === 'breakEnd') && !photoData) {
+      setPendingAction({ action, location });
+      setShowCamera(true);
+      return;
+    }
+
     const time = new Date();
     setConfirmAction(null);
     if (!attendance && action === 'checkIn') {
@@ -720,14 +897,19 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
         date: today,
         checkIn: time,
         status: 'present',
+        location: location || (pendingAction?.location || ""),
+        photoUrl: photoData || "",
         updatedAt: serverTimestamp()
       });
     } else if (attendance) {
       await updateDoc(doc(db, 'attendance', attendance.id), {
         [action]: time,
+        location: location || (pendingAction?.location || attendance.location || ""),
+        photoUrl: photoData || (attendance.photoUrl || ""),
         updatedAt: serverTimestamp()
       });
     }
+    setPendingAction(null);
   };
 
   const handleUpdatePassword = async () => {
@@ -933,52 +1115,37 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
               </CardFooter>
             </Card>
 
-            {/* BREAK START */}
-            <Card className="glass-panel border-none flex flex-col justify-between">
+            {/* BREAK SECTION (SLIDER) */}
+            <Card className="glass-panel border-none flex flex-col justify-between md:col-span-2">
               <CardContent className="pt-6">
                 <div className="flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mb-3 border border-amber-500/30">
-                    <Coffee className="w-6 h-6" />
+                  <div className="flex gap-12 mb-4">
+                    <div className="flex flex-col items-center">
+                      <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-1">Mulai Istirahat</p>
+                      <p className="text-xl font-bold text-white">
+                        {attendance?.breakStart ? format(toDateSafe(attendance.breakStart), 'HH:mm') : '--:--'}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-1">Selesai Istirahat</p>
+                      <p className="text-xl font-bold text-white">
+                        {attendance?.breakEnd ? format(toDateSafe(attendance.breakEnd), 'HH:mm') : '--:--'}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">Istirahat</p>
-                  <p className="text-2xl font-bold text-white mb-4">
-                    {attendance?.breakStart ? format(toDateSafe(attendance.breakStart), 'HH:mm') : '--:--'}
-                  </p>
+                  
+                  <div className="w-full max-w-sm mx-auto">
+                    <BreakSlider 
+                      isBreak={!!attendance?.breakStart && !attendance?.breakEnd}
+                      disabled={!attendance || !!attendance.checkOut}
+                      onComplete={() => {
+                        const isCurrentlyOnBreak = !!attendance?.breakStart && !attendance?.breakEnd;
+                        handleAction(isCurrentlyOnBreak ? 'breakEnd' : 'breakStart');
+                      }}
+                    />
+                  </div>
                 </div>
               </CardContent>
-              <CardFooter className="pt-0">
-                <Button 
-                  disabled={!attendance || !!attendance.breakStart || !!attendance.checkOut}
-                  onClick={() => setConfirmAction('breakStart')}
-                  className="w-full btn-istirahat text-white rounded-xl shadow-lg h-12 font-bold border-none"
-                >
-                  ISTIRAHAT
-                </Button>
-              </CardFooter>
-            </Card>
-
-            {/* BREAK END */}
-            <Card className="glass-panel border-none flex flex-col justify-between">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mb-3 border border-blue-500/30">
-                    <Coffee className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">Selesai Ist.</p>
-                  <p className="text-2xl font-bold text-white mb-4">
-                    {attendance?.breakEnd ? format(toDateSafe(attendance.breakEnd), 'HH:mm') : '--:--'}
-                  </p>
-                </div>
-              </CardContent>
-              <CardFooter className="pt-0">
-                <Button 
-                  disabled={!attendance?.breakStart || !!attendance.breakEnd || !!attendance.checkOut}
-                  onClick={() => setConfirmAction('breakEnd')}
-                  className="w-full btn-selesai text-white rounded-xl shadow-lg h-12 font-bold border-none"
-                >
-                  SELESAI IST.
-                </Button>
-              </CardFooter>
             </Card>
 
             {/* CHECK OUT */}
@@ -1069,6 +1236,23 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
               </CardContent>
             </Card>
           )}
+
+          <div className="text-center mt-12 mb-8 text-[10px] font-bold text-white/10 uppercase tracking-[0.5em]">
+            Presensi Digital v1.2
+          </div>
+
+          <CameraDialog 
+            isOpen={showCamera} 
+            onClose={() => {
+              setShowCamera(false);
+              setPendingAction(null);
+            }} 
+            onCapture={(photo) => {
+              if (pendingAction) {
+                handleAction(pendingAction.action, photo);
+              }
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="libur" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
@@ -1164,6 +1348,63 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
 }
 
 // --- ADMIN DASHBOARD ---
+function AdminOfficeConfig() {
+  const [config, setConfig] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  function LocationMarker() {
+      const map = useMapEvents({
+        click(e) {
+          setConfig((prev: any) => ({ ...prev, lat: e.latlng.lat, lng: e.latlng.lng }));
+        },
+      });
+      return config && config.lat !== 0 ? <Marker position={[config.lat, config.lng]} /> : null;
+  }
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'office'), (snap) => {
+      if (snap.exists()) setConfig(snap.data());
+      else setConfig({ lat: -6.2088, lng: 106.8456, radius: 100 });
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const handleUpdate = async () => {
+    await setDoc(doc(db, 'config', 'office'), config);
+    alert("Konfigurasi lokasi kantor diperbarui!");
+  };
+
+  if (loading) return <div>Memuat...</div>;
+
+  return (
+    <div className="glass-panel p-6 space-y-6">
+      <h3 className="text-xl font-bold text-white">Atur Lokasi Kantor</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label className="text-white/50">Latitude</Label>
+          <Input type="number" step="any" value={config.lat} onChange={e => setConfig({...config, lat: parseFloat(e.target.value)})} className="text-white" />
+        </div>
+        <div>
+          <Label className="text-white/50">Longitude</Label>
+          <Input type="number" step="any" value={config.lng} onChange={e => setConfig({...config, lng: parseFloat(e.target.value)})} className="text-white" />
+        </div>
+        <div>
+          <Label className="text-white/50">Radius (meter)</Label>
+          <Input type="number" value={config.radius} onChange={e => setConfig({...config, radius: parseInt(e.target.value)})} className="text-white" />
+        </div>
+      </div>
+      <div className="h-[400px] w-full border border-white/20 rounded-lg overflow-hidden">
+        <MapContainer center={[config.lat || -6.2, config.lng || 106.8]} zoom={15} className="h-full w-full">
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <LocationMarker />
+        </MapContainer>
+      </div>
+      <Button onClick={handleUpdate} className="bg-primary">Simpan Konfigurasi</Button>
+    </div>
+  );
+}
+
 function AdminDashboard({ 
   employees, 
   shifts, 
@@ -1179,6 +1420,32 @@ function AdminDashboard({
   onLogout: () => void,
   currentUser: Employee | null
 }) {
+  const isSuper = currentUser?.role === 'superadmin';
+
+  useEffect(() => {
+    // Auto-Delete records older than 2 months (60 days)
+    if (isSuper) {
+      const cleanupOldData = async () => {
+        const twoMonthsAgo = subMonths(new Date(), 2);
+        const twoMonthsAgoStr = format(twoMonthsAgo, 'yyyy-MM-dd');
+        
+        // This is a simple cleanup. In a real intensive app, this should be a Cloud Function.
+        const q = query(collection(db, 'attendance'), where('date', '<', twoMonthsAgoStr));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+          console.log(`Cleaning up ${snap.size} old attendance records...`);
+          const batchSize = 25; // Smaller batch to avoid UI freeze
+          for (let i = 0; i < snap.docs.length; i += batchSize) {
+            const chunk = snap.docs.slice(i, i + batchSize);
+            await Promise.all(chunk.map(d => deleteDoc(doc(db, 'attendance', d.id))));
+          }
+        }
+      };
+      cleanupOldData().catch(console.error);
+    }
+  }, [isSuper]);
+
   const [activeTab, setActiveTab] = useState('employees');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -1187,6 +1454,7 @@ function AdminDashboard({
     { value: 'shifts', label: 'Shift', icon: <Clock className="w-4 h-4" /> },
     { value: 'divisions', label: 'Divisi', icon: <Layers className="w-4 h-4" /> },
     { value: 'sections', label: 'Bagian', icon: <Settings className="w-4 h-4" /> },
+    { value: 'office', label: 'Lokasi Kantor', icon: <MapPin className="w-4 h-4" />, superAdminOnly: true },
     { value: 'live', label: 'Live Absen', icon: <ClipboardList className="w-4 h-4" /> },
     { value: 'manual', label: 'Absensi Manual', icon: <ClipboardCheck className="w-4 h-4" /> },
     { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
@@ -1280,6 +1548,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="manual" className="mt-0 outline-none">
                 <AdminManualAttendance employees={employees} divisions={divisions} />
+              </TabsContent>
+              <TabsContent value="office" className="mt-0 outline-none">
+                <AdminOfficeConfig />
               </TabsContent>
               <TabsContent value="leaves" className="mt-0 outline-none">
                 <AdminLeave employees={employees} sections={sections} divisions={divisions} />
@@ -2480,9 +2751,82 @@ function AdminShifts({ shifts }: { shifts: Shift[] }) {
   );
 }
 
+function AdminActivityLog({ employees }: { employees: Employee[] }) {
+  const [logs, setLogs] = useState<Attendance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'attendance'), orderBy('updatedAt', 'desc'), limit(100));
+    const unsub = onSnapshot(q, (snap) => {
+      setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance)));
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  return (
+    <DialogContent className="glass-panel text-white border-white/20 p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col rounded-[2rem]">
+      <DialogHeader>
+        <DialogTitle className="text-white text-xl font-bold flex items-center gap-2">
+           <History className="w-5 h-5 text-primary" /> Log Aktivitas Karyawan (Terbaru)
+        </DialogTitle>
+      </DialogHeader>
+      <div className="flex-1 overflow-y-auto no-scrollbar py-4">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-white/10 hover:bg-transparent">
+              <TableHead className="text-white/40">Karyawan</TableHead>
+              <TableHead className="text-white/40">Waktu</TableHead>
+              <TableHead className="text-white/40">Lokasi</TableHead>
+              <TableHead className="text-white/40">Foto</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {logs.map(log => {
+              const location = log.location ? JSON.parse(log.location) : null;
+              return (
+                <TableRow key={log.id} className="border-white/5 hover:bg-white/5">
+                  <TableCell className="font-medium text-white">{log.employeeName}</TableCell>
+                  <TableCell className="text-white/60 text-xs">
+                    {log.date}<br/>
+                    <span className="text-[10px] text-white/30 uppercase font-black">
+                      {log.updatedAt ? format(toDateSafe(log.updatedAt), 'HH:mm:ss') : '-'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {location ? (
+                      <a href={`https://www.google.com/maps?q=${location.lat},${location.lng}`} target="_blank" rel="noreferrer" 
+                         className="flex items-center gap-1 text-[10px] text-blue-400 hover:underline">
+                        <MapPin className="w-3 h-3" /> {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                      </a>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell>
+                    {log.photoUrl ? (
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedPhoto(log.photoUrl as string)} className="text-[10px] h-7 px-2 bg-white/5 hover:bg-white/10">Lihat Foto</Button>
+                    ) : '-'}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={!!selectedPhoto} onOpenChange={() => setSelectedPhoto(null)}>
+        <DialogContent className="glass-panel p-2 border-white/20 max-w-xs rounded-3xl overflow-hidden aspect-[3/4]">
+          <img src={selectedPhoto || ''} alt="Selfie" className="w-full h-full object-cover rounded-2xl" />
+        </DialogContent>
+      </Dialog>
+    </DialogContent>
+  );
+}
+
 // --- ADMIN: LIVE VIEW ---
 function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift[] }) {
   const [liveAttendance, setLiveAttendance] = useState<Attendance[]>([]);
+  const [showActivity, setShowActivity] = useState(false);
   const [date, setDate] = useState<Date>(new Date());
   const [editingAttendance, setEditingAttendance] = useState<Attendance | null>(null);
   const [showEdit, setShowEdit] = useState(false);
@@ -2711,6 +3055,13 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 glass-panel border-white/20"><Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} className="text-white" /></PopoverContent>
             </Popover>
+
+            <Dialog open={showActivity} onOpenChange={setShowActivity}>
+              <DialogTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary/20 border border-primary/20 rounded-md text-sm font-bold text-primary hover:bg-primary/30 transition-all">
+                <History className="w-4 h-4" /> Cek Activity
+              </DialogTrigger>
+              <AdminActivityLog employees={employees} />
+            </Dialog>
           </div>
         </CardHeader>
         <CardContent>
