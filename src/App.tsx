@@ -4150,6 +4150,9 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 // --- ADMIN: REPORTS ---
 function AdminManualAttendance({ employees, divisions }: { employees: Employee[], divisions: Division[] }) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [reportStart, setReportStart] = useState<Date>(new Date());
+  const [reportEnd, setReportEnd] = useState<Date>(new Date());
+  const [isExporting, setIsExporting] = useState(false);
   const [manualData, setManualData] = useState<Record<string, string>>({});
   
   // States for each input column
@@ -4249,6 +4252,21 @@ function AdminManualAttendance({ employees, divisions }: { employees: Employee[]
     H: 'text-emerald-400 bg-emerald-500/10'
   };
 
+  const handleExport = async () => {
+    setIsExporting(true);
+    // Simple export logic for manual attendance
+    const exportRows = employees.map(emp => ({
+      Nama: emp.name,
+      PIN: emp.pin,
+      Status: manualData[emp.id] || 'H'
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rekap Manual");
+    XLSX.writeFile(wb, `Rekap_Manual_${dateStr}.xlsx`);
+    setIsExporting(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -4278,11 +4296,11 @@ function AdminManualAttendance({ employees, divisions }: { employees: Employee[]
             <div className="grid grid-cols-2 gap-4 py-4">
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-white/40">DARI TANGGAL</Label>
-                <Input type="date" value={format(exportStart, 'yyyy-MM-dd')} onChange={(e) => setExportStart(new Date(e.target.value))} className="field-input h-11" />
+                <Input type="date" value={format(reportStart, 'yyyy-MM-dd')} onChange={(e) => setReportStart(new Date(e.target.value))} className="field-input h-11" />
               </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-white/40">SAMPAI TANGGAL</Label>
-                <Input type="date" value={format(exportEnd, 'yyyy-MM-dd')} onChange={(e) => setExportEnd(new Date(e.target.value))} className="field-input h-11" />
+                <Input type="date" value={format(reportEnd, 'yyyy-MM-dd')} onChange={(e) => setReportEnd(new Date(e.target.value))} className="field-input h-11" />
               </div>
             </div>
             <Button onClick={handleExport} disabled={isExporting} className="bg-primary hover:bg-primary/80 w-full h-12 rounded-xl font-bold">
