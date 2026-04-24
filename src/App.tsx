@@ -88,7 +88,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
@@ -798,6 +798,12 @@ function BreakSlider({
   isBreak: boolean, 
   disabled: boolean 
 }) {
+  const controls = useAnimation();
+
+  useEffect(() => {
+    controls.start({ x: isBreak ? 260 : 0 });
+  }, [isBreak, controls]);
+
   return (
     <div className={`relative h-14 rounded-full border border-white/10 transition-all overflow-hidden ${disabled ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}
          style={{ background: isBreak ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)' }}>
@@ -810,17 +816,16 @@ function BreakSlider({
             drag="x"
             dragConstraints={{ left: 0, right: 260 }} // Assume max drag 260px
             dragElastic={0.1}
-            dragSnapToOrigin={true}
             onDragEnd={(_, info) => {
               if (!isBreak && info.offset.x > 150) {
                 onComplete();
               } else if (isBreak && info.offset.x < -150) {
                 onComplete();
               }
+              // Force snap back; if isBreak is actually changed by onComplete, useEffect overrides this seamlessly
+              controls.start({ x: isBreak ? 260 : 0 });
             }}
-            animate={{ 
-              x: isBreak ? 260 : 0 // Shift initial position
-            }}
+            animate={controls}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className={`absolute w-10 h-10 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing shadow-xl z-20 ${isBreak ? 'bg-blue-500' : 'bg-amber-500'}`}
           >
@@ -3482,6 +3487,36 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
           </div>
         </CardContent>
       </Card>
+
+      <Card className="glass-panel border-none shadow-lg overflow-hidden mt-6">
+        <CardHeader>
+          <CardTitle className="text-white font-bold text-sm text-rose-400 flex items-center gap-2">
+            Belum Request Libur
+          </CardTitle>
+          <CardDescription className="text-white/50">
+            Karyawan divisi {selectedDivision} yang belum mengajukan libur pada periode ini.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {employees
+              .filter(e => (e.division || 'Depan') === selectedDivision && e.role !== 'superadmin' && e.role !== 'admin' && !requests.some(r => r.employeeId === e.id))
+              .length > 0 ? (
+                employees
+                  .filter(e => (e.division || 'Depan') === selectedDivision && e.role !== 'superadmin' && e.role !== 'admin' && !requests.some(r => r.employeeId === e.id))
+                  .map(e => (
+                    <Badge key={e.id} variant="outline" className="border-rose-500/30 text-rose-400 bg-rose-500/10 py-1.5 px-3">
+                      {e.name}
+                    </Badge>
+                  ))
+              ) : (
+                <div className="text-white/40 italic text-sm py-4">
+                  Semua karyawan di divisi ini sudah mengajukan libur.
+                </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -3603,6 +3638,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   }, [selectedPeriod]);
 
   useEffect(() => {
+    // Listener that synchronizes request additions and Admin deletions in real-time
     const q = query(
       collection(db, 'leaveRequests'), 
       where('division', '==', employee.division || 'Depan'),
