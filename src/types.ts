@@ -53,6 +53,7 @@ export interface LeaveRequest {
   division: string;
   sectionId: string;
   period: string; 
+  dates?: string[];
   date1?: string;
   date2?: string;
   date3?: string;
@@ -70,10 +71,13 @@ export interface PeriodControl {
   startDate?: string;
   endDate?: string;
   status: 'open' | 'closed' | 'scheduled';
+  openDate?: string;
+  openTime?: string;
   deadlineDate?: string;
   deadlineTime?: string;
   maxRequestsPerDay?: number;
   maxAccumulatedLeave?: number;
+  maxDaysPerRequest?: number;
   updatedAt: any;
 }
 

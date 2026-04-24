@@ -163,8 +163,12 @@ const calculateEffectiveQuota = (
       .filter(r => r.employeeId === employeeId && r.period === p.value && (r.status === 'approved' || r.status === 'pending'))
       .reduce((acc, req) => {
         let count = 0;
-        if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
-        if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
+        if (req.dates) {
+            count += req.dates.length;
+        } else {
+            if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
+            if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
+        }
         return acc + count;
       }, 0);
     
@@ -794,7 +798,7 @@ function BreakSlider({
   isBreak, 
   disabled 
 }: { 
-  onComplete: () => void, 
+  onComplete: () => Promise<void> | void, 
   isBreak: boolean, 
   disabled: boolean 
 }) {
@@ -816,14 +820,17 @@ function BreakSlider({
             drag="x"
             dragConstraints={{ left: 0, right: 260 }} // Assume max drag 260px
             dragElastic={0.1}
-            onDragEnd={(_, info) => {
-              if (!isBreak && info.offset.x > 150) {
-                onComplete();
-              } else if (isBreak && info.offset.x < -150) {
-                onComplete();
+            onDragEnd={async (_, info) => {
+              try {
+                if (!isBreak && info.offset.x > 150) {
+                  await onComplete();
+                } else if (isBreak && info.offset.x < -150) {
+                  await onComplete();
+                }
+              } finally {
+                // Force snap back; if isBreak is actually changed by onComplete, useEffect overrides this seamlessly later
+                controls.start({ x: isBreak ? 260 : 0 });
               }
-              // Force snap back; if isBreak is actually changed by onComplete, useEffect overrides this seamlessly
-              controls.start({ x: isBreak ? 260 : 0 });
             }}
             animate={controls}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
@@ -1212,9 +1219,9 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
                     <BreakSlider 
                       isBreak={!!attendance?.breakStart && !attendance?.breakEnd}
                       disabled={!attendance || !!attendance.checkOut}
-                      onComplete={() => {
+                      onComplete={async () => {
                         const isCurrentlyOnBreak = !!attendance?.breakStart && !attendance?.breakEnd;
-                        handleAction(isCurrentlyOnBreak ? 'breakEnd' : 'breakStart');
+                        await handleAction(isCurrentlyOnBreak ? 'breakEnd' : 'breakStart');
                       }}
                     />
                   </div>
@@ -2325,7 +2332,7 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
     const data = employees.filter(e => e.role !== 'superadmin').map(e => {
         const currentQuota = calculateEffectiveQuota(e.id, selectedPeriod, periodOptions, controls, quotas, leaveRequests);
         const usedLeave = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod).reduce((sum, req) => {
-          const dates = [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
+          const dates = req.dates || [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
           return sum + dates.filter(d => d).length;
         }, 0);
         const remaining = Math.max(0, currentQuota - usedLeave);
@@ -2412,7 +2419,7 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
                 // Calculate used quota from 'leaveRequests' collection
                 const employeeRequests = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod);
                 const usedLeave = employeeRequests.reduce((sum, req) => {
-                  const dates = [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
+                  const dates = req.dates || [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
                   return sum + dates.filter(d => d).length;
                 }, 0);
                 const remaining = Math.max(0, currentQuota - usedLeave);
@@ -2485,11 +2492,13 @@ function AdminPeriods() {
     }, { merge: true });
   };
 
-  const updateDeadline = async (periodId: string, date: string, time: string) => {
+  const updateSchedule = async (periodId: string, openDate: string, openTime: string, deadlineDate: string, deadlineTime: string) => {
     await setDoc(doc(db, 'periodControls', periodId), {
       status: 'scheduled',
-      deadlineDate: date,
-      deadlineTime: time,
+      openDate,
+      openTime,
+      deadlineDate,
+      deadlineTime,
       updatedAt: serverTimestamp()
     }, { merge: true });
   };
@@ -2504,6 +2513,13 @@ function AdminPeriods() {
   const updateMaxAccumulated = async (periodId: string, limit: number) => {
     await setDoc(doc(db, 'periodControls', periodId), {
       maxAccumulatedLeave: limit,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  };
+
+  const updateMaxDaysPerRequest = async (periodId: string, limit: number) => {
+    await setDoc(doc(db, 'periodControls', periodId), {
+      maxDaysPerRequest: limit,
       updatedAt: serverTimestamp()
     }, { merge: true });
   };
@@ -2595,8 +2611,8 @@ function AdminPeriods() {
                 <div className="flex items-center gap-2">
                   <Input 
                     type="number" 
-                    value={newPeriod.maxAccumulatedLeave || 6} 
-                    onChange={(e) => setNewPeriod({...newPeriod, maxAccumulatedLeave: parseInt(e.target.value) || 6} as any)} 
+                    value={newPeriod.maxAccumulatedLeave.toString()} 
+                    onChange={(e) => setNewPeriod({...newPeriod, maxAccumulatedLeave: parseInt(e.target.value) || 0} as any)} 
                     className="field-input w-24" 
                   />
                   <span className="text-xs text-white/40 italic">Hari</span>
@@ -2686,46 +2702,64 @@ function AdminPeriods() {
                         </Button>
                       }
                     />
-                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72">
+                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-[450px] overflow-y-auto no-scrollbar">
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 mb-1">
                           <Clock className="w-4 h-4 text-amber-400" />
                           <h4 className="text-white font-bold text-sm">Batas Waktu Request</h4>
                         </div>
                         <div className="space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Buka</Label>
+                          <LocalInput 
+                            type="date" 
+                            value={ctrl.openDate || ''}
+                            onSave={(val) => updateSchedule(p.value, val, ctrl.openTime || '08:00', ctrl.deadlineDate || '', ctrl.deadlineTime || '17:00')}
+                            className="field-input h-9 text-white" 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Jam Buka</Label>
+                          <LocalInput 
+                            type="time" 
+                            value={ctrl.openTime || '08:00'}
+                            onSave={(val) => updateSchedule(p.value, ctrl.openDate || '', val, ctrl.deadlineDate || '', ctrl.deadlineTime || '17:00')}
+                            className="field-input h-9 text-white" 
+                          />
+                        </div>
+                        <div className="space-y-1 mt-2">
                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Penutupan</Label>
-                          <Input 
+                          <LocalInput 
                             type="date" 
                             value={ctrl.deadlineDate || ''}
-                            onChange={(e) => {/* Add local state if necessary or use onBlur */}}
-                            onBlur={(e) => updateDeadline(p.value, e.target.value, ctrl.deadlineTime || '17:00')}
+                            onSave={(val) => updateSchedule(p.value, ctrl.openDate || '', ctrl.openTime || '08:00', val, ctrl.deadlineTime || '17:00')}
                             className="field-input h-9 text-white" 
                           />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Jam Penutupan</Label>
-                          <Input 
+                          <LocalInput 
                             type="time" 
                             value={ctrl.deadlineTime || '17:00'}
-                            onBlur={(e) => updateDeadline(p.value, ctrl.deadlineDate || '', e.target.value)}
+                            onSave={(val) => updateSchedule(p.value, ctrl.openDate || '', ctrl.openTime || '08:00', ctrl.deadlineDate || '', val)}
                             className="field-input h-9 text-white" 
                           />
                         </div>
-                        {ctrl.status === 'scheduled' && ctrl.deadlineDate && (
+                        {ctrl.status === 'scheduled' && ctrl.deadlineDate && ctrl.openDate && (
                           <div className="bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
                             <p className="text-[10px] text-amber-400 italic">
-                              Periode ditutup otomatis pada: <br/>
-                              <span className="font-bold">{ctrl.deadlineDate} pkl {ctrl.deadlineTime}</span>
+                              Buka: <span className="font-bold">{ctrl.openDate} pkl {ctrl.openTime}</span>
+                              <br/>
+                              Tutup: <span className="font-bold">{ctrl.deadlineDate} pkl {ctrl.deadlineTime}</span>
                             </p>
                           </div>
                         )}
                         <div className="pt-2 border-t border-white/5 space-y-1">
                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Request Per Hari</Label>
                           <div className="flex items-center gap-2">
-                            <Input 
+                            <LocalInput 
                               type="number" 
                               value={ctrl.maxRequestsPerDay || 7}
-                              onBlur={(e) => updateMaxLimit(p.value, parseInt(e.target.value) || 7)}
+                              onSave={(val) => updateMaxLimit(p.value, parseInt(val) || 7)}
                               className="field-input h-9 text-white w-20" 
                             />
                             <span className="text-[10px] text-white/30 italic">Orang / Hari</span>
@@ -2735,10 +2769,10 @@ function AdminPeriods() {
                         <div className="pt-2 border-t border-white/5 space-y-1">
                           <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Tabungan Libur</Label>
                           <div className="flex items-center gap-2">
-                            <Input 
+                            <LocalInput 
                               type="number" 
                               value={ctrl.maxAccumulatedLeave || 6}
-                              onBlur={(e) => updateMaxAccumulated(p.value, parseInt(e.target.value) || 6)}
+                              onSave={(val) => updateMaxAccumulated(p.value, parseInt(val) || 6)}
                               className="field-input h-9 text-white w-20" 
                             />
                             <span className="text-[10px] text-white/30 italic">Hari / Periode</span>
@@ -2746,17 +2780,40 @@ function AdminPeriods() {
                         </div>
                         
                         <div className="pt-2 border-t border-white/5 space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Ambil Libur</Label>
+                          <div className="flex items-center gap-2">
+                            <LocalInput 
+                              type="number" 
+                              value={ctrl.maxDaysPerRequest || 6}
+                              onSave={(val) => updateMaxDaysPerRequest(p.value, parseInt(val) || 6)}
+                              className="field-input h-9 text-white w-20" 
+                            />
+                            <span className="text-[10px] text-white/30 italic">Hari / User</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-white/5 space-y-1">
                            <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Custom Nama Periode</Label>
-                           <Input 
+                           <LocalInput 
                              value={ctrl.name || ''}
                              placeholder={p.label}
-                             onChange={(e) => {}}
-                             onBlur={async (e) => {
-                               await setDoc(doc(db, 'periodControls', p.value), { name: e.target.value }, { merge: true });
+                             onSave={async (val) => {
+                               await setDoc(doc(db, 'periodControls', p.value), { name: val }, { merge: true });
                              }}
                              className="field-input h-9 text-white"
                            />
                         </div>
+                        <Button 
+                          className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold" 
+                          size="sm"
+                          onClick={() => {
+                            if (!ctrl.deadlineDate || !ctrl.openDate) return alert("Pilih tanggal buka dan penutupan terlebih dahulu!");
+                            updateSchedule(p.value, ctrl.openDate, ctrl.openTime || '08:00', ctrl.deadlineDate, ctrl.deadlineTime || '17:00');
+                            alert("Jadwal dan pengaturan batas waktu telah disimpan!");
+                          }}
+                        >
+                          OK / Simpan Pengaturan
+                        </Button>
                       </div>
                     </PopoverContent>
                   </Popover>
@@ -3378,12 +3435,7 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
         'Divisi': r.division,
         'Alasan': r.reason,
         'Periode': r.period,
-        'Libur 1': r.date1 || '-',
-        'Libur 2': r.date2 || '-',
-        'Libur 3': r.date3 || '-',
-        'Libur 4': r.date4 || '-',
-        'Libur 5': r.date5 || '-',
-        'Libur 6': r.date6 || '-',
+        'Tanggal Libur': (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).join(', ') || '-',
         'Dibuat Pada': r.createdAt ? format(toDateSafe(r.createdAt), 'dd/MM/yyyy HH:mm') : '-'
       }));
       const ws = XLSX.utils.json_to_sheet(data);
@@ -3453,12 +3505,7 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
                   <TableHead className="text-white/40 min-w-[150px]">Nama Karyawan</TableHead>
                   <TableHead className="text-white/40">Bagian</TableHead>
                   <TableHead className="text-white/40">Alasan</TableHead>
-                  <TableHead className="text-white/40">Libur 1</TableHead>
-                  <TableHead className="text-white/40">Libur 2</TableHead>
-                  <TableHead className="text-white/40">Libur 3</TableHead>
-                  <TableHead className="text-white/40">Libur 4</TableHead>
-                  <TableHead className="text-white/40">Libur 5</TableHead>
-                  <TableHead className="text-white/40">Libur 6</TableHead>
+                  <TableHead className="text-white/40">Tanggal Libur</TableHead>
                   <TableHead className="text-right text-white/40">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -3468,19 +3515,16 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
                     <TableCell className="font-bold text-white">{r.employeeName}</TableCell>
                     <TableCell className="text-white/50 text-xs">{sections.find(s => s.id === r.sectionId)?.name || '-'}</TableCell>
                     <TableCell className="text-white/60 text-xs italic">"{r.reason}"</TableCell>
-                    <TableCell className="text-white/60 text-xs">{r.date1 ? format(new Date(r.date1), 'dd/MM') : '-'}</TableCell>
-                    <TableCell className="text-white/60 text-xs">{r.date2 ? format(new Date(r.date2), 'dd/MM') : '-'}</TableCell>
-                    <TableCell className="text-white/60 text-xs">{r.date3 ? format(new Date(r.date3), 'dd/MM') : '-'}</TableCell>
-                    <TableCell className="text-white/60 text-xs">{r.date4 ? format(new Date(r.date4), 'dd/MM') : '-'}</TableCell>
-                    <TableCell className="text-white/60 text-xs">{r.date5 ? format(new Date(r.date5), 'dd/MM') : '-'}</TableCell>
-                    <TableCell className="text-white/60 text-xs">{r.date6 ? format(new Date(r.date6), 'dd/MM') : '-'}</TableCell>
+                    <TableCell className="text-emerald-400/80 font-bold text-xs">
+                       {(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).map(d => format(new Date(d), 'dd/MM')).join(', ') || '-'}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {requests.length === 0 && (
-                  <TableRow><TableCell colSpan={9} className="text-center py-10 text-white/30 italic">Belum ada request libur di bagian {selectedDivision}.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center py-10 text-white/30 italic">Belum ada request libur di bagian {selectedDivision}.</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -3543,8 +3587,8 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   const [musicPopupText, setMusicPopupText] = useState('Silakan ajukan request libur Anda.');
   const [requestKata, setRequestKata] = useState('');
 
-  const [formData, setFormData] = useState({ 
-    date1: '', date2: '', date3: '', date4: '', date5: '', date6: '',
+  const [formData, setFormData] = useState<{dates: string[], reason: string, sectionId: string}>({ 
+    dates: [],
     reason: '',
     sectionId: ''
   });
@@ -3592,18 +3636,21 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     // Pre-populate form with existing request if it exists
     if (currentRequests && currentRequests.length > 0) {
       const r = currentRequests[0];
+      const initialDates = r.dates ? [...r.dates] : Object.entries(r)
+          .filter(([k, v]) => k.startsWith('date') && v)
+          .map(([k, v]) => v as string);
+      
+      const maxDays = periodControl?.maxDaysPerRequest || 6;
+      while (initialDates.length < maxDays) initialDates.push('');
+
       setFormData({
-        date1: r.date1 || '',
-        date2: r.date2 || '',
-        date3: r.date3 || '',
-        date4: r.date4 || '',
-        date5: r.date5 || '',
-        date6: r.date6 || '',
+        dates: initialDates.slice(0, maxDays),
         reason: r.reason || '',
         sectionId: r.sectionId || ''
       });
     } else {
-      setFormData({ date1: '', date2: '', date3: '', date4: '', date5: '', date6: '', reason: '', sectionId: '' });
+      const maxDays = periodControl?.maxDaysPerRequest || 6;
+      setFormData({ dates: Array(maxDays).fill(''), reason: '', sectionId: '' });
     }
 
     setShowMusicPopup(true);
@@ -3617,17 +3664,18 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   };
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
-      const activePeriods: string[] = [];
-      snap.forEach(d => { 
-        const status = d.data().status;
-        if (status === 'open' || status === 'scheduled') activePeriods.push(d.id);
-      });
-      if (activePeriods.length > 0) setSelectedPeriod(activePeriods[0]);
-      else setSelectedPeriod("");
+    const active = periodOptions.filter(p => {
+       const status = controls[p.value]?.status;
+       return status === 'open' || status === 'scheduled';
     });
-    return unsub;
-  }, []);
+    if (active.length > 0) {
+      if (!selectedPeriod || !active.find(a => a.value === selectedPeriod)) {
+        setSelectedPeriod(active[0].value);
+      }
+    } else {
+      setSelectedPeriod("");
+    }
+  }, [periodOptions, controls, selectedPeriod]);
 
   useEffect(() => {
     if (!selectedPeriod) return;
@@ -3669,34 +3717,33 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   const periodEffectiveQuota = calculateEffectiveQuota(employee.id, selectedPeriod, periodOptions, controls, allQuotas, allRequests);
   const usedCurrent = currentRequests.reduce((acc, req) => {
     let count = 0;
-    if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
-    if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
+    if (req.dates) {
+        count += req.dates.length;
+    } else {
+        if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
+        if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
+    }
     return acc + count;
   }, 0);
   const remainingInPeriod = Math.max(0, periodEffectiveQuota - usedCurrent);
 
   const handleSubmit = async () => {
     // Validate period status
-    if (periodControl) {
-      if (periodControl.status === 'closed') {
-        const currentPeriodValue = format(new Date(), 'yyyy-MM');
-        const msg = selectedPeriod > currentPeriodValue ? "Maaf, periode request libur ini BELUM DIBUKA oleh Admin." : "Maaf, periode request libur ini SUDAH DITUTUP oleh Admin.";
-        return alert(msg);
-      }
-      if (periodControl.status === 'scheduled' && periodControl.deadlineDate) {
-        const now = new Date();
-        const deadlineStr = `${periodControl.deadlineDate} ${periodControl.deadlineTime || '17:00'}`;
-        const deadline = parse(deadlineStr, 'yyyy-MM-dd HH:mm', new Date());
-        if (isAfter(now, deadline)) {
-          return alert(`Maaf, batas waktu request libur untuk periode ini sudah berakhir (${deadlineStr}).`);
-        }
-      }
+    const pStatus = getPeriodStatus();
+    if (pStatus === 'closed') {
+      return alert("Maaf, periode request libur ini SUDAH DITUTUP oleh Admin.");
+    }
+    if (pStatus === 'not_yet_open') {
+      return alert("Maaf, periode request libur ini BELUM DIBUKA oleh Admin.");
     }
 
     if (!formData.reason) return alert("Isi alasan libur!");
     if (!formData.sectionId) return alert("Pilih bagian!");
-    const selectedDates = [formData.date1, formData.date2, formData.date3, formData.date4, formData.date5, formData.date6].filter(d => d !== '');
+    const selectedDates = formData.dates.filter((d: string) => d !== '');
     if (selectedDates.length === 0) return alert("Pilih setidaknya satu tanggal libur!");
+
+    const maxDays = periodControl?.maxDaysPerRequest || 6;
+    if (selectedDates.length > maxDays) return alert(`Hanya bisa memilih maksimal ${maxDays} hari libur!`);
 
     // Check if enough quota
     if (selectedDates.length > periodEffectiveQuota) {
@@ -3717,18 +3764,19 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     // Check limit per day per division
     const maxLimit = periodControl?.maxRequestsPerDay || 7;
     for (const d of selectedDates) {
-      const count = currentAllRequests.filter(r => 
-        r.employeeId !== employee.id && 
-        (r.date1 === d || r.date2 === d || r.date3 === d || r.date4 === d || r.date5 === d || r.date6 === d)
-      ).length;
+      const count = currentAllRequests.filter(r => {
+        if (r.employeeId === employee.id) return false;
+        if (r.dates && r.dates.includes(d)) return true;
+        if (!r.dates && (r.date1 === d || r.date2 === d || r.date3 === d || r.date4 === d || r.date5 === d || r.date6 === d)) return true;
+        return false;
+      }).length;
 
       if (count >= maxLimit) {
         return alert(`Tanggal ${d ? format(new Date(d), 'dd MMM yyyy') : '-'} sudah penuh (maks ${maxLimit} orang di divisi ${employee.division}).`);
       }
     }
 
-    // Single row per employee per period
-    await setDoc(doc(db, 'leaveRequests', `${employee.id}_${selectedPeriod}`), {
+    const payload: any = {
       ...formData,
       employeeId: employee.id,
       employeeName: employee.name,
@@ -3736,22 +3784,36 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
       period: selectedPeriod,
       status: 'approved', // Auto approved
       createdAt: serverTimestamp()
+    };
+    
+    // Fallback for backwards compatibility in existing old view scripts etc.
+    formData.dates.forEach((d, i) => {
+        payload[`date${i + 1}`] = d;
     });
+
+    // Single row per employee per period
+    await setDoc(doc(db, 'leaveRequests', `${employee.id}_${selectedPeriod}`), payload);
     setShowAdd(false);
     stopMusic();
-    setFormData({ date1: '', date2: '', date3: '', date4: '', date5: '', date6: '', reason: '', sectionId: '' });
+    const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
+    setFormData({ dates: Array(maxDaysFinal).fill(''), reason: '', sectionId: '' });
   };
 
   const usedDays = currentRequests.reduce((acc, r) => {
     let count = 0;
-    if (r.date1) count++; if (r.date2) count++; if (r.date3) count++;
-    if (r.date4) count++; if (r.date5) count++; if (r.date6) count++;
+    if (r.dates) {
+      count += r.dates.length;
+    } else {
+      if (r.date1) count++; if (r.date2) count++; if (r.date3) count++;
+      if (r.date4) count++; if (r.date5) count++; if (r.date6) count++;
+    }
     return acc + count;
   }, 0);
 
   const usageMap: Record<string, number> = {};
   currentAllRequests.forEach(r => {
-    [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6].forEach(d => {
+    let dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+    dArr.forEach(d => {
       if (d) usageMap[d] = (usageMap[d] || 0) + 1;
     });
   });
@@ -3760,21 +3822,31 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
-  const isPeriodClosedFlag = () => {
-    if (!periodControl) return false;
-    if (periodControl.status === 'closed') return true;
-    if (periodControl.status === 'scheduled' && periodControl.deadlineDate) {
+  const getPeriodStatus = () => {
+    if (!periodControl) return 'open';
+    if (periodControl.status === 'closed') return 'closed';
+    if (periodControl.status === 'scheduled') {
       const now = new Date();
-      const deadlineStr = `${periodControl.deadlineDate} ${periodControl.deadlineTime || '17:00'}`;
-      try {
-        const deadline = parse(deadlineStr, 'yyyy-MM-dd HH:mm', new Date());
-        return isAfter(now, deadline);
-      } catch (e) { return false; }
+      if (periodControl.openDate) {
+        const openStr = `${periodControl.openDate} ${periodControl.openTime || '08:00'}`;
+        try {
+          const openDate = parse(openStr, 'yyyy-MM-dd HH:mm', new Date());
+          if (isAfter(openDate, now)) return 'not_yet_open';
+        } catch (e) {}
+      }
+      if (periodControl.deadlineDate) {
+        const deadlineStr = `${periodControl.deadlineDate} ${periodControl.deadlineTime || '17:00'}`;
+        try {
+          const deadline = parse(deadlineStr, 'yyyy-MM-dd HH:mm', new Date());
+          if (isAfter(now, deadline)) return 'closed';
+        } catch (e) {}
+      }
     }
-    return false;
+    return 'open';
   };
 
-  const isClosed = isPeriodClosedFlag();
+  const periodStatusResult = getPeriodStatus();
+  const isClosed = periodStatusResult !== 'open';
   const currentPeriodValue = format(new Date(), 'yyyy-MM');
 
   return (
@@ -3827,17 +3899,17 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
           {periodControl && (
             <div className="mt-2 flex items-center gap-2">
               <Badge variant="outline" className={`border-none px-2 py-0 text-[10px] font-bold ${
-                periodControl.status === 'open' ? 'bg-emerald-500/20 text-emerald-400' :
-                periodControl.status === 'closed' ? 'bg-rose-500/20 text-rose-400' :
-                'bg-amber-500/20 text-amber-400'
+                periodStatusResult === 'open' ? 'bg-emerald-500/20 text-emerald-400' :
+                periodStatusResult === 'not_yet_open' ? 'bg-amber-500/20 text-amber-400' :
+                'bg-rose-500/20 text-rose-400'
               }`}>
-                {periodControl.status === 'open' ? 'REQUEST DIBUKA' : 
-                 periodControl.status === 'closed' ? (selectedPeriod > currentPeriodValue ? 'REQUEST BELUM DIBUKA' : 'REQUEST SUDAH DITUTUP') : 
-                 'BATAS WAKTU AKTIF'}
+                {periodStatusResult === 'open' ? 'REQUEST DIBUKA' : 
+                 periodStatusResult === 'not_yet_open' ? 'REQUEST BELUM DIBUKA' : 
+                 'REQUEST SUDAH DITUTUP'}
               </Badge>
               {periodControl.status === 'scheduled' && (
                 <span className="text-[10px] text-white/30 italic">
-                  Sampai: {periodControl.deadlineDate} {periodControl.deadlineTime}
+                  {periodStatusResult === 'not_yet_open' ? `Buka: ${periodControl.openDate} ${periodControl.openTime}` : (periodStatusResult === 'open' ? `Tutup: ${periodControl.deadlineDate} ${periodControl.deadlineTime}` : '')}
                 </span>
               )}
             </div>
@@ -3850,7 +3922,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
             <StatCard label="Sisa Kuota" value={Math.max(0, periodEffectiveQuota - usedDays)} icon={<Clock className="text-amber-400 w-4 h-4" />} size="sm" />
           </div>
           <p className="text-[9px] text-white/30 italic mr-2 text-right">
-            * Maksimal Kuota: 6 hari (termasuk sisa periode lalu yang terakumulasi otomatis).
+            * Maksimal Kuota: {periodControl?.maxAccumulatedLeave || 6} hari (termasuk sisa periode lalu yang terakumulasi otomatis).
           </p>
         </div>
       </div>
@@ -3861,7 +3933,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-white text-lg">Input Tanggal Libur Saya</CardTitle>
-                <CardDescription className="text-white/40">Isi tanggal libur yang diinginkan (Maks. 6 hari)</CardDescription>
+                <CardDescription className="text-white/40">Isi tanggal libur yang diinginkan (Maks. {periodControl?.maxDaysPerRequest || 6} hari)</CardDescription>
               </div>
               <Dialog open={showAdd} onOpenChange={(val) => {
                 setShowAdd(val);
@@ -3890,12 +3962,21 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                     <DialogDescription className="text-white/60">Tentukan tanggal libur Anda. Maksimal {periodControl?.maxRequestsPerDay || 7} orang per hari di divisi {employee.division}.</DialogDescription>
                   </DialogHeader>
                   <div className="grid grid-cols-2 gap-4 py-4">
-                    <div className="grid gap-1.5"><Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-1</Label><Input type="date" value={formData.date1} onChange={(e) => setFormData({...formData, date1: e.target.value})} className="field-input text-xs" /></div>
-                    <div className="grid gap-1.5"><Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-2</Label><Input type="date" value={formData.date2} onChange={(e) => setFormData({...formData, date2: e.target.value})} className="field-input text-xs" /></div>
-                    <div className="grid gap-1.5"><Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-3</Label><Input type="date" value={formData.date3} onChange={(e) => setFormData({...formData, date3: e.target.value})} className="field-input text-xs" /></div>
-                    <div className="grid gap-1.5"><Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-4</Label><Input type="date" value={formData.date4} onChange={(e) => setFormData({...formData, date4: e.target.value})} className="field-input text-xs" /></div>
-                    <div className="grid gap-1.5"><Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-5</Label><Input type="date" value={formData.date5} onChange={(e) => setFormData({...formData, date5: e.target.value})} className="field-input text-xs" /></div>
-                    <div className="grid gap-1.5"><Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-6</Label><Input type="date" value={formData.date6} onChange={(e) => setFormData({...formData, date6: e.target.value})} className="field-input text-xs" /></div>
+                    {formData.dates.map((d, index) => (
+                      <div className="grid gap-1.5" key={index}>
+                        <Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-{index + 1}</Label>
+                        <Input 
+                          type="date" 
+                          value={d} 
+                          onChange={(e) => {
+                            const newDates = [...formData.dates];
+                            newDates[index] = e.target.value;
+                            setFormData({...formData, dates: newDates});
+                          }} 
+                          className="field-input text-xs" 
+                        />
+                      </div>
+                    ))}
                     <div className="grid gap-1.5 col-span-2">
                       <Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Bagian (Wajib)</Label>
                       <Select value={formData.sectionId} onValueChange={(val) => setFormData({...formData, sectionId: val})}>
@@ -3933,12 +4014,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                       <TableHead className="text-white/40">Status</TableHead>
                       <TableHead className="text-white/40">Bagian</TableHead>
                       <TableHead className="text-white/40">Alasan</TableHead>
-                      <TableHead className="text-white/40 text-[10px]">Tgl 1</TableHead>
-                      <TableHead className="text-white/40 text-[10px]">Tgl 2</TableHead>
-                      <TableHead className="text-white/40 text-[10px]">Tgl 3</TableHead>
-                      <TableHead className="text-white/40 text-[10px]">Tgl 4</TableHead>
-                      <TableHead className="text-white/40 text-[10px]">Tgl 5</TableHead>
-                      <TableHead className="text-white/40 text-[10px]">Tgl 6</TableHead>
+                      <TableHead className="text-white/40 text-[10px]">Tanggal Libur</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -3951,16 +4027,13 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                         </TableCell>
                         <TableCell className="text-white/50 text-xs">{sections.find(s => s.id === r.sectionId)?.name || '-'}</TableCell>
                         <TableCell className="text-white/60 text-xs truncate max-w-[100px]" title={r.reason}>{r.reason}</TableCell>
-                        <TableCell className="text-white/60 text-[10px]">{r.date1 || '-'}</TableCell>
-                        <TableCell className="text-white/60 text-[10px]">{r.date2 || '-'}</TableCell>
-                        <TableCell className="text-white/60 text-[10px]">{r.date3 || '-'}</TableCell>
-                        <TableCell className="text-white/60 text-[10px]">{r.date4 || '-'}</TableCell>
-                        <TableCell className="text-white/60 text-[10px]">{r.date5 || '-'}</TableCell>
-                        <TableCell className="text-white/60 text-[10px]">{r.date6 || '-'}</TableCell>
+                        <TableCell className="text-emerald-400/80 font-bold text-xs">
+                          {(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).join(', ') || '-'}
+                        </TableCell>
                       </TableRow>
                     ))}
                     {currentRequests.length === 0 && (
-                      <TableRow><TableCell colSpan={7} className="text-center py-6 text-white/30 italic">Anda belum mengajukan request libur.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={4} className="text-center py-6 text-white/30 italic">Anda belum mengajukan request libur.</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -3980,24 +4053,16 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                   <TableHeader>
                     <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
                       <TableHead className="text-white/40 sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Nama</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tgl 1</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tgl 2</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tgl 3</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tgl 4</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tgl 5</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tgl 6</TableHead>
+                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tanggal Libur</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentAllRequests.filter(r => r.employeeId !== employee.id).map(r => (
                       <TableRow key={r.id} className="border-white/5 hover:bg-white/5">
                         <TableCell className="font-semibold text-white/80">{r.employeeName}</TableCell>
-                        <TableCell className="text-white/40 text-[10px]">{r.date1 ? format(new Date(r.date1), 'dd/MM') : '-'}</TableCell>
-                        <TableCell className="text-white/40 text-[10px]">{r.date2 ? format(new Date(r.date2), 'dd/MM') : '-'}</TableCell>
-                        <TableCell className="text-white/40 text-[10px]">{r.date3 ? format(new Date(r.date3), 'dd/MM') : '-'}</TableCell>
-                        <TableCell className="text-white/40 text-[10px]">{r.date4 ? format(new Date(r.date4), 'dd/MM') : '-'}</TableCell>
-                        <TableCell className="text-white/40 text-[10px]">{r.date5 ? format(new Date(r.date5), 'dd/MM') : '-'}</TableCell>
-                        <TableCell className="text-white/40 text-[10px]">{r.date6 ? format(new Date(r.date6), 'dd/MM') : '-'}</TableCell>
+                        <TableCell className="text-emerald-400/80 font-bold text-[10px]">
+                          {(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).map(d => format(new Date(d), 'dd/MM')).join(', ') || '-'}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -4568,6 +4633,25 @@ function EditTimeField({ label, current, onSave }: { label: string, current: any
 }
 
 // Helpers
+function LocalInput({ value, type = "text", placeholder, className, onSave }: { value: string | number, type?: string, placeholder?: string, className?: string, onSave: (v: string) => void }) {
+  const [val, setVal] = useState(value?.toString() || '');
+  
+  useEffect(() => {
+    setVal(value?.toString() || '');
+  }, [value]);
+
+  return (
+    <Input 
+      type={type}
+      value={val}
+      placeholder={placeholder}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => onSave(val)}
+      className={className}
+    />
+  );
+}
+
 function StatCard({ label, value, icon, size = 'default' }: { label: string, value: number, icon: React.ReactNode, size?: 'default' | 'sm' }) {
   if (size === 'sm') {
     return (

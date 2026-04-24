@@ -77,10 +77,13 @@
         "startDate": { "type": "string", "description": "YYYY-MM-DD" },
         "endDate": { "type": "string", "description": "YYYY-MM-DD" },
         "status": { "type": "string", "enum": ["open", "closed", "scheduled"] },
+        "openDate": { "type": "string", "description": "YYYY-MM-DD" },
+        "openTime": { "type": "string", "description": "HH:mm" },
         "deadlineDate": { "type": "string", "description": "YYYY-MM-DD" },
         "deadlineTime": { "type": "string", "description": "HH:mm" },
         "maxRequestsPerDay": { "type": "integer", "description": "Limit of people requesting leave on same day" },
         "maxAccumulatedLeave": { "type": "integer", "description": "Max carryover leave allowed for this period" },
+        "maxDaysPerRequest": { "type": "integer", "description": "Max days a single user can request per period" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["status", "deadlineDate", "deadlineTime", "maxRequestsPerDay"]
