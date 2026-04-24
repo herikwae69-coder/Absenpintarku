@@ -1109,20 +1109,20 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 glass-panel p-1.5 h-auto md:h-16 bg-white/5 border-white/10 mb-8 rounded-2xl gap-2">
-          <TabsTrigger value="absen" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
+        <TabsList className="flex flex-wrap w-full glass-panel p-1.5 h-auto bg-white/5 border-white/10 mb-8 rounded-2xl gap-2 justify-center">
+          <TabsTrigger value="absen" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <Clock className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Absen</span>
           </TabsTrigger>
-          <TabsTrigger value="libur" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
+          <TabsTrigger value="libur" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <CalendarIcon className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Libur</span>
           </TabsTrigger>
-          <TabsTrigger value="bonus" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
+          <TabsTrigger value="bonus" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <Zap className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Bonus</span>
           </TabsTrigger>
-          <TabsTrigger value="ristan" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
+          <TabsTrigger value="ristan" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan</span>
           </TabsTrigger>
-          <TabsTrigger value="riwayat" className="rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-0 text-white/40">
+          <TabsTrigger value="riwayat" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <History className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Riwayat</span>
           </TabsTrigger>
         </TabsList>
@@ -2492,13 +2492,20 @@ function AdminPeriods() {
     }, { merge: true });
   };
 
-  const updateSchedule = async (periodId: string, openDate: string, openTime: string, deadlineDate: string, deadlineTime: string) => {
+  const updateSchedule = async (periodId: string, openDate: string, openTime: string, deadlineDate: string, deadlineTime: string, maxRequestsPerDay?: number, maxAccumulatedLeave?: number, maxDaysPerRequest?: number, name?: string) => {
+    // Need to get the current control data to provide defaults if not provided in arguments
+    const currentCtrl = controls[periodId] || {};
+    
     await setDoc(doc(db, 'periodControls', periodId), {
       status: 'scheduled',
       openDate,
       openTime,
       deadlineDate,
       deadlineTime,
+      maxRequestsPerDay: maxRequestsPerDay ?? currentCtrl.maxRequestsPerDay ?? 7,
+      maxAccumulatedLeave: maxAccumulatedLeave ?? currentCtrl.maxAccumulatedLeave ?? 6,
+      maxDaysPerRequest: maxDaysPerRequest ?? currentCtrl.maxDaysPerRequest ?? 6,
+      name: name ?? currentCtrl.name ?? '',
       updatedAt: serverTimestamp()
     }, { merge: true });
   };
@@ -3240,49 +3247,51 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
               </DialogContent>
             </Dialog>
 
-            <Dialog open={showLibur} onOpenChange={setShowLibur}>
-              <DialogTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm h-10">
-                <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
-              </DialogTrigger>
-            <DialogContent className="bg-black/95 text-white border-white/20 sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-white text-xl">Atur Karyawan Libur</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label className="text-white/70 text-xs">Cari Karyawan (Nama / PIN)</Label>
-                    <div className="relative">
-                      <Input 
-                        placeholder="Ketik nama atau PIN..." 
-                        className="field-input h-12 rounded-xl pl-4 pr-10"
-                        onChange={(e) => {
-                          const val = e.target.value.toLowerCase();
-                          const found = employees.find(e => e.name.toLowerCase().includes(val) || (e as any).pin?.includes(val));
-                          if (found) setLiburData({...liburData, employeeId: found.id});
-                        }}
-                      />
-                      <div className="absolute right-3 top-3 text-white/50 text-xs font-mono">
-                        {employees.find(e => e.id === liburData.employeeId)?.name || '...'}
+            <div className="flex flex-wrap gap-2 items-center">
+              <Dialog open={showLibur} onOpenChange={setShowLibur}>
+                <DialogTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm h-10">
+                  <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
+                </DialogTrigger>
+                <DialogContent className="bg-black/95 text-white border-white/20 sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-white text-xl">Atur Karyawan Libur</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label className="text-white/70 text-xs">Cari Karyawan (Nama / PIN)</Label>
+                      <div className="relative">
+                        <Input 
+                          placeholder="Ketik nama atau PIN..." 
+                          className="field-input h-12 rounded-xl pl-4 pr-10"
+                          onChange={(e) => {
+                            const val = e.target.value.toLowerCase();
+                            const found = employees.find(e => e.name.toLowerCase().includes(val) || (e as any).pin?.includes(val));
+                            if (found) setLiburData({...liburData, employeeId: found.id});
+                          }}
+                        />
+                        <div className="absolute right-3 top-3 text-white/50 text-xs font-mono">
+                          {employees.find(e => e.id === liburData.employeeId)?.name || '...'}
+                        </div>
                       </div>
                     </div>
+                    <div className="grid gap-2">
+                      <Label className="text-white/70 text-xs">Tanggal Libur</Label>
+                      <Input type="date" value={liburData.date} onChange={(e) => setLiburData({...liburData, date: e.target.value})} className="field-input h-12 rounded-xl" />
+                    </div>
                   </div>
-                  <div className="grid gap-2">
-                    <Label className="text-white/70 text-xs">Tanggal Libur</Label>
-                    <Input type="date" value={liburData.date} onChange={(e) => setLiburData({...liburData, date: e.target.value})} className="field-input h-12 rounded-xl" />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button onClick={handleSetLibur} className="w-full bg-blue-600 hover:bg-blue-700 h-12 font-bold">TETAPKAN LIBUR</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  <DialogFooter>
+                    <Button onClick={handleSetLibur} className="w-full bg-blue-600 hover:bg-blue-700 h-12 font-bold">TETAPKAN LIBUR</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
-            <Popover>
-              <PopoverTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm">
-                <CalendarIcon className="w-4 h-4" /> Ganti Tanggal
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 glass-panel border-white/20"><Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} className="text-white" /></PopoverContent>
-            </Popover>
+              <Popover>
+                <PopoverTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm">
+                  <CalendarIcon className="w-4 h-4" /> Ganti Tanggal
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 glass-panel border-white/20"><Calendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} className="text-white" /></PopoverContent>
+              </Popover>
+            </div>
 
             <Dialog open={showActivity} onOpenChange={setShowActivity}>
               <DialogTrigger className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-primary/20 border border-primary/20 rounded-md text-xs font-bold text-primary hover:bg-primary/30 transition-all whitespace-nowrap">
@@ -4633,7 +4642,106 @@ function EditTimeField({ label, current, onSave }: { label: string, current: any
 }
 
 // Helpers
+function ScheduleSettings({ ctrl, pValue, onUpdate }) {
+  const [local, setLocal] = useState({
+    openDate: ctrl.openDate || '',
+    openTime: ctrl.openTime || '08:00',
+    deadlineDate: ctrl.deadlineDate || '',
+    deadlineTime: ctrl.deadlineTime || '17:00',
+    maxRequestsPerDay: ctrl.maxRequestsPerDay || 7,
+    maxAccumulatedLeave: ctrl.maxAccumulatedLeave || 6,
+    maxDaysPerRequest: ctrl.maxDaysPerRequest || 6,
+    name: ctrl.name || ''
+  });
+
+  useEffect(() => {
+     setLocal({
+        openDate: ctrl.openDate || '',
+        openTime: ctrl.openTime || '08:00',
+        deadlineDate: ctrl.deadlineDate || '',
+        deadlineTime: ctrl.deadlineTime || '17:00',
+        maxRequestsPerDay: ctrl.maxRequestsPerDay || 7,
+        maxAccumulatedLeave: ctrl.maxAccumulatedLeave || 6,
+        maxDaysPerRequest: ctrl.maxDaysPerRequest || 6,
+        name: ctrl.name || ''
+     })
+  }, [ctrl.openDate, ctrl.openTime, ctrl.deadlineDate, ctrl.deadlineTime, ctrl.maxRequestsPerDay, ctrl.maxAccumulatedLeave, ctrl.maxDaysPerRequest, ctrl.name]);
+
+  return (
+    <div className="space-y-3">
+        <div className="space-y-1">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Buka</Label>
+          <Input type="date" value={local.openDate} onChange={(e) => setLocal({...local, openDate: e.target.value})} className="field-input h-9 text-white" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Jam Buka</Label>
+          <Input type="time" value={local.openTime} onChange={(e) => setLocal({...local, openTime: e.target.value})} className="field-input h-9 text-white" />
+        </div>
+        <div className="space-y-1 mt-2">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Penutupan</Label>
+          <Input type="date" value={local.deadlineDate} onChange={(e) => setLocal({...local, deadlineDate: e.target.value})} className="field-input h-9 text-white" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Jam Penutupan</Label>
+          <Input type="time" value={local.deadlineTime} onChange={(e) => setLocal({...local, deadlineTime: e.target.value})} className="field-input h-9 text-white" />
+        </div>
+        
+        {ctrl.status === 'scheduled' && local.deadlineDate && local.openDate && (
+          <div className="bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+            <p className="text-[10px] text-amber-400 italic">
+              Buka: <span className="font-bold">{local.openDate} pkl {local.openTime}</span>
+              <br/>
+              Tutup: <span className="font-bold">{local.deadlineDate} pkl {local.deadlineTime}</span>
+            </p>
+          </div>
+        )}
+        
+        <div className="pt-2 border-t border-white/5 space-y-1">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Request Per Hari</Label>
+          <div className="flex items-center gap-2">
+            <Input type="number" value={local.maxRequestsPerDay} onChange={(e) => setLocal({...local, maxRequestsPerDay: parseInt(e.target.value) || 7})} className="field-input h-9 text-white w-20" />
+            <span className="text-[10px] text-white/30 italic">Orang / Hari</span>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-white/5 space-y-1">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Tabungan Libur</Label>
+          <div className="flex items-center gap-2">
+            <Input type="number" value={local.maxAccumulatedLeave} onChange={(e) => setLocal({...local, maxAccumulatedLeave: parseInt(e.target.value) || 6})} className="field-input h-9 text-white w-20" />
+            <span className="text-[10px] text-white/30 italic">Hari / Periode</span>
+          </div>
+        </div>
+        
+        <div className="pt-2 border-t border-white/5 space-y-1">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Ambil Libur</Label>
+          <div className="flex items-center gap-2">
+            <Input type="number" value={local.maxDaysPerRequest} onChange={(e) => setLocal({...local, maxDaysPerRequest: parseInt(e.target.value) || 6})} className="field-input h-9 text-white w-20" />
+            <span className="text-[10px] text-white/30 italic">Hari / User</span>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-white/5 space-y-1">
+          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Custom Nama Periode</Label>
+          <Input value={local.name} onChange={(e) => setLocal({...local, name: e.target.value})} className="field-input h-9 text-white" />
+        </div>
+        
+        <Button 
+          className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold" 
+          size="sm"
+          onClick={async () => {
+             if (!local.deadlineDate || !local.openDate) return alert("Pilih tanggal buka dan penutupan terlebih dahulu!");
+             await onUpdate(pValue, local.openDate, local.openTime, local.deadlineDate, local.deadlineTime, local.maxRequestsPerDay, local.maxAccumulatedLeave, local.maxDaysPerRequest, local.name);
+             alert("Jadwal dan pengaturan batas waktu telah disimpan!");
+          }}
+        >
+          Simpan Semua Pengaturan
+        </Button>
+    </div>
+  )
+}
+
 function LocalInput({ value, type = "text", placeholder, className, onSave }: { value: string | number, type?: string, placeholder?: string, className?: string, onSave: (v: string) => void }) {
+
   const [val, setVal] = useState(value?.toString() || '');
   
   useEffect(() => {
