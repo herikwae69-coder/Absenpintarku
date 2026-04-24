@@ -3555,8 +3555,8 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
   const handleRequestClick = () => {
     // Pre-populate form with existing request if it exists
-    if (requests && requests.length > 0) {
-      const r = requests[0];
+    if (currentRequests && currentRequests.length > 0) {
+      const r = currentRequests[0];
       setFormData({
         date1: r.date1 || '',
         date2: r.date2 || '',
@@ -3627,8 +3627,11 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     return unsub;
   }, []);
 
+  const currentRequests = requests.filter(r => r.period === selectedPeriod);
+  const currentAllRequests = allRequests.filter(r => r.period === selectedPeriod);
+
   const periodEffectiveQuota = calculateEffectiveQuota(employee.id, selectedPeriod, periodOptions, controls, allQuotas, allRequests);
-  const usedCurrent = requests.filter(r => r.period === selectedPeriod).reduce((acc, req) => {
+  const usedCurrent = currentRequests.reduce((acc, req) => {
     let count = 0;
     if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
     if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
@@ -3678,7 +3681,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     // Check limit per day per division
     const maxLimit = periodControl?.maxRequestsPerDay || 7;
     for (const d of selectedDates) {
-      const count = allRequests.filter(r => 
+      const count = currentAllRequests.filter(r => 
         r.employeeId !== employee.id && 
         (r.date1 === d || r.date2 === d || r.date3 === d || r.date4 === d || r.date5 === d || r.date6 === d)
       ).length;
@@ -3703,7 +3706,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     setFormData({ date1: '', date2: '', date3: '', date4: '', date5: '', date6: '', reason: '', sectionId: '' });
   };
 
-  const usedDays = requests.reduce((acc, r) => {
+  const usedDays = currentRequests.reduce((acc, r) => {
     let count = 0;
     if (r.date1) count++; if (r.date2) count++; if (r.date3) count++;
     if (r.date4) count++; if (r.date5) count++; if (r.date6) count++;
@@ -3711,7 +3714,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   }, 0);
 
   const usageMap: Record<string, number> = {};
-  allRequests.forEach(r => {
+  currentAllRequests.forEach(r => {
     [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6].forEach(d => {
       if (d) usageMap[d] = (usageMap[d] || 0) + 1;
     });
@@ -3903,7 +3906,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {requests.map(r => (
+                    {currentRequests.map(r => (
                       <TableRow key={r.id} className="border-white/5 hover:bg-white/5">
                         <TableCell>
                           <Badge variant="outline" className="border-none bg-emerald-500/20 text-emerald-400 capitalize">
@@ -3920,7 +3923,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                         <TableCell className="text-white/60 text-[10px]">{r.date6 || '-'}</TableCell>
                       </TableRow>
                     ))}
-                    {requests.length === 0 && (
+                    {currentRequests.length === 0 && (
                       <TableRow><TableCell colSpan={7} className="text-center py-6 text-white/30 italic">Anda belum mengajukan request libur.</TableCell></TableRow>
                     )}
                   </TableBody>
@@ -3950,7 +3953,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {allRequests.filter(r => r.employeeId !== employee.id).map(r => (
+                    {currentAllRequests.filter(r => r.employeeId !== employee.id).map(r => (
                       <TableRow key={r.id} className="border-white/5 hover:bg-white/5">
                         <TableCell className="font-semibold text-white/80">{r.employeeName}</TableCell>
                         <TableCell className="text-white/40 text-[10px]">{r.date1 ? format(new Date(r.date1), 'dd/MM') : '-'}</TableCell>
