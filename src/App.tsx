@@ -90,6 +90,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
 
@@ -1550,6 +1551,7 @@ function AdminDashboard({
     { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
     { value: 'quotas', label: 'Atur Kuota', icon: <BadgeCheck className="w-4 h-4" /> },
     { value: 'periods', label: 'Batas Waktu', icon: <CalendarIcon className="w-4 h-4" /> },
+    { value: 'backup', label: 'Backup Data', icon: <Download className="w-4 h-4" /> },
     { value: 'reports', label: 'Laporan', icon: <Eye className="w-4 h-4" /> },
     { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" />, superAdminOnly: true },
     { value: 'kata', label: 'Kata-kata', icon: <MessageSquare className="w-4 h-4" />, superAdminOnly: true },
@@ -1651,6 +1653,9 @@ function AdminDashboard({
               <TabsContent value="periods" className="mt-0 outline-none">
                 <AdminPeriods />
               </TabsContent>
+              <TabsContent value="backup" className="mt-0 outline-none">
+                <AdminBackup employees={employees} />
+              </TabsContent>
               <TabsContent value="kata" className="mt-0 outline-none">
                  <AdminKata />
               </TabsContent>
@@ -1722,8 +1727,10 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   });
 
   const filteredEmployees = employees.filter(e => 
-    e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (e.pin && e.pin.includes(searchTerm))
+    (e.isActive !== false) && (
+      e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (e.pin && e.pin.includes(searchTerm))
+    )
   );
 
   const resetForm = () => setFormData({ 
@@ -1798,9 +1805,11 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
 
   const handleAdd = async () => {
     if (!formData.name || !formData.pin) return alert("Lengkapi data!");
+    if (employees.some(e => e.pin === formData.pin)) return alert("No. Absen sudah terdaftar!");
     await addDoc(collection(db, 'employees'), {
       ...formData,
       shiftId: formData.shiftId || (shifts[0]?.id || ""),
+      isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -1819,7 +1828,8 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
       shiftId: shifts[0]?.id || "",
       leaveQuota: 12,
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      isActive: true
     });
     alert(`Super Admin ${adminName} Berhasil Dibuat`);
   };
@@ -1843,14 +1853,25 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
     alert("Password telah direset ke 123456.");
   };
 
-  const handleDelete = async (id: string) => {
-    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+  const handleEmployeeDelete = async (emp: any) => {
+    const action = prompt("Pilih aksi: 'hapus' atau 'nonaktif'?");
+    if (action !== 'hapus' && action !== 'nonaktif') {
+      alert("Aksi tidak valid!");
+      return;
+    }
+    const pwd = prompt("Masukkan Password Admin:");
     if (pwd !== 'admin123') {
       alert("Password salah!");
       return;
     }
-    if (confirm("Hapus karyawan ini?")) {
-      await deleteDoc(doc(db, 'employees', id));
+    if (action === 'hapus') {
+      if (confirm("Yakin hapus karyawan ini? Data akan hilang permanen.")) {
+        await deleteDoc(doc(db, 'employees', emp.id));
+      }
+    } else {
+      if (confirm("Yakin nonaktifkan karyawan ini? Data akan tersimpan.")) {
+        await updateDoc(doc(db, 'employees', emp.id), { isActive: false, pin: emp.pin + '(nonaktif)' });
+      }
     }
   };
 
@@ -2012,7 +2033,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
                     {e.role !== 'superadmin' || currentUser?.role === 'superadmin' ? (
                       <>
                         <Button variant="ghost" size="icon" onClick={() => triggerEdit(e)} className="hover:bg-white/10"><Edit className="w-4 h-4 text-primary" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEmployeeDelete(e)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
                       </>
                     ) : (
                       <span className="text-xs text-white/20 italic">Locked</span>
@@ -4130,9 +4151,6 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 function AdminManualAttendance({ employees, divisions }: { employees: Employee[], divisions: Division[] }) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [manualData, setManualData] = useState<Record<string, string>>({});
-  const [exportStart, setExportStart] = useState<Date>(new Date());
-  const [exportEnd, setExportEnd] = useState<Date>(new Date());
-  const [isExporting, setIsExporting] = useState(false);
   
   // States for each input column
   const [inputs, setInputs] = useState<Record<string, string>>({
@@ -4219,62 +4237,6 @@ function AdminManualAttendance({ employees, divisions }: { employees: Employee[]
     CT12: Object.values(manualData).filter(s => s === 'CT12').length,
     CL: Object.values(manualData).filter(s => s === 'CL').length,
     H: employees.length - Object.keys(manualData).length,
-  };
-
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      const start = format(exportStart, 'yyyy-MM-dd');
-      const end = format(exportEnd, 'yyyy-MM-dd');
-      
-      const q = query(
-        collection(db, 'manualAttendance'), 
-        where('date', '>=', start),
-        where('date', '<=', end)
-      );
-      const snap = await getDocs(q);
-      const allRecords = snap.docs.map(d => d.data());
-
-      const dates: string[] = [];
-      let tempDate = new Date(exportStart);
-      while (tempDate <= exportEnd) {
-        dates.push(format(tempDate, 'yyyy-MM-dd'));
-        tempDate.setDate(tempDate.getDate() + 1);
-      }
-
-      const exportRows = employees.map(emp => {
-        const row: any = { 'Nama': emp.name, 'No Absen': emp.pin, 'Divisi': emp.division };
-        let count = { A: 0, I: 0, S: 0, L: 0, CT: 0, CL: 0, H: 0 };
-        
-        dates.forEach(d => {
-          const record = allRecords.find(r => r.employeeId === emp.id && r.date === d);
-          const status = record ? record.status : 'H';
-          row[d] = status;
-          if (status === 'A') count.A++;
-          else if (status === 'I') count.I++;
-          else if (status === 'S') count.S++;
-          else if (status === 'L') count.L++;
-          else if (status === 'CT12') count.CT++;
-          else if (status === 'CL') count.CL++;
-          else count.H++;
-        });
-
-        row['Total A'] = count.A; row['Total I'] = count.I; row['Total S'] = count.S;
-        row['Total L'] = count.L; row['Total CT'] = count.CT; row['Total CL'] = count.CL;
-        row['Total H'] = count.H;
-        return row;
-      });
-
-      const ws = XLSX.utils.json_to_sheet(exportRows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi Manual");
-      XLSX.writeFile(wb, `Rekap_Manual_${start}_${end}.xlsx`);
-    } catch (err) {
-       console.error(err);
-       alert("Gagal ekspor.");
-    } finally {
-       setIsExporting(false);
-    }
   };
 
   const statusColors: Record<string, string> = {
@@ -4455,6 +4417,130 @@ function AdminManualAttendance({ employees, divisions }: { employees: Employee[]
   );
 }
 
+function AdminBackup({ employees }: { employees: Employee[] }) {
+  const [exportStart, setExportStart] = useState<Date>(new Date());
+  const [exportEnd, setExportEnd] = useState<Date>(new Date());
+  const [exportFormat, setExportFormat] = useState<'excel' | 'zip'>('excel');
+  const [exportType, setExportType] = useState<string>('3m');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleBackupExport = async () => {
+    setIsExporting(true);
+    try {
+      const dates: string[] = [];
+      let tempDate = new Date(exportStart);
+      while (tempDate <= exportEnd) {
+        dates.push(format(tempDate, 'yyyy-MM-dd'));
+        tempDate.setDate(tempDate.getDate() + 1);
+      }
+      
+      const q = query(collection(db, 'manualAttendance'), where('date', '>=', format(exportStart, 'yyyy-MM-dd')), where('date', '<=', format(exportEnd, 'yyyy-MM-dd')));
+      const snap = await getDocs(q);
+      const allRecords = snap.docs.map(d => d.data());
+
+      const wb = XLSX.utils.book_new();
+
+      // Group dates by Month-Year for sheets
+      const months: Record<string, string[]> = {};
+      dates.forEach(d => {
+        const monthKey = format(new Date(d), 'MMM-yyyy');
+        if (!months[monthKey]) months[monthKey] = [];
+        months[monthKey].push(d);
+      });
+
+      Object.keys(months).forEach(monthKey => {
+        const monthDates = months[monthKey];
+        const exportRows = employees.map(emp => {
+          const row: any = { 'Nama': emp.name, 'No Absen': emp.pin, 'Divisi': emp.division };
+          monthDates.forEach(d => {
+            const record = allRecords.find(r => r.employeeId === emp.id && r.date === d);
+            row[d] = record ? record.status : 'H';
+          });
+          return row;
+        });
+        const ws = XLSX.utils.json_to_sheet(exportRows);
+        XLSX.utils.book_append_sheet(wb, ws, monthKey);
+      });
+      
+      const fileName = `Backup_Data_${format(exportStart, 'dd-MM-yyyy')}_to_${format(exportEnd, 'dd-MM-yyyy')}`;
+      
+      if (exportFormat === 'zip') {
+        const zip = new JSZip();
+        zip.file(`${fileName}.xlsx`, XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
+        const content = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(content);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${fileName}.zip`;
+        link.click();
+      } else {
+        XLSX.writeFile(wb, `${fileName}.xlsx`);
+      }
+    } catch (err) {
+       console.error(err);
+       alert("Gagal backup.");
+    } finally {
+       setIsExporting(false);
+    }
+  };
+
+  return (
+    <Card className="glass-panel border-none p-6 text-white">
+      <CardHeader>
+        <CardTitle>Backup Data</CardTitle>
+        <CardDescription className="text-white/60">Pilih rentang waktu untuk backup data ke Excel/ZIP.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Select value={exportType} onValueChange={(val) => {
+          setExportType(val);
+          const now = new Date();
+          if (val === '3m') { const d = new Date(); d.setMonth(now.getMonth() - 3); setExportStart(d); setExportEnd(now); }
+          else if (val === '6m') { const d = new Date(); d.setMonth(now.getMonth() - 6); setExportStart(d); setExportEnd(now); }
+          else if (val === '12m') { const d = new Date(); d.setFullYear(now.getFullYear() - 1); setExportStart(d); setExportEnd(now); }
+        }}>
+          <SelectTrigger className="glass-panel border-white/10 text-white">
+            <SelectValue placeholder="Pilih Periode" />
+          </SelectTrigger>
+          <SelectContent className="glass-panel border-white/20 text-white">
+            <SelectItem value="3m">3 Bulan Terakhir</SelectItem>
+            <SelectItem value="6m">6 Bulan Terakhir</SelectItem>
+            <SelectItem value="12m">1 Tahun Terakhir</SelectItem>
+            <SelectItem value="custom">Custom</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {exportType === 'custom' && (
+          <div className="grid grid-cols-2 gap-2">
+              <Input type="date" onChange={(e) => setExportStart(new Date(e.target.value))} className="glass-panel border-white/10 text-white" />
+              <Input type="date" onChange={(e) => setExportEnd(new Date(e.target.value))} className="glass-panel border-white/10 text-white" />
+          </div>
+        )}
+        
+        <div className="space-y-2">
+          <Label className="text-white/60 text-xs uppercase font-bold tracking-wider">Pilih Format File:</Label>
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => setExportFormat('excel')} 
+              className={`flex-1 ${exportFormat === 'excel' ? 'bg-primary text-white' : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'}`}
+            >
+              Excel (.xlsx)
+            </Button>
+            <Button 
+              onClick={() => setExportFormat('zip')} 
+              className={`flex-1 ${exportFormat === 'zip' ? 'bg-primary text-white' : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'}`}
+            >
+              ZIP (.zip)
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter>
+        <Button onClick={handleBackupExport} disabled={isExporting} className="w-full bg-primary hover:bg-primary/80">Download {exportFormat.toUpperCase()}</Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
 // --- ADMIN: REPORTS ---
 function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Shift[] }) {
   const [dateRange, setDateRange] = useState({ 
@@ -4560,7 +4646,9 @@ function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Sh
             <CardDescription className="text-white/50">Pilih rentang tanggal untuk mengunduh laporan.</CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleExport} disabled={exportLoading} variant="outline" className="flex gap-2 glass-panel border-white/10 text-white hover:bg-white/10 shadow-lg"><Download className="w-4 h-4" /> Download Excel</Button>
+            <Button onClick={handleExport} disabled={exportLoading} className="bg-primary hover:bg-primary/80">
+              <Download className="w-4 h-4 mr-2" /> {exportLoading ? "Memproses..." : "Download Excel"}
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
