@@ -15,6 +15,7 @@ export interface Employee {
   pin: string;
   password?: string;
   role: 'admin' | 'employee' | 'superadmin';
+  isActive?: boolean;
   shiftId: string;
   division: string;
   leaveQuota: number;

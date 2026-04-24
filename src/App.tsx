@@ -160,18 +160,15 @@ const calculateEffectiveQuota = (
       break;
     }
 
-    const used = allLeaveRequests
-      .filter(r => r.employeeId === employeeId && r.period === p.value && (r.status === 'approved' || r.status === 'pending'))
-      .reduce((acc, req) => {
-        let count = 0;
-        if (req.dates) {
-            count += req.dates.length;
-        } else {
-            if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
-            if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
-        }
-        return acc + count;
-      }, 0);
+    const usedRequests = allLeaveRequests.filter(r => r.employeeId === employeeId && r.period === p.value && (r.status === 'approved' || r.status === 'pending'));
+    const uniqueDates = new Set<string>();
+    usedRequests.forEach(r => {
+      const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+      dArr.forEach(d => {
+        if (d) uniqueDates.add(d);
+      });
+    });
+    const used = uniqueDates.size;
     
     carryover = Math.max(0, effective - used);
   }
@@ -256,7 +253,7 @@ const formatDuration = (minutes: number) => {
 };
 
 // Generate a list of periods for selectors
-const getPeriodOptions = (monthsBefore: number = 3, monthsAfter: number = 12) => {
+const getPeriodOptions = (monthsBefore: number = 24, monthsAfter: number = 12) => {
   const options = [];
   const now = new Date();
   for (let i = -monthsBefore; i <= monthsAfter; i++) {
@@ -2352,10 +2349,16 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
   const handleDownloadQuota = () => {
     const data = employees.filter(e => e.role !== 'superadmin').map(e => {
         const currentQuota = calculateEffectiveQuota(e.id, selectedPeriod, periodOptions, controls, quotas, leaveRequests);
-        const usedLeave = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod).reduce((sum, req) => {
-          const dates = req.dates || [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
-          return sum + dates.filter(d => d).length;
-        }, 0);
+        
+        const usedRequests = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod);
+        const uniqueDates = new Set<string>();
+        usedRequests.forEach(r => {
+          const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+          dArr.forEach(d => {
+            if (d) uniqueDates.add(d);
+          });
+        });
+        const usedLeave = uniqueDates.size;
         const remaining = Math.max(0, currentQuota - usedLeave);
         
         return {
@@ -2437,12 +2440,16 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
               {employees.filter(e => e.role !== 'superadmin').map(e => {
                 const currentQuota = calculateEffectiveQuota(e.id, selectedPeriod, periodOptions, controls, quotas, leaveRequests);
                 
-                // Calculate used quota from 'leaveRequests' collection
+                // Calculate used quota from 'leaveRequests' collection using unique dates logic
                 const employeeRequests = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod);
-                const usedLeave = employeeRequests.reduce((sum, req) => {
-                  const dates = req.dates || [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
-                  return sum + dates.filter(d => d).length;
-                }, 0);
+                const uniqueDates = new Set<string>();
+                employeeRequests.forEach(r => {
+                  const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+                  dArr.forEach(d => {
+                    if (d) uniqueDates.add(d);
+                  });
+                });
+                const usedLeave = uniqueDates.size;
                 const remaining = Math.max(0, currentQuota - usedLeave);
                 
                 return (
@@ -3717,19 +3724,30 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
   useEffect(() => {
     // Listener that synchronizes request additions and Admin deletions in real-time
-    const q = query(
+    // Fetch ALL requests for THIS employee (cross-division) to ensure accurate carryover
+    const qEmp = query(
+      collection(db, 'leaveRequests'),
+      where('employeeId', '==', employee.id)
+    );
+    const unsubEmp = onSnapshot(qEmp, (snap) => {
+      const data = snap.docs.map(d => ({id: d.id, ...d.data()} as LeaveRequest));
+      setRequests(data);
+    });
+
+    // Listener for ALL requests in the CURRENT division (for popular dates / quota checks)
+    const qDiv = query(
       collection(db, 'leaveRequests'), 
       where('division', '==', employee.division || 'Depan'),
       orderBy('createdAt', 'desc')
     );
-    const unsub = onSnapshot(q, (snap) => {
+    const unsubDiv = onSnapshot(qDiv, (snap) => {
       const data = snap.docs.map(d => ({id: d.id, ...d.data()} as LeaveRequest));
       setAllRequests(data);
-      setRequests(data.filter(r => r.employeeId === employee.id));
     }, (err) => console.error("Employee leave error:", err));
     
     return () => {
-      unsub();
+      unsubEmp();
+      unsubDiv();
     };
   }, [employee.id, employee.division]);
 
@@ -3744,17 +3762,21 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
   const currentRequests = requests.filter(r => r.period === selectedPeriod);
   const currentAllRequests = allRequests.filter(r => r.period === selectedPeriod);
 
-  const periodEffectiveQuota = calculateEffectiveQuota(employee.id, selectedPeriod, periodOptions, controls, allQuotas, allRequests);
-  const usedCurrent = currentRequests.reduce((acc, req) => {
-    let count = 0;
-    if (req.dates) {
-        count += req.dates.length;
-    } else {
-        if (req.date1) count++; if (req.date2) count++; if (req.date3) count++;
-        if (req.date4) count++; if (req.date5) count++; if (req.date6) count++;
+  const periodEffectiveQuota = calculateEffectiveQuota(employee.id, selectedPeriod, periodOptions, controls, allQuotas, requests);
+  
+  // Use unique dates to count used days across potentially duplicate records
+  const uniqueUsedDates = new Set<string>();
+  currentRequests.forEach(r => {
+    if (r.status === 'approved' || r.status === 'pending') {
+      const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+      dArr.forEach(d => {
+        if (d) uniqueUsedDates.add(d);
+      });
     }
-    return acc + count;
-  }, 0);
+  });
+  const usedDays = uniqueUsedDates.size;
+
+  const usedCurrent = usedDays; // Keep compatibility with existing variable usage if any
   const remainingInPeriod = Math.max(0, periodEffectiveQuota - usedCurrent);
 
   const handleSubmit = async () => {
@@ -3829,22 +3851,20 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     setFormData({ dates: Array(maxDaysFinal).fill(''), reason: '', sectionId: '' });
   };
 
-  const usedDays = currentRequests.reduce((acc, r) => {
-    let count = 0;
-    if (r.dates) {
-      count += r.dates.length;
-    } else {
-      if (r.date1) count++; if (r.date2) count++; if (r.date3) count++;
-      if (r.date4) count++; if (r.date5) count++; if (r.date6) count++;
-    }
-    return acc + count;
-  }, 0);
-
   const usageMap: Record<string, number> = {};
+  // For popular dates, we should only count each user once per date in a period
+  // to avoid skewing numbers if there are duplicate records for the same employee
+  const userDateSeen = new Set<string>();
   currentAllRequests.forEach(r => {
-    let dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+    const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
     dArr.forEach(d => {
-      if (d) usageMap[d] = (usageMap[d] || 0) + 1;
+      if (d) {
+        const key = `${r.employeeId}_${d}`;
+        if (!userDateSeen.has(key)) {
+          usageMap[d] = (usageMap[d] || 0) + 1;
+          userDateSeen.add(key);
+        }
+      }
     });
   });
 
@@ -4254,17 +4274,39 @@ function AdminManualAttendance({ employees, divisions }: { employees: Employee[]
 
   const handleExport = async () => {
     setIsExporting(true);
-    // Simple export logic for manual attendance
-    const exportRows = employees.map(emp => ({
-      Nama: emp.name,
-      PIN: emp.pin,
-      Status: manualData[emp.id] || 'H'
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Rekap Manual");
-    XLSX.writeFile(wb, `Rekap_Manual_${dateStr}.xlsx`);
-    setIsExporting(false);
+    try {
+      const startStr = format(reportStart, 'yyyy-MM-dd');
+      const endStr = format(reportEnd, 'yyyy-MM-dd');
+      
+      const q = query(
+        collection(db, 'manualAttendance'),
+        where('date', '>=', startStr),
+        where('date', '<=', endStr)
+      );
+      const snap = await getDocs(q);
+      const records = snap.docs.map(d => d.data());
+      
+      const wb = XLSX.utils.book_new();
+      
+      const exportRows = employees.map(emp => {
+        const row: any = { 'Nama': emp.name, 'PIN': emp.pin };
+        // We need all dates in the range
+        for (let d = new Date(reportStart); d <= reportEnd; d.setDate(d.getDate() + 1)) {
+          const dateStr = format(d, 'yyyy-MM-dd');
+          const record = records.find(r => r.employeeId === emp.id && r.date === dateStr);
+          row[dateStr] = record ? record.status : 'H';
+        }
+        return row;
+      });
+      
+      const ws = XLSX.utils.json_to_sheet(exportRows);
+      XLSX.utils.book_append_sheet(wb, ws, "Rekap Manual");
+      XLSX.writeFile(wb, `Rekap_Manual_${startStr}_to_${endStr}.xlsx`);
+    } catch (error) {
+      console.error("Export error:", error);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
