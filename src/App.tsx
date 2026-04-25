@@ -2327,18 +2327,18 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     return unsub;
   }, [selectedPeriod]);
 
-  // Find initials for section. Max 3 letters.
+  // Find initials for section. Max 4 letters.
   const getSectionInitials = (sectionId: string) => {
     const section = sections.find(s => s.id === sectionId);
     if (!section) return "";
     const name = section.name;
     const parts = name.split(' ');
     if (parts.length > 1) {
-      // If multiple words, take first letter of each, up to 3
-      return "(" + parts.map(p => p[0]).join('').substring(0, 3).toUpperCase() + ")";
+      // If multiple words, take first letter of each, up to 4
+      return "(" + parts.map(p => p[0]).join('').substring(0, 4).toUpperCase() + ")";
     }
-    // If one word, take first 3 letters
-    return "(" + name.substring(0, 3).toUpperCase() + ")";
+    // If one word, take first 4 letters
+    return "(" + name.substring(0, 4).toUpperCase() + ")";
   };
 
   const getNickname = (employeeId: string, fullName: string) => {
@@ -3242,12 +3242,13 @@ function AdminKata() {
             placeholder="Contoh: Terima kasih! Request Anda akan segera diproses..."
           />
           <div className="grid gap-2">
-            <Label className="text-white/70 text-xs">Durasi Popup Muncul (Menit)</Label>
+            <Label className="text-white/70 text-xs">Durasi Popup Muncul (Detik)</Label>
             <Input 
               type="number" 
               value={postSubmitDuration} 
               onChange={(e) => setPostSubmitDuration(parseInt(e.target.value) || 0)}
               className="field-input"
+              placeholder="Contoh: 7"
             />
           </div>
           <Button onClick={handleSave} className="w-full bg-primary mt-4">Simpan Semua Pengaturan</Button>
@@ -3983,6 +3984,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     sectionId: ''
   });
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const isPostPopupRef = React.useRef(false);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'systemConfig', 'requestKata'), (doc) => {
@@ -4198,29 +4200,40 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
     // Single row per employee per period
     await setDoc(doc(db, 'leaveRequests', `${employee.id}_${selectedPeriod}`), payload);
-    setShowAdd(false);
-    stopMusic();
     
-    // Reset form
-    const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
-    setFormData({ dates: Array(maxDaysFinal).fill(''), reason: '', sectionId: '' });
-
-    // Show post-submit popup
+    // Check for post-submit popup config
     const configSnap = await getDoc(doc(db, 'systemConfig', 'requestKata'));
     if (configSnap.exists()) {
       const configData = configSnap.data();
       if (configData.postText) {
         setMusicPopupText(configData.postText);
+        isPostPopupRef.current = true;
         setShowMusicPopup(true);
-        playMusic();
+        // Do NOT stop music here, it should continue
+        setShowAdd(false);
         
-        // Use duration from config or default to 7 minutes
-        const durationMs = (configData.duration || 7) * 60 * 1000;
+        // Reset form
+        const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
+        setFormData({ dates: Array(maxDaysFinal).fill(''), reason: '', sectionId: '' });
+
+        // Use duration from config or default to 7 seconds
+        const durationMs = (configData.duration || 7) * 1000;
         setTimeout(() => {
           setShowMusicPopup(false);
+          isPostPopupRef.current = false;
           stopMusic();
         }, durationMs);
+      } else {
+        setShowAdd(false);
+        stopMusic();
+        const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
+        setFormData({ dates: Array(maxDaysFinal).fill(''), reason: '', sectionId: '' });
       }
+    } else {
+      setShowAdd(false);
+      stopMusic();
+      const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
+      setFormData({ dates: Array(maxDaysFinal).fill(''), reason: '', sectionId: '' });
     }
   };
 
@@ -4360,7 +4373,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
               </div>
               <Dialog open={showAdd} onOpenChange={(val) => {
                 setShowAdd(val);
-                if (!val) stopMusic();
+                if (!val && !isPostPopupRef.current && !showMusicPopup) stopMusic();
               }}>
                  {/* No DialogTrigger here, we open it via handleRequestClick after 4s */}
                  {(() => {
