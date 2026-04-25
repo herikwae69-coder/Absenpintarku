@@ -3186,12 +3186,17 @@ function AdminPeriods() {
 
 function AdminKata() {
   const [kata, setKata] = useState('');
+  const [postSubmitKata, setPostSubmitKata] = useState('');
+  const [postSubmitDuration, setPostSubmitDuration] = useState(7);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'systemConfig', 'requestKata'), (doc) => {
       if (doc.exists()) {
-        setKata(doc.data().text || '');
+        const data = doc.data();
+        setKata(data.text || '');
+        setPostSubmitKata(data.postText || '');
+        setPostSubmitDuration(data.duration || 7);
       }
       setLoading(false);
     });
@@ -3199,26 +3204,56 @@ function AdminKata() {
   }, []);
 
   const handleSave = async () => {
-    await setDoc(doc(db, 'systemConfig', 'requestKata'), { text: kata });
-    alert('Kata-kata berhasil disimpan!');
+    await setDoc(doc(db, 'systemConfig', 'requestKata'), { 
+      text: kata,
+      postText: postSubmitKata,
+      duration: postSubmitDuration
+    });
+    alert('Kata-kata dan durasi berhasil disimpan!');
   };
 
   return (
-    <Card className="glass-panel border-none p-6 text-white">
-      <CardHeader>
-        <CardTitle>Pengaturan Kata-kata Request</CardTitle>
-        <CardDescription className="text-white/60">Teks yang muncul 4 detik sebelum form request:</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <textarea 
-          value={kata} 
-          onChange={(e) => setKata(e.target.value)}
-          className="w-full h-32 field-input p-3 rounded-xl bg-white/5 border border-white/10"
-          placeholder="Contoh: Halo! Silakan ajukan request Anda..."
-        />
-        <Button onClick={handleSave} className="w-full bg-primary">Simpan Kata-kata</Button>
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <Card className="glass-panel border-none p-6 text-white">
+        <CardHeader>
+          <CardTitle>Pengaturan Kata-kata Request (Sebelum Form)</CardTitle>
+          <CardDescription className="text-white/60">Teks yang muncul beberapa detik sebelum form request terbuka:</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <textarea 
+            value={kata} 
+            onChange={(e) => setKata(e.target.value)}
+            className="w-full h-32 field-input p-3 rounded-xl bg-white/5 border border-white/10"
+            placeholder="Contoh: Halo! Silakan ajukan request Anda..."
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="glass-panel border-none p-6 text-white">
+        <CardHeader>
+          <CardTitle>Pengaturan Kata-kata Post-Submit (Setelah Submit)</CardTitle>
+          <CardDescription className="text-white/60">Teks yang muncul setelah karyawan berhasil mengirim request:</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <textarea 
+            value={postSubmitKata} 
+            onChange={(e) => setPostSubmitKata(e.target.value)}
+            className="w-full h-32 field-input p-3 rounded-xl bg-white/5 border border-white/10"
+            placeholder="Contoh: Terima kasih! Request Anda akan segera diproses..."
+          />
+          <div className="grid gap-2">
+            <Label className="text-white/70 text-xs">Durasi Popup Muncul (Menit)</Label>
+            <Input 
+              type="number" 
+              value={postSubmitDuration} 
+              onChange={(e) => setPostSubmitDuration(parseInt(e.target.value) || 0)}
+              className="field-input"
+            />
+          </div>
+          <Button onClick={handleSave} className="w-full bg-primary mt-4">Simpan Semua Pengaturan</Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -4165,8 +4200,28 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     await setDoc(doc(db, 'leaveRequests', `${employee.id}_${selectedPeriod}`), payload);
     setShowAdd(false);
     stopMusic();
+    
+    // Reset form
     const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
     setFormData({ dates: Array(maxDaysFinal).fill(''), reason: '', sectionId: '' });
+
+    // Show post-submit popup
+    const configSnap = await getDoc(doc(db, 'systemConfig', 'requestKata'));
+    if (configSnap.exists()) {
+      const configData = configSnap.data();
+      if (configData.postText) {
+        setMusicPopupText(configData.postText);
+        setShowMusicPopup(true);
+        playMusic();
+        
+        // Use duration from config or default to 7 minutes
+        const durationMs = (configData.duration || 7) * 60 * 1000;
+        setTimeout(() => {
+          setShowMusicPopup(false);
+          stopMusic();
+        }, durationMs);
+      }
+    }
   };
 
   const usageMap: Record<string, number> = {};
