@@ -29,7 +29,8 @@ import {
   limit,
   Timestamp
 } from 'firebase/firestore';
-import { format, startOfDay, endOfDay, isAfter, isBefore, parse } from 'date-fns';
+import { format, startOfDay, endOfDay, isAfter, isBefore, parse, eachDayOfInterval, startOfWeek, endOfWeek, getDay, addDays, isSameDay } from 'date-fns';
+import { id } from 'date-fns/locale';
 import { 
   Music,
   User, 
@@ -1548,6 +1549,7 @@ function AdminDashboard({
     { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
     { value: 'quotas', label: 'Atur Kuota', icon: <BadgeCheck className="w-4 h-4" /> },
     { value: 'periods', label: 'Batas Waktu', icon: <CalendarIcon className="w-4 h-4" /> },
+    { value: 'jadwal', label: 'Jadwal Libur', icon: <CalendarIcon className="w-4 h-4 text-primary" /> },
     { value: 'backup', label: 'Backup Data', icon: <Download className="w-4 h-4" /> },
     { value: 'reports', label: 'Laporan', icon: <Eye className="w-4 h-4" /> },
     { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" />, superAdminOnly: true },
@@ -1649,6 +1651,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="periods" className="mt-0 outline-none">
                 <AdminPeriods />
+              </TabsContent>
+              <TabsContent value="jadwal" className="mt-0 outline-none">
+                <AdminJadwalLibur employees={employees} sections={sections} divisions={divisions} />
               </TabsContent>
               <TabsContent value="backup" className="mt-0 outline-none">
                 <AdminBackup employees={employees} />
@@ -2262,7 +2267,178 @@ function AdminSections({ sections, divisions }: { sections: Section[], divisions
   );
 }
 
-// --- ADMIN: QUOTA MANAGEMENT ---
+// --- ADMIN: JADWAL LIBUR CHART ---
+function AdminJadwalLibur({ employees, sections, divisions }: { employees: Employee[], sections: Section[], divisions: Division[] }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  const periodOptions = getCombinedPeriods(controls);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
+  const [selectedDivision, setSelectedDivision] = useState<string>(divisions?.[0]?.name || "Marketing");
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+      const data: Record<string, any> = {};
+      snap.docs.forEach(d => { data[d.id] = d.data(); });
+      setControls(data);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPeriod && periodOptions.length > 0) {
+      const nowStr = format(new Date(), 'yyyy-MM-dd');
+      const current = periodOptions.find(p => nowStr >= format(p.start, 'yyyy-MM-dd') && nowStr <= format(p.end, 'yyyy-MM-dd'));
+      setSelectedPeriod(current ? current.value : periodOptions[0].value);
+    }
+  }, [periodOptions, selectedPeriod]);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'leaveRequests'), 
+      where('status', 'in', ['approved', 'pending']),
+      where('period', '==', selectedPeriod)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setLeaveRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveRequest)));
+    });
+    return unsub;
+  }, [selectedPeriod]);
+
+  const activePeriod = periodOptions.find(p => p.value === selectedPeriod);
+  if (!activePeriod) return <div>Memuat periode...</div>;
+
+  const startDate = startOfDay(activePeriod.start);
+  const endDate = endOfDay(activePeriod.end);
+  
+  // Create range of dates
+  const days = eachDayOfInterval({ start: startDate, end: endDate });
+  
+  // Find initials for section. If name is "Bagian Depan", initials = "BD" or just "Depan" -> "D"
+  // Let's use a mapping or just first 2-3 letters of section name.
+  // In the image "TM" for "TAMI", "KM" for "KUMA", "BR" for "BARA"
+  const getSectionInitials = (sectionId: string) => {
+    const section = sections.find(s => s.id === sectionId);
+    if (!section) return "";
+    const name = section.name;
+    const parts = name.split(' ');
+    if (parts.length > 1) {
+      return "(" + parts.map(p => p[0]).join('').toUpperCase() + ")";
+    }
+    return "(" + name.substring(0, 2).toUpperCase() + ")";
+  };
+
+  // Group requests by date
+  const dateMap: Record<string, LeaveRequest[]> = {};
+  leaveRequests.forEach(req => {
+    if (req.division !== selectedDivision) return;
+    const rDates = req.dates || [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
+    rDates.forEach(d => {
+      if (d) {
+        if (!dateMap[d]) dateMap[d] = [];
+        // Avoid duplicate employees on same date
+        if (!dateMap[d].some(r => r.employeeId === req.employeeId)) {
+          dateMap[d].push(req);
+        }
+      }
+    });
+  });
+
+  const weekDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
+  
+  // We need to pad the beginning of the calendar to align with SENIN (getDay 1 is Monday in date-fns if using locale)
+  // getDay 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  const firstDayOfWeek = getDay(days[0]); // 0 (Sun) to 6 (Sat)
+  // Align to SENIN as first column
+  const paddingBefore = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+  const calendarCells = [];
+  for (let i = 0; i < paddingBefore; i++) calendarCells.push(null);
+  days.forEach(d => calendarCells.push(d));
+
+  return (
+    <Card className="glass-panel border-none shadow-lg text-white">
+      <CardHeader className="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div>
+          <CardTitle className="text-primary uppercase tracking-[0.2em] font-black text-xl flex items-center gap-3">
+            <div className="w-2 h-8 bg-primary rounded-full" />
+            JADWAL LIBUR SEMENTARA {selectedDivision} {activePeriod.label}
+          </CardTitle>
+          <CardDescription className="text-white/50">Bagan informasi libur per divisi berdasarkan request karyawan.</CardDescription>
+        </div>
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+            <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white font-bold h-10">
+              <SelectValue placeholder="Pilih Divisi" />
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white">
+              {divisions.map(d => (
+                <SelectItem key={d.id} value={d.name} className="hover:bg-white/10">{d.name}</SelectItem>
+              ))}
+              {divisions.length === 0 && <SelectItem value="Marketing" className="hover:bg-white/10">Marketing (Default)</SelectItem>}
+            </SelectContent>
+          </Select>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-full md:w-[250px] glass-panel border-white/10 text-white font-bold h-10">
+              <SelectValue placeholder="Pilih Periode" />
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white">
+              {periodOptions.map(p => (
+                <SelectItem key={p.value} value={p.value} className="hover:bg-white/10">{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="border border-white/10 rounded-xl overflow-hidden bg-black/20">
+          <div className="grid grid-cols-7 bg-blue-600/20 border-b border-white/10">
+            {weekDays.map(wd => (
+              <div key={wd} className="p-3 text-center text-[10px] md:text-sm font-bold text-blue-400 border-r border-white/10 last:border-r-0">
+                {wd}
+              </div>
+            ))}
+          </div>
+          
+          <div className="grid grid-cols-7 border-b border-white/10 last:border-b-0">
+            {calendarCells.map((date, idx) => {
+              if (!date) return <div key={`pad-${idx}`} className="min-h-[120px] bg-white/5 border-r border-b border-white/10 last:border-r-0" />;
+              
+              const dateStr = format(date, 'yyyy-MM-dd');
+              const isSunday = getDay(date) === 0;
+              const requests = dateMap[dateStr] || [];
+              
+              return (
+                <div key={dateStr} className={`min-h-[140px] border-r border-b border-white/10 last:border-r-0 flex flex-col ${isSunday ? 'bg-rose-500/5' : ''}`}>
+                  <div className={`p-2 text-center text-[10px] font-bold border-b border-white/5 ${isSunday ? 'bg-rose-500/20 text-rose-400' : 'bg-blue-400/20 text-blue-200'}`}>
+                    {format(date, 'dd/MM/yyyy')}
+                  </div>
+                  <div className="flex-1 p-1 space-y-1 overflow-y-auto no-scrollbar">
+                    {requests.map(r => (
+                      <div key={r.id} className={`text-[9px] md:text-[10px] p-1 rounded font-medium truncate ${isSunday ? 'bg-rose-500/10 text-rose-200' : 'bg-white/5 text-white/80'}`}>
+                        {r.employeeName} {getSectionInitials(r.sectionId)}
+                      </div>
+                    ))}
+                    {requests.length === 0 && <div className="text-[9px] text-white/10 text-center mt-4">---</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        
+        <div className="mt-6 flex flex-wrap gap-4 text-[10px] text-white/40 italic">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-blue-400/20" /> Hari Biasa
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-rose-500/20" /> Hari Minggu
+          </div>
+          <p>* Jadwal ini menampilkan semua request yang statusnya Approved & Pending.</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AdminQuota({ employees }: { employees: Employee[] }) {
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = getCombinedPeriods(controls);
