@@ -12,6 +12,7 @@ export interface Section {
 export interface Employee {
   id: string;
   name: string;
+  nickname?: string;
   pin: string;
   password?: string;
   role: 'admin' | 'employee' | 'superadmin';

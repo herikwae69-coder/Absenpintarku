@@ -31,6 +31,7 @@ import {
 } from 'firebase/firestore';
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse, eachDayOfInterval, startOfWeek, endOfWeek, getDay, addDays, isSameDay } from 'date-fns';
 import { id } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
 import { 
   Music,
   User, 
@@ -90,7 +91,6 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
-import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
@@ -1720,6 +1720,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({ 
     name: '', 
+    nickname: '',
     pin: '', 
     shiftId: '', 
     role: 'employee' as const, 
@@ -1731,12 +1732,14 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   const filteredEmployees = employees.filter(e => 
     (e.isActive !== false) && (
       e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (e.nickname && e.nickname.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (e.pin && e.pin.includes(searchTerm))
     )
   );
 
   const resetForm = () => setFormData({ 
     name: '', 
+    nickname: '',
     pin: '', 
     shiftId: '', 
     role: 'employee', 
@@ -1748,7 +1751,8 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   const handleExportTemplate = () => {
     const data = [
       {
-        "Nama": "Budi Santoso",
+        "Nama Lengkap": "Budi Santoso",
+        "Nama Panggilan": "Budi",
         "No Absen": "1001",
         "Divisi": "Depan",
         "Nama Shift": shifts[0]?.name || "Shift 1",
@@ -1780,10 +1784,11 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
 
         for (const row of data) {
           const shift = shifts.find(s => s.name === row["Nama Shift"]) || shifts[0];
-          if (!row["Nama"] || !row["No Absen"]) continue;
+          if (!row["Nama Lengkap"] || !row["No Absen"]) continue;
 
           await addDoc(collection(db, 'employees'), {
-            name: row["Nama"].toString(),
+            name: row["Nama Lengkap"].toString(),
+            nickname: (row["Nama Panggilan"] || "").toString(),
             pin: row["No Absen"].toString(),
             shiftId: shift?.id || "",
             division: row["Divisi"] || 'Depan',
@@ -1881,6 +1886,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
     setIsEditing(e);
     setFormData({ 
       name: e.name, 
+      nickname: e.nickname || '',
       pin: e.pin, 
       shiftId: e.shiftId, 
       role: e.role, 
@@ -1935,9 +1941,13 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
               <DialogDescription className="text-white/60">Masukkan informasi detail karyawan di bawah ini.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 py-4">
-              <div className="grid gap-2 col-span-2 text-white">
+              <div className="grid gap-2 text-white">
                 <Label className="text-white/70 text-xs">Nama Lengkap</Label>
-                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Contoh: Budi Santoso" className="field-input" />
+                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Budi Santoso" className="field-input" />
+              </div>
+              <div className="grid gap-2 text-white">
+                <Label className="text-white/70 text-xs">Nama Panggilan</Label>
+                <Input value={formData.nickname} onChange={(e) => setFormData({...formData, nickname: e.target.value})} placeholder="Budi" className="field-input" />
               </div>
               <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">No. Absen</Label>
@@ -2026,7 +2036,10 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
             <TableBody>
               {filteredEmployees.map(e => (
                 <TableRow key={e.id} className="border-white/5 hover:bg-white/5">
-                  <TableCell className="font-semibold text-white whitespace-nowrap">{e.name}</TableCell>
+                  <TableCell className="font-semibold text-white whitespace-nowrap">
+                    {e.name}
+                    {e.nickname && <div className="text-[10px] text-white/40 font-normal leading-tight">({e.nickname})</div>}
+                  </TableCell>
                   <TableCell className="text-white/60 whitespace-nowrap">{e.division || '-'}</TableCell>
                   <TableCell className="text-white/50 font-mono whitespace-nowrap">{e.pin}</TableCell>
                   <TableCell className="text-white/70 whitespace-nowrap">{shifts.find(s => s.id === e.shiftId)?.name || "N/A"}</TableCell>
@@ -2270,10 +2283,11 @@ function AdminSections({ sections, divisions }: { sections: Section[], divisions
 // --- ADMIN: JADWAL LIBUR CHART ---
 function AdminJadwalLibur({ employees, sections, divisions }: { employees: Employee[], sections: Section[], divisions: Division[] }) {
   const [controls, setControls] = useState<Record<string, any>>({});
-  const periodOptions = getCombinedPeriods(controls);
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [selectedDivision, setSelectedDivision] = useState<string>(divisions?.[0]?.name || "Marketing");
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
@@ -2293,6 +2307,11 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
   }, [periodOptions, selectedPeriod]);
 
   useEffect(() => {
+    if (!selectedPeriod) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
     const q = query(
       collection(db, 'leaveRequests'), 
       where('status', 'in', ['approved', 'pending']),
@@ -2300,31 +2319,95 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     );
     const unsub = onSnapshot(q, (snap) => {
       setLeaveRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as LeaveRequest)));
+      setLoading(false);
+    }, (err) => {
+      console.error("Error fetching jadwal libur:", err);
+      setLoading(false);
     });
     return unsub;
   }, [selectedPeriod]);
 
-  const activePeriod = periodOptions.find(p => p.value === selectedPeriod);
-  if (!activePeriod) return <div>Memuat periode...</div>;
-
-  const startDate = startOfDay(activePeriod.start);
-  const endDate = endOfDay(activePeriod.end);
-  
-  // Create range of dates
-  const days = eachDayOfInterval({ start: startDate, end: endDate });
-  
-  // Find initials for section. If name is "Bagian Depan", initials = "BD" or just "Depan" -> "D"
-  // Let's use a mapping or just first 2-3 letters of section name.
-  // In the image "TM" for "TAMI", "KM" for "KUMA", "BR" for "BARA"
+  // Find initials for section. Max 3 letters.
   const getSectionInitials = (sectionId: string) => {
     const section = sections.find(s => s.id === sectionId);
     if (!section) return "";
     const name = section.name;
     const parts = name.split(' ');
     if (parts.length > 1) {
-      return "(" + parts.map(p => p[0]).join('').toUpperCase() + ")";
+      // If multiple words, take first letter of each, up to 3
+      return "(" + parts.map(p => p[0]).join('').substring(0, 3).toUpperCase() + ")";
     }
-    return "(" + name.substring(0, 2).toUpperCase() + ")";
+    // If one word, take first 3 letters
+    return "(" + name.substring(0, 3).toUpperCase() + ")";
+  };
+
+  const getNickname = (employeeId: string, fullName: string) => {
+    const emp = employees.find(e => e.id === employeeId);
+    if (emp && emp.nickname) return emp.nickname;
+    // Fallback to first name if nickname empty
+    return fullName.split(' ')[0];
+  };
+
+  const handleExportExcel = () => {
+    if (!activePeriod) return;
+    
+    const startDate = startOfDay(activePeriod.start);
+    const endDate = endOfDay(activePeriod.end);
+    const days = eachDayOfInterval({ start: startDate, end: endDate });
+    const weekDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
+    
+    const firstDayOfWeek = getDay(days[0]); 
+    const paddingBefore = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+    
+    const calendarCells = [];
+    for (let i = 0; i < paddingBefore; i++) calendarCells.push(null);
+    days.forEach(d => calendarCells.push(d));
+
+    // To create a "Grid" in Excel, we can arrange rows in groups of 7 columns
+    const rows: any[] = [];
+    
+    // Header Row (SENIN to MINGGU)
+    rows.push(weekDays);
+
+    // Data rows
+    for (let i = 0; i < calendarCells.length; i += 7) {
+      const weekDates = calendarCells.slice(i, i + 7);
+      
+      // Row for Dates
+      const dateRow = weekDates.map(date => date ? format(date, 'dd/MM/yyyy') : "");
+      rows.push(dateRow);
+
+      // Row for Employees (Multiple rows if multiple employees on same day)
+      // We find the max employees in any day of this week
+      const weekRequests = weekDates.map(date => {
+        if (!date) return [];
+        const dateStr = format(date, 'yyyy-MM-dd');
+        return dateMap[dateStr] || [];
+      });
+
+      const maxInWeek = Math.max(...weekRequests.map(reqs => reqs.length), 1);
+      
+      for (let r = 0; r < maxInWeek; r++) {
+        const empRow = weekRequests.map(reqs => {
+          const req = reqs[r];
+          if (!req) return "";
+          return `${getNickname(req.employeeId, req.employeeName)} ${getSectionInitials(req.sectionId)}`;
+        });
+        rows.push(empRow);
+      }
+      
+      // Empty row as separator
+      rows.push(new Array(7).fill(""));
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Jadwal Libur");
+    
+    // Set column widths
+    worksheet['!cols'] = new Array(7).fill({ wch: 20 });
+
+    XLSX.writeFile(workbook, `Jadwal_Libur_${selectedDivision}_${activePeriod.label}.xlsx`);
   };
 
   // Group requests by date
@@ -2335,7 +2418,6 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     rDates.forEach(d => {
       if (d) {
         if (!dateMap[d]) dateMap[d] = [];
-        // Avoid duplicate employees on same date
         if (!dateMap[d].some(r => r.employeeId === req.employeeId)) {
           dateMap[d].push(req);
         }
@@ -2343,99 +2425,159 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     });
   });
 
-  const weekDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
-  
-  // We need to pad the beginning of the calendar to align with SENIN (getDay 1 is Monday in date-fns if using locale)
-  // getDay 0 = Sunday, 1 = Monday, ... 6 = Saturday
-  const firstDayOfWeek = getDay(days[0]); // 0 (Sun) to 6 (Sat)
-  // Align to SENIN as first column
-  const paddingBefore = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
-  const calendarCells = [];
-  for (let i = 0; i < paddingBefore; i++) calendarCells.push(null);
-  days.forEach(d => calendarCells.push(d));
+  const activePeriod = periodOptions.find(p => p.value === selectedPeriod);
 
   return (
-    <Card className="glass-panel border-none shadow-lg text-white">
-      <CardHeader className="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div>
-          <CardTitle className="text-primary uppercase tracking-[0.2em] font-black text-xl flex items-center gap-3">
-            <div className="w-2 h-8 bg-primary rounded-full" />
-            JADWAL LIBUR SEMENTARA {selectedDivision} {activePeriod.label}
-          </CardTitle>
-          <CardDescription className="text-white/50">Bagan informasi libur per divisi berdasarkan request karyawan.</CardDescription>
-        </div>
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <Select value={selectedDivision} onValueChange={setSelectedDivision}>
-            <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white font-bold h-10">
-              <SelectValue placeholder="Pilih Divisi" />
-            </SelectTrigger>
-            <SelectContent className="glass-panel border-white/20 text-white">
-              {divisions.map(d => (
-                <SelectItem key={d.id} value={d.name} className="hover:bg-white/10">{d.name}</SelectItem>
-              ))}
-              {divisions.length === 0 && <SelectItem value="Marketing" className="hover:bg-white/10">Marketing (Default)</SelectItem>}
-            </SelectContent>
-          </Select>
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-full md:w-[250px] glass-panel border-white/10 text-white font-bold h-10">
-              <SelectValue placeholder="Pilih Periode" />
-            </SelectTrigger>
-            <SelectContent className="glass-panel border-white/20 text-white">
-              {periodOptions.map(p => (
-                <SelectItem key={p.value} value={p.value} className="hover:bg-white/10">{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="border border-white/10 rounded-xl overflow-hidden bg-black/20">
-          <div className="grid grid-cols-7 bg-blue-600/20 border-b border-white/10">
-            {weekDays.map(wd => (
-              <div key={wd} className="p-3 text-center text-[10px] md:text-sm font-bold text-blue-400 border-r border-white/10 last:border-r-0">
-                {wd}
+    <div className="space-y-6" id="jadwal-libur-section">
+      <Card className="glass-panel border-none shadow-lg text-white">
+        <CardHeader className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="w-full md:w-auto">
+            <CardTitle className="text-primary uppercase tracking-[0.2em] font-black text-xl flex items-center gap-3">
+              <div className="w-2 h-8 bg-primary rounded-full" />
+              JADWAL LIBUR {selectedDivision}
+            </CardTitle>
+            <CardDescription className="text-white/50 text-xs mt-1">
+              Periode: <span className="text-white/80 font-bold">{activePeriod ? activePeriod.label : "Pilih Periode"}</span>
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <Select value={selectedDivision} onValueChange={setSelectedDivision}>
+              <SelectTrigger className="w-full md:w-[150px] glass-panel border-white/10 text-white font-bold h-10">
+                <SelectValue placeholder="Divisi" />
+              </SelectTrigger>
+              <SelectContent className="glass-panel border-white/20 text-white">
+                {divisions.map(d => (
+                  <SelectItem key={d.id} value={d.name} className="hover:bg-white/10">{d.name}</SelectItem>
+                ))}
+                {divisions.length === 0 && <SelectItem value="Marketing" className="hover:bg-white/10">Marketing</SelectItem>}
+              </SelectContent>
+            </Select>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white font-bold h-10">
+                <SelectValue placeholder={periodOptions.length > 0 ? "Pilih Periode" : "Memuat..."} />
+              </SelectTrigger>
+              <SelectContent className="glass-panel border-white/20 text-white">
+                {periodOptions.map(p => (
+                  <SelectItem key={p.value} value={p.value} className="hover:bg-white/10">{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button 
+              onClick={handleExportExcel}
+              disabled={!activePeriod}
+              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold h-10 px-4 rounded-xl flex items-center gap-2 w-full md:w-auto shadow-lg shadow-emerald-900/20 transition-all"
+              id="download-jadwal-btn"
+            >
+              <Download className="w-4 h-4" />
+              Download Excel
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {periodOptions.length === 0 ? (
+             <div className="flex flex-col items-center justify-center h-80 glass-panel border-dashed border-white/10 rounded-3xl p-10 text-center">
+              <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4">
+                <CalendarIcon className="w-8 h-8 text-white/20" />
               </div>
-            ))}
-          </div>
+              <h3 className="text-lg font-bold text-white mb-2">Memuat Data Periode...</h3>
+              <p className="text-white/40 text-xs">Pastikan koneksi internet stabil atau cek menu "Batas Waktu".</p>
+            </div>
+          ) : !activePeriod ? (
+            <div className="flex flex-col items-center justify-center h-80 glass-panel border-white/10 rounded-3xl p-10 text-center">
+              <p className="text-white/40 text-sm font-bold tracking-widest animate-pulse uppercase">Silakan Pilih Periode Di Atas</p>
+            </div>
+          ) : loading ? (
+            <div className="flex items-center justify-center h-96">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+                <p className="text-white/20 text-[10px] tracking-[0.3em] font-bold">Sinkronisasi Data...</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {(() => {
+                const startDate = startOfDay(activePeriod.start);
+                const endDate = endOfDay(activePeriod.end);
+                const days = eachDayOfInterval({ start: startDate, end: endDate });
+                const weekDays = ['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU', 'MINGGU'];
+                const firstDayOfWeek = getDay(days[0]); 
+                const paddingBefore = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+                const calendarCells = [];
+                for (let i = 0; i < paddingBefore; i++) calendarCells.push(null);
+                days.forEach(d => calendarCells.push(d));
+
+                return (
+                  <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/40 backdrop-blur-md shadow-2xl">
+                    <div className="grid grid-cols-7 bg-white/5 border-b border-white/10">
+                      {weekDays.map(wd => (
+                        <div key={wd} className="p-4 text-center text-[10px] md:text-xs font-black text-white/40 tracking-widest border-r border-white/10 last:border-r-0 uppercase">
+                          {wd}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="grid grid-cols-7 border-b border-white/10 last:border-b-0">
+                      {calendarCells.map((date, idx) => {
+                        if (!date) return <div key={`pad-${idx}`} className="min-h-[140px] bg-white/[0.02] border-r border-white/10 last:border-r-0" />;
+                        
+                        const dateStr = format(date, 'yyyy-MM-dd');
+                        const isSunday = getDay(date) === 0;
+                        const isToday = isSameDay(date, new Date());
+                        const requests = dateMap[dateStr] || [];
+                        
+                        return (
+                          <div key={dateStr} className={`min-h-[160px] border-r border-b border-white/10 last:border-r-0 flex flex-col group transition-all duration-300 hover:bg-white/[0.05] ${isSunday ? 'bg-rose-500/[0.03]' : ''} ${isToday ? 'bg-primary/[0.05]' : ''}`}>
+                            <div className={`p-3 flex items-center justify-between border-b border-white/[0.03] ${isToday ? 'bg-primary/20 text-white font-bold' : isSunday ? 'text-rose-400 font-bold' : 'text-white/60 font-medium'}`}>
+                              <span className="text-[10px] opacity-40">{format(date, 'dd')}</span>
+                              <span className="text-[9px] scale-90 origin-right">{format(date, 'MM/yy')}</span>
+                            </div>
+                            <div className="flex-1 p-2 space-y-1.5 overflow-y-auto no-scrollbar scroll-smooth">
+                              {requests.map(r => (
+                                <motion.div 
+                                  initial={{ opacity: 0, x: -5 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  key={r.id} 
+                                  className={`text-[9px] md:text-[10px] p-2 rounded-lg font-bold truncate transition-transform hover:scale-[1.02] active:scale-95 shadow-sm ${
+                                    isSunday 
+                                      ? 'bg-rose-500/20 text-rose-100 border border-rose-500/20' 
+                                      : 'bg-white/5 text-white/90 border border-white/10 hover:border-primary/30 hover:bg-white/10'
+                                  }`}
+                                >
+                                  <span className="text-primary mr-1">●</span>
+                                  {getNickname(r.employeeId, r.employeeName)} 
+                                  <span className="ml-1 opacity-50 font-normal">{getSectionInitials(r.sectionId)}</span>
+                                </motion.div>
+                              ))}
+                              {requests.length === 0 && !isToday && <div className="text-[8px] text-white/5 text-center mt-6 tracking-[0.2em] uppercase font-black">- Kosong -</div>}
+                              {requests.length === 0 && isToday && <div className="text-[8px] text-primary/20 text-center mt-6 tracking-[0.2em] uppercase font-black">HARI INI</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
+          )}
           
-          <div className="grid grid-cols-7 border-b border-white/10 last:border-b-0">
-            {calendarCells.map((date, idx) => {
-              if (!date) return <div key={`pad-${idx}`} className="min-h-[120px] bg-white/5 border-r border-b border-white/10 last:border-r-0" />;
-              
-              const dateStr = format(date, 'yyyy-MM-dd');
-              const isSunday = getDay(date) === 0;
-              const requests = dateMap[dateStr] || [];
-              
-              return (
-                <div key={dateStr} className={`min-h-[140px] border-r border-b border-white/10 last:border-r-0 flex flex-col ${isSunday ? 'bg-rose-500/5' : ''}`}>
-                  <div className={`p-2 text-center text-[10px] font-bold border-b border-white/5 ${isSunday ? 'bg-rose-500/20 text-rose-400' : 'bg-blue-400/20 text-blue-200'}`}>
-                    {format(date, 'dd/MM/yyyy')}
-                  </div>
-                  <div className="flex-1 p-1 space-y-1 overflow-y-auto no-scrollbar">
-                    {requests.map(r => (
-                      <div key={r.id} className={`text-[9px] md:text-[10px] p-1 rounded font-medium truncate ${isSunday ? 'bg-rose-500/10 text-rose-200' : 'bg-white/5 text-white/80'}`}>
-                        {r.employeeName} {getSectionInitials(r.sectionId)}
-                      </div>
-                    ))}
-                    {requests.length === 0 && <div className="text-[9px] text-white/10 text-center mt-4">---</div>}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="mt-8 flex flex-wrap justify-between items-center gap-6 glass-panel border-white/5 p-4 rounded-xl">
+            <div className="flex flex-wrap gap-6 text-[10px] text-white/40 font-bold tracking-widest uppercase">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-white/10 border border-white/20" /> Hari Biasa
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-rose-500/20 border border-rose-500/40" /> Hari Minggu
+              </div>
+              <div className="flex items-center gap-3 text-primary">
+                <div className="w-2 h-2 rounded-full bg-primary/40 border border-primary" /> Hari Ini
+              </div>
+            </div>
+            <p className="text-[9px] text-white/20 italic font-medium">* Menampilkan data request status APPROVED & PENDING</p>
           </div>
-        </div>
-        
-        <div className="mt-6 flex flex-wrap gap-4 text-[10px] text-white/40 italic">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-blue-400/20" /> Hari Biasa
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-rose-500/20" /> Hari Minggu
-          </div>
-          <p>* Jadwal ini menampilkan semua request yang statusnya Approved & Pending.</p>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
