@@ -1080,7 +1080,7 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
 
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Halo, {employee.name}</h2>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Halo, {employee.nickname || employee.name.split(' ')[0]}</h2>
           <p className="text-white/40 text-xs font-bold uppercase tracking-widest mt-1">
             {(() => {
               const hour = currentTime.getHours();
