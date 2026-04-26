@@ -94,3 +94,13 @@ export interface ManualAttendance {
   status: 'H' | 'L' | 'I' | 'S' | 'CT12' | 'CL' | 'A';
   updatedAt: any;
 }
+
+export interface ActivityLog {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  action: string;
+  timestamp: any;
+  location?: string;
+  photoUrl?: string;
+}

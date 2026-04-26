@@ -107,7 +107,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import JSZip from 'jszip';
-import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance } from './types';
+import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance, ActivityLog } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -970,6 +970,16 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
     const time = new Date();
     setConfirmAction(null);
     try {
+        // Log to activityLogs for historical record
+        await addDoc(collection(db, 'activityLogs'), {
+          employeeId: employee.id,
+          employeeName: employee.name,
+          action,
+          timestamp: serverTimestamp(),
+          location: location || (pendingAction?.location || ""),
+          photoUrl: photoData || "",
+        });
+
         if (!attendance && action === 'checkIn') {
           if (!selectedShiftId) {
              setIsProcessing(false);
@@ -1534,15 +1544,32 @@ function AdminDashboard({
         const twoMonthsAgo = subMonths(new Date(), 2);
         const twoMonthsAgoStr = format(twoMonthsAgo, 'yyyy-MM-dd');
         
+        // Cleanup attendance photos
         const q = query(collection(db, 'attendance'), where('date', '<', twoMonthsAgoStr), where('photoUrl', '>', ''));
         const snap = await getDocs(q);
         
+        const batchSize = 25;
+
         if (!snap.empty) {
-          console.log(`Cleaning up ${snap.size} old photo records...`);
-          const batchSize = 25;
+          console.log(`Cleaning up ${snap.size} old attendance photo records...`);
           for (let i = 0; i < snap.docs.length; i += batchSize) {
             const chunk = snap.docs.slice(i, i + batchSize);
             await Promise.all(chunk.map(d => updateDoc(doc(db, 'attendance', d.id), { photoUrl: "" })));
+          }
+        }
+
+        // Cleanup activityLogs photos
+        const qLogs = query(
+          collection(db, 'activityLogs'), 
+          where('timestamp', '<', Timestamp.fromDate(twoMonthsAgo)), 
+          where('photoUrl', '>', '')
+        );
+        const snapLogs = await getDocs(qLogs);
+        if (!snapLogs.empty) {
+          console.log(`Cleaning up ${snapLogs.size} old activity log photos...`);
+          for (let i = 0; i < snapLogs.docs.length; i += batchSize) {
+            const chunk = snapLogs.docs.slice(i, i + batchSize);
+            await Promise.all(chunk.map(d => updateDoc(doc(db, 'activityLogs', d.id), { photoUrl: "" })));
           }
         }
       };
@@ -3534,38 +3561,56 @@ function AdminShifts({ shifts }: { shifts: Shift[] }) {
   );
 }
 
-function AdminActivityLog({ employees }: { employees: Employee[] }) {
-  const [logs, setLogs] = useState<Attendance[]>([]);
+function AdminActivityLog({ employees, viewDate }: { employees: Employee[], viewDate: string }) {
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
-  const getActionName = (log: Attendance) => {
-    // Determine the most recent action based on timestamps
-    const actions: { label: string, time: any, order: number }[] = [];
-    if (log.checkIn) actions.push({ label: 'Masuk', time: log.checkIn, order: 1 });
-    if (log.breakStart) actions.push({ label: 'Istirahat', time: log.breakStart, order: 2 });
-    if (log.breakEnd) actions.push({ label: 'Selesai Ist.', time: log.breakEnd, order: 3 });
-    if (log.checkOut) actions.push({ label: 'Pulang', time: log.checkOut, order: 4 });
-    
-    // Sort by time descending to find latest
-    actions.sort((a, b) => b.time.seconds - a.time.seconds);
-    return actions[0]?.label || 'Lainnya';
+  const getActionName = (action: string) => {
+    switch(action) {
+      case 'checkIn': return 'Masuk';
+      case 'breakStart': return 'Istirahat';
+      case 'breakEnd': return 'Selesai Ist.';
+      case 'checkOut': return 'Pulang';
+      default: return 'Lainnya';
+    }
   };
 
   useEffect(() => {
-    const q = query(collection(db, 'attendance'), orderBy('updatedAt', 'desc'), limit(100));
+    // We calculate the start and end of the viewed date to filter activityLogs
+    const dateObj = toDateSafe(viewDate);
+    const startOfDay = new Date(dateObj);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(dateObj);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const q = query(
+      collection(db, 'activityLogs'), 
+      where('timestamp', '>=', Timestamp.fromDate(startOfDay)),
+      where('timestamp', '<=', Timestamp.fromDate(endOfDay)),
+      orderBy('timestamp', 'desc'), 
+      limit(200)
+    );
     const unsub = onSnapshot(q, (snap) => {
-      setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as Attendance)));
+      setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityLog)));
       setLoading(false);
+    }, (err) => {
+      console.error("Query activityLogs failed, might need index:", err);
+      // Fallback to global if filter fails due to index missing
+      const qGlobal = query(collection(db, 'activityLogs'), orderBy('timestamp', 'desc'), limit(100));
+      onSnapshot(qGlobal, (s) => {
+        setLogs(s.docs.map(d => ({ id: d.id, ...d.data() } as ActivityLog)));
+        setLoading(false);
+      });
     });
     return unsub;
-  }, []);
+  }, [viewDate]);
 
   return (
     <DialogContent className="glass-panel text-white border-white/20 p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col rounded-[2rem]">
       <DialogHeader>
         <DialogTitle className="text-white text-xl font-bold flex items-center gap-2">
-           <History className="w-5 h-5 text-primary" /> Log Aktivitas Karyawan (Terbaru)
+           <History className="w-5 h-5 text-primary" /> Log Aktivitas: {format(toDateSafe(viewDate), 'dd MMMM yyyy')}
         </DialogTitle>
       </DialogHeader>
       <div className="flex-1 overflow-y-auto no-scrollbar py-4">
@@ -3585,11 +3630,11 @@ function AdminActivityLog({ employees }: { employees: Employee[] }) {
               return (
                 <TableRow key={log.id} className="border-white/5 hover:bg-white/5">
                   <TableCell className="font-medium text-white">{log.employeeName}</TableCell>
-                  <TableCell className="text-white/80 font-bold">{getActionName(log)}</TableCell>
+                  <TableCell className="text-white/80 font-bold">{getActionName(log.action)}</TableCell>
                   <TableCell className="text-white/60 text-xs">
-                    {log.date}<br/>
+                    {log.timestamp ? format(toDateSafe(log.timestamp), 'dd MMM yyyy') : '-'}<br/>
                     <span className="text-[10px] text-white/30 uppercase font-black">
-                      {log.updatedAt ? format(toDateSafe(log.updatedAt), 'HH:mm:ss') : '-'}
+                      {log.timestamp ? format(toDateSafe(log.timestamp), 'HH:mm:ss') : '-'}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -3860,7 +3905,7 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
               <DialogTrigger className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-primary/20 border border-primary/20 rounded-md text-xs font-bold text-primary hover:bg-primary/30 transition-all whitespace-nowrap">
                 <History className="w-3 h-3" /> Cek Activity
               </DialogTrigger>
-              <AdminActivityLog employees={employees} />
+              <AdminActivityLog employees={employees} viewDate={format(date, 'yyyy-MM-dd')} />
             </Dialog>
           </div>
         </CardHeader>

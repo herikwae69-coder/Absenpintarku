@@ -101,6 +101,20 @@
       },
       "required": ["employeeId", "date", "status"]
     },
+    "ActivityLog": {
+      "title": "Activity Log",
+      "description": "Historical record of all employee actions.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" },
+        "photoUrl": { "type": "string" }
+      },
+      "required": ["employeeId", "action", "timestamp"]
+    },
     "OfficeConfig": {
       "title": "OfficeConfig",
       "description": "Office location and geofencing settings.",
@@ -137,6 +151,10 @@
     "/manualAttendance/{attendanceId}": {
       "schema": "ManualAttendance",
       "description": "Manual attendance logs."
+    },
+    "/activityLogs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Granular activity logs for audit trails."
     },
     "/config/office": {
       "schema": "OfficeConfig",
