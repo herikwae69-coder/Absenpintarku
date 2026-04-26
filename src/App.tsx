@@ -1649,7 +1649,7 @@ function AdminDashboard({
               </Button>
             }
           />
-          <DialogContent className="glass-panel border-white/10 text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl">
+          <DialogContent className="glass-panel text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl bg-[#0A0F1E]/95 border-[#0A0F1E]">
             <div className="flex items-center gap-3 mb-10 px-2">
               <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
                 <Settings className="w-5 h-5 text-primary" />
@@ -2750,6 +2750,10 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
             <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 mr-2">
               <Button 
                 onClick={() => {
+                  const currentControl = selectedPeriod ? controls[selectedPeriod] : null;
+                  if (currentControl?.isPermanentlyClosed) {
+                    return alert("Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengedit jadwal.");
+                  }
                   if (isEditingSchedule && hasPendingTrashOrWaiting) {
                     return alert("Masih ada request di Kotak Tunggu atau Tempat Sampah. Harap diproses sebelum mengunci jadwal.");
                   }
@@ -2986,6 +2990,11 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
   }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (controls[selectedPeriod]?.isPermanentlyClosed) {
+      alert("Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengimpor kuota.");
+      e.target.value = '';
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
@@ -3161,6 +3170,9 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
                           variant="ghost" 
                           className="text-white/30 hover:text-white hover:bg-white/10"
                           onClick={async () => {
+                            if (controls[selectedPeriod]?.isPermanentlyClosed) {
+                              return alert("Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengubah kuota.");
+                            }
                             const newVal = prompt(`Update Kuota untuk ${e.name}:`, String(currentQuota));
                             if (newVal !== null) {
                               const quotaVal = parseInt(newVal);
@@ -3302,6 +3314,19 @@ function AdminPeriods() {
     }
   }
 
+  const togglePermanentClose = async (periodId: string, currentStatus: boolean) => {
+    const pwd = prompt(`Masukkan Password Admin untuk ${currentStatus ? 'membuka powermanen (unlock)' : 'menutup permanen'}:`);
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
+    await setDoc(doc(db, 'periodControls', periodId), {
+      isPermanentlyClosed: !currentStatus,
+      status: !currentStatus ? 'closed' : 'open',
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  };
+
   if (loading) return <div className="text-white p-10 text-center">Memuat pengaturan periode...</div>;
 
   return (
@@ -3425,6 +3450,7 @@ function AdminPeriods() {
                     size="sm" 
                     variant={ctrl.status === 'open' ? 'default' : 'ghost'}
                     onClick={() => updateStatus(p.value, 'open')}
+                    disabled={ctrl.isPermanentlyClosed}
                     className={ctrl.status === 'open' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'text-white/50 hover:bg-white/10'}
                   >
                     Buka
@@ -3433,6 +3459,7 @@ function AdminPeriods() {
                     size="sm" 
                     variant={ctrl.status === 'closed' ? 'destructive' : 'ghost'}
                     onClick={() => updateStatus(p.value, 'closed')}
+                    disabled={ctrl.isPermanentlyClosed}
                     className={ctrl.status === 'closed' ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'text-white/50 hover:bg-white/10'}
                   >
                     Tutup
@@ -3444,6 +3471,7 @@ function AdminPeriods() {
                         <Button 
                           size="sm" 
                           variant={ctrl.status === 'scheduled' ? 'default' : 'ghost'}
+                          disabled={ctrl.isPermanentlyClosed}
                           className={ctrl.status === 'scheduled' ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'text-white/50 hover:bg-white/10'}
                         >
                           {ctrl.status === 'scheduled' ? 'Terjadwal' : 'Jadwalkan'}
@@ -3565,6 +3593,16 @@ function AdminPeriods() {
                       </div>
                     </PopoverContent>
                   </Popover>
+
+                  <Button 
+                    size="sm" 
+                    variant={ctrl.isPermanentlyClosed ? "default" : "secondary"} 
+                    className={`font-semibold ${ctrl.isPermanentlyClosed ? 'bg-rose-900 hover:bg-rose-800 text-white shadow-[0_0_10px_rgba(225,29,72,0.5)]' : 'bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 border border-rose-900/50'}`}
+                    onClick={() => togglePermanentClose(p.value, !!ctrl.isPermanentlyClosed)}
+                  >
+                    <Lock className="w-3 h-3 mr-1" />
+                    {ctrl.isPermanentlyClosed ? 'Buka Permanen' : 'Tutup Permanen'}
+                  </Button>
 
                   <Button size="sm" variant="ghost" className="text-white/20 hover:text-rose-400 hover:bg-rose-500/10" onClick={() => handleDelete(p.value)}>
                     <Trash2 className="w-4 h-4" />
@@ -4685,6 +4723,7 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
   const getPeriodStatus = () => {
     if (!periodControl) return 'open';
+    if (periodControl.isPermanentlyClosed) return 'closed';
     if (periodControl.status === 'closed') return 'closed';
     if (periodControl.status === 'scheduled') {
       const now = new Date();
