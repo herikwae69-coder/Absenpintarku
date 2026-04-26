@@ -2531,7 +2531,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     const { active, over } = event;
     if (!over || !active) return;
 
-    const [requestId, originalDate] = active.id.toString().split('|');
+    const [requestId, originalDate, dateIndex] = active.id.toString().split('|');
     const newDate = over.id.toString();
 
     if (originalDate === newDate && newDate !== 'TRASH') return;
@@ -2539,11 +2539,33 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     const request = leaveRequests.find(r => r.id === requestId);
     if (!request) return;
 
+    if (newDate !== 'TRASH' && newDate !== 'WAITING') {
+      const hasDuplicateDate = leaveRequests.some(r => {
+        if (r.employeeId !== request.employeeId) return false;
+        
+        // For the *current* request being edited, ignore if it's the date being moved
+        // but wait, we need to check if ANY of their requests use this new date.
+        // Even the same request, if it already has `newDate`, we want to block it.
+        const rDates = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+        return rDates.includes(newDate);
+      });
+
+      if (hasDuplicateDate) {
+        toast({
+          title: "Gagal memindah",
+          description: "Karyawan sudah memiliki jadwal libur di tanggal ini.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
     const currentDates = request.dates || [request.date1, request.date2, request.date3, request.date4, request.date5, request.date6];
-    
+
     let replaced = false;
-    const newDates = currentDates.map(d => {
-      if (d === originalDate && !replaced) {
+    const newDates = currentDates.map((d, index) => {
+      // If we have dateIndex, match exactly that index. Otherwise fallback to match by originalDate string
+      if (dateIndex ? index.toString() === dateIndex : (d === originalDate && !replaced)) {
         replaced = true;
         return newDate;
       }
@@ -2873,7 +2895,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                               <span className="text-[10px] opacity-40">{format(date, 'dd')}</span>
                               <span className="text-[9px] scale-90 origin-right">{format(date, 'MM/yy')}</span>
                             </div>
-                            <div className="flex-1 p-2 space-y-1.5 overflow-y-auto no-scrollbar scroll-smooth">
+                            <div className="flex-1 p-2 space-y-1.5">
                               {requests.map((r, i) => (
                                 <DraggableLeaveBadge 
                                   key={`${r.id}-${dateStr}-${i}`} 
@@ -4541,6 +4563,16 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     if (!formData.sectionId) return alert("Pilih bagian!");
     const selectedDates = formData.dates.filter((d: string) => d !== '');
     if (selectedDates.length === 0) return alert("Pilih setidaknya satu tanggal libur!");
+
+    const uniqueSelectedDates = new Set(selectedDates);
+    if (uniqueSelectedDates.size !== selectedDates.length) {
+      return alert("Anda memilih tanggal yang sama lebih dari sekali. Silakan pilih tanggal yang berbeda.");
+    }
+
+    const overlap = selectedDates.find((d: string) => uniqueUsedDates.has(d));
+    if (overlap) {
+      return alert(`Tanggal ${overlap} sudah diajukan libur sebelumnya. Silakan pilih tanggal lain.`);
+    }
 
     const maxDays = periodControl?.maxDaysPerRequest || 6;
     if (selectedDates.length > maxDays) return alert(`Hanya bisa memilih maksimal ${maxDays} hari libur!`);
