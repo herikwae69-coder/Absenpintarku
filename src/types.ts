@@ -82,6 +82,7 @@ export interface PeriodControl {
   maxRequestsPerDay?: number;
   maxAccumulatedLeave?: number;
   maxDaysPerRequest?: number;
+  isVisibleToEmployee?: boolean;
   updatedAt: any;
 }
 

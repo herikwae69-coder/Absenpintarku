@@ -50,6 +50,7 @@ import {
   Music,
   User, 
   Clock, 
+  Check,
   Coffee, 
   LogOut, 
   Users, 
@@ -3041,6 +3042,13 @@ function AdminPeriods() {
     }, { merge: true });
   };
 
+  const updateVisibility = async (periodId: string, isVisible: boolean) => {
+    await setDoc(doc(db, 'periodControls', periodId), {
+      isVisibleToEmployee: isVisible,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  };
+
   const handleAddCustom = async () => {
     if (!newPeriod.name || !newPeriod.startDate || !newPeriod.endDate) {
       alert("Lengkapi nama dan rentang tanggal!");
@@ -3177,6 +3185,23 @@ function AdminPeriods() {
             </Popover>
           </div>
                     <p className="text-xs text-white/40">Status: <span className="uppercase font-bold tracking-wider">{ctrl.status === 'scheduled' ? 'Terjadwal' : ctrl.status === 'open' ? 'Terbuka' : 'Ditutup'}</span></p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <button 
+                        onClick={() => updateVisibility(p.value, !ctrl.isVisibleToEmployee)}
+                        className={`flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-black transition-all border shadow-sm ${
+                          ctrl.isVisibleToEmployee 
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                            : 'bg-white/5 text-white/20 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                          ctrl.isVisibleToEmployee ? 'bg-emerald-500 border-transparent text-black' : 'border-white/20 bg-transparent'
+                        }`}>
+                          {ctrl.isVisibleToEmployee && <Check className="w-3 h-3 stroke-[4]" />}
+                        </div>
+                        {ctrl.isVisibleToEmployee ? 'TAMPIL DI KARYAWAN' : 'SEMBUNYIKAN DARI KARYAWAN'}
+                      </button>
+                    </div>
                     {isCustom && <p className="text-[10px] text-white/20">{ctrl.startDate} s/d {ctrl.endDate}</p>}
                   </div>
                 </div>
@@ -4213,8 +4238,10 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
 
   useEffect(() => {
     const active = periodOptions.filter(p => {
-       const status = controls[p.value]?.status;
-       return status === 'open' || status === 'scheduled';
+       const ctrl = controls[p.value];
+       if (!ctrl) return false;
+       // Always show if admin checked it, or if it's currently open/scheduled
+       return ctrl.isVisibleToEmployee === true || ctrl.status === 'open' || ctrl.status === 'scheduled';
     });
     if (active.length > 0) {
       if (!selectedPeriod || !active.find(a => a.value === selectedPeriod)) {
@@ -4627,12 +4654,33 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                         <TableCell className="text-white/50 text-xs">{sections.find(s => s.id === r.sectionId)?.name || '-'}</TableCell>
                         <TableCell className="text-white/60 text-xs truncate max-w-[100px]" title={r.reason}>{r.reason}</TableCell>
                         <TableCell className="text-emerald-400/80 font-bold text-xs relative group/date">
-                          <div className="flex flex-col">
-                            <span>{(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).join(', ') || '-'}</span>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex flex-wrap gap-x-1">
+                              {(() => {
+                                const currentDates = (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean);
+                                return currentDates.map((d, i) => {
+                                  const isNew = r.isModifiedByAdmin && r.originalDates && !r.originalDates.includes(d);
+                                  return (
+                                    <span key={i} className={isNew ? "text-amber-400" : ""}>
+                                      {d}{i < currentDates.length - 1 ? "," : ""}
+                                    </span>
+                                  );
+                                });
+                              })()}
+                            </div>
                             {r.isModifiedByAdmin && r.originalDates && (
-                              <span className="text-[9px] text-white/30 line-through">
-                                Asli: {r.originalDates.filter(Boolean).join(', ')}
-                              </span>
+                              <div className="text-[9px] text-white/30 flex flex-wrap gap-x-1 items-center">
+                                <span className="opacity-50">Asli:</span>
+                                {r.originalDates.filter(Boolean).map((od, idx) => {
+                                  const currentDates = (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean);
+                                  const wasMoved = !currentDates.includes(od);
+                                  return (
+                                    <span key={idx} className={wasMoved ? "line-through text-rose-500/50" : ""}>
+                                      {od}{idx < r.originalDates.filter(Boolean).length - 1 ? "," : ""}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
                         </TableCell>
