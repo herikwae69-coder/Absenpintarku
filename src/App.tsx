@@ -31,6 +31,7 @@ import {
 } from 'firebase/firestore';
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse, eachDayOfInterval, startOfWeek, endOfWeek, getDay, addDays, isSameDay } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { generateBackupZip } from './lib/backupService';
 import * as XLSX from 'xlsx';
 import { 
   DndContext, 
@@ -1375,9 +1376,6 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
             </Card>
           )}
 
-          <div className="text-center mt-12 mb-8 text-[10px] font-bold text-white/10 uppercase tracking-[0.5em]">
-            Presensi Digital v1.2
-          </div>
 
           <CameraDialog 
             isOpen={showCamera} 
@@ -5380,86 +5378,17 @@ function AdminManualAttendance({ employees, divisions }: { employees: Employee[]
   );
 }
 
+
+// --- ADMIN: BACKUP ---
 function AdminBackup({ employees }: { employees: Employee[] }) {
   const [exportStart, setExportStart] = useState<Date>(new Date());
   const [exportEnd, setExportEnd] = useState<Date>(new Date());
-  const [exportFormat, setExportFormat] = useState<'excel' | 'zip'>('excel');
-  const [exportType, setExportType] = useState<string>('3m');
   const [isExporting, setIsExporting] = useState(false);
 
   const handleBackupExport = async () => {
     setIsExporting(true);
     try {
-      const dates: string[] = [];
-      let tempDate = new Date(exportStart);
-      while (tempDate <= exportEnd) {
-        dates.push(format(tempDate, 'yyyy-MM-dd'));
-        tempDate.setDate(tempDate.getDate() + 1);
-      }
-      
-      // Fetch data
-      const qManual = query(collection(db, 'manualAttendance'), where('date', '>=', format(exportStart, 'yyyy-MM-dd')), where('date', '<=', format(exportEnd, 'yyyy-MM-dd')));
-      const qLive = query(collection(db, 'attendance'), where('date', '>=', format(exportStart, 'yyyy-MM-dd')), where('date', '<=', format(exportEnd, 'yyyy-MM-dd')));
-      const qLeaves = query(collection(db, 'leaveRequests'), where('status', 'in', ['approved', 'pending']));
-      const qQuotas = query(collection(db, 'periodQuotas'));
-
-      const [snapManual, snapLive, snapLeaves, snapQuotas] = await Promise.all([
-        getDocs(qManual),
-        getDocs(qLive),
-        getDocs(qLeaves),
-        getDocs(qQuotas)
-      ]);
-
-      const manualRecords = snapManual.docs.map(d => d.data());
-      const liveRecords = snapLive.docs.map(d => d.data());
-      const leaveRecords = snapLeaves.docs.map(d => d.data());
-      const quotaRecords = snapQuotas.docs.map(d => d.data());
-
-      const wb = XLSX.utils.book_new();
-
-      // Attendance Sheet
-      const attendanceData = employees.map(emp => {
-        const row: any = { 'Nama': emp.name, 'No Absen': emp.pin, 'Divisi': emp.division };
-        dates.forEach(d => {
-          const manual = manualRecords.find(r => r.employeeId === emp.id && r.date === d);
-          const live = liveRecords.find(r => r.employeeId === emp.id && r.date === d);
-          row[d] = manual ? `M: ${manual.status}` : (live ? `L: In:${live.checkIn ? format(toDateSafe(live.checkIn), 'HH:mm') : '-'} Out:${live.checkOut ? format(toDateSafe(live.checkOut), 'HH:mm') : '-'}` : '-');
-        });
-        return row;
-      });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attendanceData), 'Absensi');
-
-      // Leave Requests Sheet
-      const leaveData = leaveRecords.map(r => ({
-        'Nama': employees.find(e => e.id === r.employeeId)?.name || 'Unknown',
-        'Tanggal': r.dates ? r.dates.join(', ') : '',
-        'Status': r.status,
-        'Alasan': r.reason
-      }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(leaveData), 'Request Libur');
-
-      // Quotas Sheet
-      const quotaData = quotaRecords.map(q => ({
-        'Nama': q.employeeName,
-        'Periode': q.period,
-        'Kuota': q.quota
-      }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(quotaData), 'Kuota');
-      
-      const fileName = `Backup_Data_${format(exportStart, 'dd-MM-yyyy')}_to_${format(exportEnd, 'dd-MM-yyyy')}`;
-      
-      if (exportFormat === 'zip') {
-        const zip = new JSZip();
-        zip.file(`${fileName}.xlsx`, XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
-        const content = await zip.generateAsync({ type: 'blob' });
-        const url = URL.createObjectURL(content);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${fileName}.zip`;
-        link.click();
-      } else {
-        XLSX.writeFile(wb, `${fileName}.xlsx`);
-      }
+      await generateBackupZip(exportStart, exportEnd);
     } catch (err) {
        console.error(err);
        alert("Gagal backup.");
@@ -5475,56 +5404,20 @@ function AdminBackup({ employees }: { employees: Employee[] }) {
         <CardDescription className="text-white/60">Pilih rentang waktu untuk mengunduh seluruh data (Absen, Libur, Kuota).</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <Select value={exportType} onValueChange={(val) => {
-          setExportType(val);
-          const now = new Date();
-          const start = new Date(now);
-          if (val === '3m') { start.setMonth(now.getMonth() - 3); }
-          else if (val === '6m') { start.setMonth(now.getMonth() - 6); }
-          else if (val === '12m') { start.setFullYear(now.getFullYear() - 1); }
-          else if (val === 'custom') { return; }
-          setExportStart(start);
-          setExportEnd(now);
-        }}>
-          <SelectTrigger className="bg-slate-800 border-white/10 text-white">
-            <SelectValue placeholder="Pilih Periode" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-800 border-white/20 text-white">
-            <SelectItem value="3m">3 Bulan Terakhir</SelectItem>
-            <SelectItem value="6m">6 Bulan Terakhir</SelectItem>
-            <SelectItem value="12m">1 Tahun Terakhir</SelectItem>
-            <SelectItem value="custom">Custom</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {exportType === 'custom' && (
-          <div className="grid grid-cols-2 gap-2">
-              <Input type="date" onChange={(e) => setExportStart(new Date(e.target.value))} className="bg-slate-800 border-white/10 text-white" />
-              <Input type="date" onChange={(e) => setExportEnd(new Date(e.target.value))} className="bg-slate-800 border-white/10 text-white" />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label className="text-white">Start Date</Label>
+            <Input type="date" className="field-input" value={format(exportStart, 'yyyy-MM-dd')} onChange={(e) => setExportStart(new Date(e.target.value))} />
           </div>
-        )}
-        
-        <div className="space-y-2 bg-slate-950/50 p-4 rounded-xl border border-white/5">
-          <Label className="text-white/60 text-xs uppercase font-bold tracking-wider">Pilih Format File:</Label>
-          <div className="flex gap-2 mt-2">
-            <Button 
-              onClick={() => setExportFormat('excel')} 
-              className={`flex-1 ${exportFormat === 'excel' ? 'bg-primary text-white' : 'bg-slate-800 text-white border border-white/20 hover:bg-slate-700'}`}
-            >
-              Excel (.xlsx)
-            </Button>
-            <Button 
-              onClick={() => setExportFormat('zip')} 
-              className={`flex-1 ${exportFormat === 'zip' ? 'bg-primary text-white' : 'bg-slate-800 text-white border border-white/20 hover:bg-slate-700'}`}
-            >
-              ZIP (.zip)
-            </Button>
+          <div>
+            <Label className="text-white">End Date</Label>
+            <Input type="date" className="field-input" value={format(exportEnd, 'yyyy-MM-dd')} onChange={(e) => setExportEnd(new Date(e.target.value))} />
           </div>
         </div>
       </CardContent>
       <CardFooter>
         <Button onClick={handleBackupExport} disabled={isExporting} className="w-full bg-primary hover:bg-primary/80 h-12 font-bold text-lg">
-          {isExporting ? "Memproses..." : `Download ${exportFormat.toUpperCase()}`}
+          {isExporting ? "Memproses..." : "Download Backup Zip"}
         </Button>
       </CardFooter>
     </Card>
