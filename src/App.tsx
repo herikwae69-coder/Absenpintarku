@@ -1580,23 +1580,46 @@ function AdminDashboard({
   const [activeTab, setActiveTab] = useState('employees');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  const menuItems = [
-    { value: 'employees', label: 'Karyawan', icon: <Users className="w-4 h-4" /> },
-    { value: 'shifts', label: 'Shift', icon: <Clock className="w-4 h-4" /> },
-    { value: 'divisions', label: 'Divisi', icon: <Layers className="w-4 h-4" /> },
-    { value: 'sections', label: 'Bagian', icon: <Settings className="w-4 h-4" /> },
-    { value: 'office', label: 'Lokasi Kantor', icon: <MapPin className="w-4 h-4" />, superAdminOnly: true },
-    { value: 'live', label: 'Live Absen', icon: <ClipboardList className="w-4 h-4" /> },
-    { value: 'manual', label: 'Absensi Manual', icon: <ClipboardCheck className="w-4 h-4" /> },
-    { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
-    { value: 'quotas', label: 'Atur Kuota', icon: <BadgeCheck className="w-4 h-4" /> },
-    { value: 'periods', label: 'Batas Waktu', icon: <CalendarIcon className="w-4 h-4" /> },
-    { value: 'jadwal', label: 'Jadwal Libur', icon: <CalendarIcon className="w-4 h-4 text-primary" /> },
-    { value: 'backup', label: 'Backup Data', icon: <Download className="w-4 h-4" /> },
-    { value: 'reports', label: 'Laporan', icon: <Eye className="w-4 h-4" /> },
-    { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" />, superAdminOnly: true },
-    { value: 'kata', label: 'Kata-kata', icon: <MessageSquare className="w-4 h-4" />, superAdminOnly: true },
+  const menuGroups = [
+    {
+      label: 'Kelola Karyawan',
+      items: [
+        { value: 'employees', label: 'Karyawan', icon: <Users className="w-4 h-4" /> },
+        { value: 'shifts', label: 'Shift', icon: <Clock className="w-4 h-4" /> },
+        { value: 'divisions', label: 'Divisi', icon: <Layers className="w-4 h-4" /> },
+        { value: 'sections', label: 'Bagian', icon: <Settings className="w-4 h-4" /> },
+      ]
+    },
+    {
+      label: 'Absensi',
+      items: [
+        { value: 'manual', label: 'Absensi Manual', icon: <ClipboardCheck className="w-4 h-4" /> },
+        { value: 'live', label: 'Live Absensi', icon: <ClipboardList className="w-4 h-4" /> },
+        { value: 'reports', label: 'Laporan', icon: <Eye className="w-4 h-4" /> },
+        { value: 'backup', label: 'Backup Data', icon: <Download className="w-4 h-4" /> },
+      ]
+    },
+    {
+      label: 'Libur',
+      items: [
+        { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
+        { value: 'quotas', label: 'Atur Kuota', icon: <BadgeCheck className="w-4 h-4" /> },
+        { value: 'periods', label: 'Batas Waktu', icon: <CalendarIcon className="w-4 h-4" /> },
+        { value: 'jadwal', label: 'Jadwal Libur', icon: <CalendarIcon className="w-4 h-4 text-primary" /> },
+      ]
+    },
+    {
+      label: 'Superadmin',
+      superAdminOnly: true,
+      items: [
+        { value: 'office', label: 'Lokasi Kantor', icon: <MapPin className="w-4 h-4" /> },
+        { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" /> },
+        { value: 'kata', label: 'Kata-kata', icon: <MessageSquare className="w-4 h-4" /> },
+      ]
+    }
   ];
+
+  const allMenuItems = menuGroups.flatMap(g => g.items);
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-screen flex-col overflow-hidden bg-[#0A0F1E] w-full">
@@ -1618,19 +1641,26 @@ function AdminDashboard({
               <span className="font-bold text-lg text-white">Menu Admin</span>
             </div>
             <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar">
-              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 items-stretch p-0">
-                {menuItems.filter(i => !i.superAdminOnly || currentUser?.role === 'superadmin').map((item) => (
-                  <TabsTrigger 
-                    key={item.value}
-                    value={item.value} 
-                    onClick={() => setIsMobileOpen(false)}
-                    className="justify-start gap-4 h-12 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-white font-semibold text-white/50"
-                  >
-                    <div className={`p-2 rounded-lg ${activeTab === item.value ? 'bg-white/20' : 'bg-white/5'}`}>
-                      {item.icon}
+              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-6 items-stretch p-0">
+                {menuGroups.filter(g => !g.superAdminOnly || currentUser?.role === 'superadmin').map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] px-4 mb-2">{group.label}</h3>
+                    <div className="space-y-1">
+                      {group.items.map((item) => (
+                        <TabsTrigger 
+                          key={item.value}
+                          value={item.value} 
+                          onClick={() => setIsMobileOpen(false)}
+                          className="w-full justify-start gap-4 h-11 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-semibold text-white/50 hover:text-white hover:bg-white/5"
+                        >
+                          <div className={`p-1.5 rounded-lg ${activeTab === item.value ? 'bg-primary/20 text-primary' : 'bg-white/5'}`}>
+                            {item.icon}
+                          </div>
+                          <span className="text-sm">{item.label}</span>
+                        </TabsTrigger>
+                      ))}
                     </div>
-                    {item.label}
-                  </TabsTrigger>
+                  </div>
                 ))}
               </TabsList>
             </nav>
@@ -1658,7 +1688,7 @@ function AdminDashboard({
           <div className="max-w-7xl mx-auto space-y-6">
             <div className="flex flex-col gap-1 mb-8">
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white capitalize">
-                {menuItems.find(i => i.value === activeTab)?.label}
+                {allMenuItems.find(i => i.value === activeTab)?.label}
               </h1>
               <p className="text-white/40 text-xs md:text-sm">Kelola data dan monitoring operasional harian.</p>
             </div>
@@ -1903,6 +1933,10 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   };
 
   const handleEmployeeDelete = async (emp: any) => {
+    if (emp.role === 'superadmin' && currentUser?.role !== 'superadmin') {
+      alert("Anda tidak memiliki akses untuk menghapus Super Admin!");
+      return;
+    }
     const action = prompt("Pilih aksi: 'hapus' atau 'nonaktif'?");
     if (action !== 'hapus' && action !== 'nonaktif') {
       alert("Aksi tidak valid!");
@@ -2020,7 +2054,10 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
 
               <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">Hak Akses</Label>
-                <Select value={formData.role} onValueChange={(val: any) => {
+                <Select 
+                  value={formData.role} 
+                  disabled={isEditing?.role === 'superadmin' && currentUser?.role !== 'superadmin'}
+                  onValueChange={(val: any) => {
                   if (val === 'superadmin') {
                     const pwd = prompt("Masukkan password untuk akses Super Admin:");
                     if (pwd === "adnan2301") {
@@ -2087,13 +2124,15 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
                   <TableCell className="text-white/70 whitespace-nowrap">{shifts.find(s => s.id === e.shiftId)?.name || "N/A"}</TableCell>
                   <TableCell className="text-white/70 font-mono whitespace-nowrap">{e.leaveQuota || 0} Hari</TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
-                    {e.role !== 'superadmin' || currentUser?.role === 'superadmin' ? (
-                      <>
-                        <Button variant="ghost" size="icon" onClick={() => triggerEdit(e)} className="hover:bg-white/10"><Edit className="w-4 h-4 text-primary" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleEmployeeDelete(e)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
-                      </>
+                    <Button variant="ghost" size="icon" onClick={() => triggerEdit(e)} className="hover:bg-white/10">
+                      <Edit className="w-4 h-4 text-primary" />
+                    </Button>
+                    {e.role === 'superadmin' && currentUser?.role !== 'superadmin' ? (
+                      <span className="text-[9px] text-white/20 italic px-2">Protected</span>
                     ) : (
-                      <span className="text-xs text-white/20 italic">Locked</span>
+                      <Button variant="ghost" size="icon" onClick={() => handleEmployeeDelete(e)} className="hover:bg-white/10">
+                        <Trash2 className="w-4 h-4 text-rose-500" />
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
@@ -2849,7 +2888,7 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
   };
 
   const handleDownloadQuota = () => {
-    const data = employees.filter(e => e.role !== 'superadmin').map(e => {
+    const data = employees.map(e => {
         const currentQuota = calculateEffectiveQuota(e.id, selectedPeriod, periodOptions, controls, quotas, leaveRequests);
         
         const usedRequests = leaveRequests.filter(a => a.employeeId === e.id && a.period === selectedPeriod);
@@ -2939,7 +2978,7 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.filter(e => e.role !== 'superadmin').map(e => {
+              {employees.map(e => {
                 const currentQuota = calculateEffectiveQuota(e.id, selectedPeriod, periodOptions, controls, quotas, leaveRequests);
                 
                 // Calculate used quota from 'leaveRequests' collection using unique dates logic
@@ -4161,10 +4200,10 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
         <CardContent>
           <div className="flex flex-wrap gap-2">
             {employees
-              .filter(e => (e.division || 'Depan') === selectedDivision && e.role !== 'superadmin' && e.role !== 'admin' && !requests.some(r => r.employeeId === e.id))
+              .filter(e => (e.division || 'Depan') === selectedDivision && e.role !== 'admin' && !requests.some(r => r.employeeId === e.id))
               .length > 0 ? (
                 employees
-                  .filter(e => (e.division || 'Depan') === selectedDivision && e.role !== 'superadmin' && e.role !== 'admin' && !requests.some(r => r.employeeId === e.id))
+                  .filter(e => (e.division || 'Depan') === selectedDivision && e.role !== 'admin' && !requests.some(r => r.employeeId === e.id))
                   .map(e => (
                     <Badge key={e.id} variant="outline" className="border-rose-500/30 text-rose-400 bg-rose-500/10 py-1.5 px-3">
                       {e.name}
