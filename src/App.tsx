@@ -318,6 +318,7 @@ const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
 };
 
 // Admin Authentication is now handle via Employee roles
+import { useAutoLogout } from './hooks/useAutoLogout';
 
 import { 
   onAuthStateChanged,
@@ -364,7 +365,10 @@ export default function App() {
       setLoading(false);
     }, (err) => {
       console.error("Employee snapshot error:", err);
-      setAuthError("Gagal memuat data. Mohon cek koneksi atau database.");
+      // Suppress permission errors, assuming app handles login/auth state dynamically
+      if (err instanceof Error && !err.message.includes('permission-denied')) {
+        setAuthError("Gagal memuat data. Mohon cek koneksi atau database.");
+      }
     });
 
     const unsubShifts = onSnapshot(collection(db, 'shifts'), (snapshot) => {
@@ -437,6 +441,8 @@ export default function App() {
     localStorage.removeItem('jg1_user');
     localStorage.removeItem('jg1_isAdmin');
   };
+
+  useAutoLogout(currentUser, handleLogout);
 
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50">
@@ -986,11 +992,14 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
           photoUrl: photoData || "",
         });
 
-        if (!attendance && action === 'checkIn') {
-          if (!selectedShiftId) {
-             setIsProcessing(false);
-             return alert("Pilih shift terlebih dahulu!");
+        if (action === 'checkIn') {
+          if (attendance) return alert("Anda sudah melakukan check-in hari ini.");
+          if (!selectedShiftId) return alert("Pilih shift terlebih dahulu!");
+          if (new Date().getDay() === 0) {
+            const dayOffShift = shifts.find(s => s.name.toLowerCase().replace(/\s/g, '') === 'dayoff');
+            if (selectedShiftId !== dayOffShift?.id) return alert("Hari Minggu hanya boleh shift Dayoff!");
           }
+          
           await addDoc(collection(db, 'attendance'), {
             employeeId: employee.id,
             employeeName: employee.name,
@@ -1002,14 +1011,32 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
             photoUrl: photoData || "",
             updatedAt: serverTimestamp()
           });
-        } else if (attendance) {
-          await updateDoc(doc(db, 'attendance', attendance.id), {
-            [action]: time,
-            location: location || (pendingAction?.location || attendance.location || ""),
-            photoUrl: photoData || (attendance.photoUrl || ""),
-            updatedAt: serverTimestamp()
-          });
+        } else if (action === 'breakStart') {
+          if (!attendance) return alert("Silakan check-in terlebih dahulu!");
+          if (attendance.breakStart) return alert("Anda sudah mulai istirahat.");
+          
+          const payload = { breakStart: time };
+          await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
+          setAttendance({ ...attendance, ...payload } as Attendance);
+        } else if (action === 'breakEnd') {
+          if (!attendance) return alert("Silakan check-in terlebih dahulu!");
+          if (!attendance.breakStart) return alert("Anda belum mulai istirahat.");
+          if (attendance.breakEnd) return alert("Anda sudah selesai istirahat.");
+          
+          const payload = { breakEnd: time };
+          await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
+          setAttendance({ ...attendance, ...payload } as Attendance);
+        } else if (action === 'checkOut') {
+          if (!attendance) return alert("Silakan check-in terlebih dahulu!");
+          if (!!attendance.breakStart && !attendance.breakEnd) return alert("Selesaikan istirahat terlebih dahulu!");
+          if (!attendance.breakStart || !attendance.breakEnd) return alert("Istirahat wajib dilakukan (mulai dan selesai).");
+          if (attendance.checkOut) return alert("Anda sudah check-out hari ini.");
+          
+          const payload = { checkOut: time };
+          await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
+          setAttendance({ ...attendance, ...payload } as Attendance);
         }
+        
         setStatusMessage("Berhasil!");
     } catch (e) {
         setStatusMessage("Gagal menyimpan data!");
@@ -2551,11 +2578,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
       });
 
       if (hasDuplicateDate) {
-        toast({
-          title: "Gagal memindah",
-          description: "Karyawan sudah memiliki jadwal libur di tanggal ini.",
-          variant: "destructive"
-        });
+        alert("Gagal memindah: Karyawan sudah memiliki jadwal libur di tanggal ini.");
         return;
       }
     }
@@ -4605,11 +4628,6 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
     const uniqueSelectedDates = new Set(selectedDates);
     if (uniqueSelectedDates.size !== selectedDates.length) {
       return alert("Anda memilih tanggal yang sama lebih dari sekali. Silakan pilih tanggal yang berbeda.");
-    }
-
-    const overlap = selectedDates.find((d: string) => uniqueUsedDates.has(d));
-    if (overlap) {
-      return alert(`Tanggal ${overlap} sudah diajukan libur sebelumnya. Silakan pilih tanggal lain.`);
     }
 
     const maxDays = periodControl?.maxDaysPerRequest || 6;
