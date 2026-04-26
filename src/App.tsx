@@ -33,6 +33,18 @@ import { format, startOfDay, endOfDay, isAfter, isBefore, parse, eachDayOfInterv
 import { id } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import { 
+  DndContext, 
+  DragEndEvent, 
+  useDraggable, 
+  useDroppable,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects
+} from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
+import { 
   Music,
   User, 
   Clock, 
@@ -2281,6 +2293,85 @@ function AdminSections({ sections, divisions }: { sections: Section[], divisions
 }
 
 // --- ADMIN: JADWAL LIBUR CHART ---
+function DraggableLeaveBadge({ 
+  request, 
+  dateStr, 
+  isSunday, 
+  getNickname, 
+  getSectionInitials,
+  disabled
+}: { 
+  request: LeaveRequest, 
+  dateStr: string, 
+  isSunday: boolean,
+  getNickname: (id: string, name: string) => string,
+  getSectionInitials: (id: string) => string,
+  disabled?: boolean,
+  key?: string
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `${request.id}|${dateStr}`,
+    disabled,
+    data: { request, dateStr }
+  });
+
+  const style = transform ? {
+    transform: CSS.Translate.toString(transform),
+    zIndex: 999
+  } : undefined;
+
+  return (
+    <motion.div 
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      initial={{ opacity: 0, x: -5 }}
+      animate={{ opacity: 1, x: 0 }}
+      className={`text-[9px] md:text-[10px] p-2 rounded-lg font-bold truncate transition-transform hover:scale-[1.02] active:scale-95 shadow-sm cursor-grab active:cursor-grabbing ${
+        isDragging ? 'opacity-50 scale-105 shadow-xl ring-2 ring-primary bg-primary/20' : 
+        isSunday 
+          ? 'bg-rose-500/20 text-rose-100 border border-rose-500/20' 
+          : 'bg-white/5 text-white/90 border border-white/10 hover:border-primary/30 hover:bg-white/10'
+      } ${disabled ? 'cursor-default' : ''}`}
+    >
+      <span className="text-primary mr-1">●</span>
+      {getNickname(request.employeeId, request.employeeName)} 
+      <span className="ml-1 opacity-50 font-normal">{getSectionInitials(request.sectionId)}</span>
+    </motion.div>
+  );
+}
+
+function DroppableCell({ 
+  dateStr, 
+  children, 
+  isSunday, 
+  isToday 
+}: { 
+  dateStr: string, 
+  children: React.ReactNode, 
+  isSunday: boolean, 
+  isToday: boolean,
+  key?: string 
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: dateStr,
+  });
+
+  return (
+    <div 
+      ref={setNodeRef}
+      className={`min-h-[160px] border-r border-b border-white/10 last:border-r-0 flex flex-col group transition-all duration-300 ${
+        isOver ? 'bg-primary/20 scale-[0.98]' : 
+        isSunday ? 'bg-rose-500/[0.03]' : 
+        isToday ? 'bg-primary/[0.05]' : ''
+      } hover:bg-white/[0.05]`}
+    >
+      {children}
+    </div>
+  );
+}
+
 function AdminJadwalLibur({ employees, sections, divisions }: { employees: Employee[], sections: Section[], divisions: Division[] }) {
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
@@ -2288,6 +2379,15 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
   const [selectedDivision, setSelectedDivision] = useState<string>(divisions?.[0]?.name || "Marketing");
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
@@ -2326,6 +2426,44 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     });
     return unsub;
   }, [selectedPeriod]);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || !active) return;
+
+    const [requestId, originalDate] = active.id.toString().split('|');
+    const newDate = over.id.toString();
+
+    if (originalDate === newDate) return;
+
+    const request = leaveRequests.find(r => r.id === requestId);
+    if (!request) return;
+
+    const currentDates = request.dates || [request.date1, request.date2, request.date3, request.date4, request.date5, request.date6];
+    const newDates = currentDates.map(d => d === originalDate ? newDate : d);
+
+    try {
+      // Store original dates if not already present
+      const updateData: any = {
+        dates: newDates,
+        isModifiedByAdmin: true,
+        updatedAt: serverTimestamp()
+      };
+
+      // Also update individual date fields for backward compatibility
+      newDates.forEach((d, i) => {
+        if (d) updateData[`date${i + 1}`] = d;
+      });
+
+      if (!request.originalDates) {
+        updateData.originalDates = currentDates.filter(Boolean);
+      }
+
+      await updateDoc(doc(db, 'leaveRequests', requestId), updateData);
+    } catch (error) {
+      console.error("Error updating leave request position:", error);
+    }
+  };
 
   // Find initials for section. Max 4 letters.
   const getSectionInitials = (sectionId: string) => {
@@ -2381,7 +2519,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
       // We find the max employees in any day of this week
       const weekRequests = weekDates.map(date => {
         if (!date) return [];
-        const dateStr = format(date, 'yyyy-MM-dd');
+        const dateStr = date ? format(date, 'yyyy-MM-dd') : "";
         return dateMap[dateStr] || [];
       });
 
@@ -2391,7 +2529,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
         const empRow = weekRequests.map(reqs => {
           const req = reqs[r];
           if (!req) return "";
-          return `${getNickname(req.employeeId, req.employeeName)} ${getSectionInitials(req.sectionId)}`;
+          return `${getNickname(req.employeeId, req.employeeName || "")} ${getSectionInitials(req.sectionId)}`;
         });
         rows.push(empRow);
       }
@@ -2432,8 +2570,8 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
       <Card className="glass-panel border-none shadow-lg text-white">
         <CardHeader className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="w-full md:w-auto">
-            <CardTitle className="text-primary uppercase tracking-[0.2em] font-black text-xl flex items-center gap-3">
-              <div className="w-2 h-8 bg-primary rounded-full" />
+            <CardTitle className="text-primary uppercase tracking-[0.2em] font-black text-xl flex items-center gap-3 text-wrap">
+              <div className="w-2 h-8 bg-primary rounded-full shrink-0" />
               JADWAL LIBUR {selectedDivision}
             </CardTitle>
             <CardDescription className="text-white/50 text-xs mt-1">
@@ -2441,6 +2579,17 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 mr-2">
+              <Button 
+                onClick={() => setIsEditingSchedule(!isEditingSchedule)}
+                className={`h-8 px-3 text-[10px] font-bold rounded-lg transition-all ${
+                   isEditingSchedule ? 'bg-primary text-white shadow-lg' : 'bg-transparent text-white/40 hover:text-white'
+                }`}
+              >
+                {isEditingSchedule ? <Edit className="w-3 h-3 mr-2" /> : <Lock className="w-3 h-3 mr-2" />}
+                {isEditingSchedule ? 'SEDANG EDIT' : 'KUNCI JADWAL'}
+              </Button>
+            </div>
             <Select value={selectedDivision} onValueChange={setSelectedDivision}>
               <SelectTrigger className="w-full md:w-[150px] glass-panel border-white/10 text-white font-bold h-10">
                 <SelectValue placeholder="Divisi" />
@@ -2494,7 +2643,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
               </div>
             </div>
           ) : (
-            <>
+            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
               {(() => {
                 const startDate = startOfDay(activePeriod.start);
                 const endDate = endOfDay(activePeriod.end);
@@ -2526,43 +2675,38 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                         const requests = dateMap[dateStr] || [];
                         
                         return (
-                          <div key={dateStr} className={`min-h-[160px] border-r border-b border-white/10 last:border-r-0 flex flex-col group transition-all duration-300 hover:bg-white/[0.05] ${isSunday ? 'bg-rose-500/[0.03]' : ''} ${isToday ? 'bg-primary/[0.05]' : ''}`}>
+                          <DroppableCell key={dateStr} dateStr={dateStr} isSunday={isSunday} isToday={isToday}>
                             <div className={`p-3 flex items-center justify-between border-b border-white/[0.03] ${isToday ? 'bg-primary/20 text-white font-bold' : isSunday ? 'text-rose-400 font-bold' : 'text-white/60 font-medium'}`}>
                               <span className="text-[10px] opacity-40">{format(date, 'dd')}</span>
                               <span className="text-[9px] scale-90 origin-right">{format(date, 'MM/yy')}</span>
                             </div>
                             <div className="flex-1 p-2 space-y-1.5 overflow-y-auto no-scrollbar scroll-smooth">
                               {requests.map(r => (
-                                <motion.div 
-                                  initial={{ opacity: 0, x: -5 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  key={r.id} 
-                                  className={`text-[9px] md:text-[10px] p-2 rounded-lg font-bold truncate transition-transform hover:scale-[1.02] active:scale-95 shadow-sm ${
-                                    isSunday 
-                                      ? 'bg-rose-500/20 text-rose-100 border border-rose-500/20' 
-                                      : 'bg-white/5 text-white/90 border border-white/10 hover:border-primary/30 hover:bg-white/10'
-                                  }`}
-                                >
-                                  <span className="text-primary mr-1">●</span>
-                                  {getNickname(r.employeeId, r.employeeName)} 
-                                  <span className="ml-1 opacity-50 font-normal">{getSectionInitials(r.sectionId)}</span>
-                                </motion.div>
+                                <DraggableLeaveBadge 
+                                  key={`${r.id}-${dateStr}`} 
+                                  request={r} 
+                                  dateStr={dateStr} 
+                                  isSunday={isSunday}
+                                  getNickname={getNickname}
+                                  getSectionInitials={getSectionInitials}
+                                  disabled={!isEditingSchedule}
+                                />
                               ))}
                               {requests.length === 0 && !isToday && <div className="text-[8px] text-white/5 text-center mt-6 tracking-[0.2em] uppercase font-black">- Kosong -</div>}
                               {requests.length === 0 && isToday && <div className="text-[8px] text-primary/20 text-center mt-6 tracking-[0.2em] uppercase font-black">HARI INI</div>}
                             </div>
-                          </div>
+                          </DroppableCell>
                         );
                       })}
                     </div>
                   </div>
                 );
               })()}
-            </>
+            </DndContext>
           )}
           
           <div className="mt-8 flex flex-wrap justify-between items-center gap-6 glass-panel border-white/5 p-4 rounded-xl">
-            <div className="flex flex-wrap gap-6 text-[10px] text-white/40 font-bold tracking-widest uppercase">
+             <div className="flex flex-wrap gap-4 md:gap-6 text-[10px] text-white/40 font-bold tracking-widest uppercase">
               <div className="flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-white/10 border border-white/20" /> Hari Biasa
               </div>
@@ -2572,6 +2716,11 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
               <div className="flex items-center gap-3 text-primary">
                 <div className="w-2 h-2 rounded-full bg-primary/40 border border-primary" /> Hari Ini
               </div>
+              {isEditingSchedule && (
+                <div className="flex items-center gap-3 text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md animate-pulse">
+                  <Edit className="w-2.5 h-2.5" /> DRAG & DROP AKTIF
+                </div>
+              )}
             </div>
             <p className="text-[9px] text-white/20 italic font-medium">* Menampilkan data request status APPROVED & PENDING</p>
           </div>
@@ -4455,16 +4604,30 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                   </TableHeader>
                   <TableBody>
                     {currentRequests.map(r => (
-                      <TableRow key={r.id} className="border-white/5 hover:bg-white/5">
+                      <TableRow key={r.id} className={`border-white/5 hover:bg-white/5 ${r.isModifiedByAdmin ? 'bg-amber-500/5' : ''}`}>
                         <TableCell>
-                          <Badge variant="outline" className="border-none bg-emerald-500/20 text-emerald-400 capitalize">
-                            {r.status}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className="border-none bg-emerald-500/20 text-emerald-400 capitalize w-fit">
+                              {r.status}
+                            </Badge>
+                            {r.isModifiedByAdmin && (
+                              <Badge className="bg-amber-500 text-black text-[8px] px-1 py-0 font-black h-4 w-fit">
+                                DIRUBAH ADMIN
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-white/50 text-xs">{sections.find(s => s.id === r.sectionId)?.name || '-'}</TableCell>
                         <TableCell className="text-white/60 text-xs truncate max-w-[100px]" title={r.reason}>{r.reason}</TableCell>
-                        <TableCell className="text-emerald-400/80 font-bold text-xs">
-                          {(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).join(', ') || '-'}
+                        <TableCell className="text-emerald-400/80 font-bold text-xs relative group/date">
+                          <div className="flex flex-col">
+                            <span>{(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).join(', ') || '-'}</span>
+                            {r.isModifiedByAdmin && r.originalDates && (
+                              <span className="text-[9px] text-white/30 line-through">
+                                Asli: {r.originalDates.filter(Boolean).join(', ')}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

@@ -64,6 +64,8 @@ export interface LeaveRequest {
   date6?: string;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
+  isModifiedByAdmin?: boolean;
+  originalDates?: string[];
   createdAt: any;
 }
 
