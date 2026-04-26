@@ -408,7 +408,7 @@ export default function App() {
   };
 
   const handleAdminAuth = (employee: Employee, credential: string) => {
-    if (employee.role !== 'admin' && employee.role !== 'superadmin') {
+    if (employee.role !== 'admin' && employee.role !== 'superadmin' && employee.role !== 'spv') {
       alert("Maaf kamu bukan admin!");
       return;
     }
@@ -654,16 +654,16 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
                   />
                 </div>
 
-                {selectedAdmin && (selectedAdmin.role === 'admin' || selectedAdmin.role === 'superadmin') ? (
+                {selectedAdmin && (selectedAdmin.role === 'admin' || selectedAdmin.role === 'superadmin' || selectedAdmin.role === 'spv') ? (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex flex-col items-center gap-1"
                   >
-                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">{selectedAdmin.role === 'superadmin' ? 'Super Admin' : 'Admin'} Terdeteksi</span>
+                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">{selectedAdmin.role === 'superadmin' ? 'Super Admin' : selectedAdmin.role === 'spv' ? 'Supervisor' : 'Admin'} Terdeteksi</span>
                     <span className="text-lg font-black text-white">{selectedAdmin.name}</span>
                   </motion.div>
-                ) : (adminAbsenId && selectedAdmin && selectedAdmin.role !== 'admin' && selectedAdmin.role !== 'superadmin') ? (
+                ) : (adminAbsenId && selectedAdmin && selectedAdmin.role !== 'admin' && selectedAdmin.role !== 'superadmin' && selectedAdmin.role !== 'spv') ? (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -671,11 +671,11 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
                   >
                     <AlertCircle className="w-6 h-6 text-rose-400 mb-1" />
                     <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Akses Ditolak</span>
-                    <span className="text-sm font-semibold text-white/80">Maaf, Anda bukan Admin.</span>
+                    <span className="text-sm font-semibold text-white/80">Maaf, Anda bukan Admin/Supervisor.</span>
                   </motion.div>
                 ) : null}
 
-                {selectedAdmin && (selectedAdmin.role === 'admin' || selectedAdmin.role === 'superadmin') && (
+                {selectedAdmin && (selectedAdmin.role === 'admin' || selectedAdmin.role === 'superadmin' || selectedAdmin.role === 'spv') && (
                   <motion.div 
                     initial={{ opacity: 0, height: 0 }} 
                     animate={{ opacity: 1, height: 'auto' }} 
@@ -1577,10 +1577,10 @@ function AdminDashboard({
     }
   }, [isSuper]);
 
-  const [activeTab, setActiveTab] = useState('employees');
+  const [activeTab, setActiveTab] = useState(currentUser?.role === 'spv' ? 'live' : 'employees');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  const menuGroups = [
+  const rawMenuGroups = [
     {
       label: 'Kelola Karyawan',
       items: [
@@ -1618,6 +1618,16 @@ function AdminDashboard({
       ]
     }
   ];
+
+  const menuGroups = rawMenuGroups.map(g => {
+    if (currentUser?.role === 'spv') {
+      return {
+        ...g,
+        items: g.items.filter(i => ['live', 'leaves', 'jadwal'].includes(i.value))
+      }
+    }
+    return g;
+  }).filter(g => g.items.length > 0);
 
   const allMenuItems = menuGroups.flatMap(g => g.items);
 
@@ -1864,7 +1874,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
             pin: row["No Absen"].toString(),
             shiftId: shift?.id || "",
             division: row["Divisi"] || 'Depan',
-            role: (currentUser?.role === 'superadmin' && row["Hak Akses"] === 'admin' ? 'admin' : 'employee'),
+            role: (currentUser?.role === 'superadmin' && row["Hak Akses"] === 'admin' ? 'admin' : (row["Hak Akses"] === 'spv' || row["Hak Akses"] === 'SPV') ? 'spv' : 'employee'),
             leaveQuota: parseInt(row["Kuota Libur"]) || 4,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -2072,6 +2082,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
                   <SelectTrigger className="field-input text-white border-white/10"><SelectValue placeholder="Pilih Hak Akses" /></SelectTrigger>
                   <SelectContent className="glass-panel border-white/10 text-white">
                     <SelectItem value="employee" className="hover:bg-white/10">Karyawan</SelectItem>
+                    <SelectItem value="spv" className="hover:bg-white/10">SPV</SelectItem>
                     {currentUser?.role === 'superadmin' && (
                       <>
                         <SelectItem value="admin" className="hover:bg-white/10">Administrator</SelectItem>
@@ -3061,20 +3072,13 @@ function AdminPeriods() {
     }, { merge: true });
   };
 
-  const updateSchedule = async (periodId: string, openDate: string, openTime: string, deadlineDate: string, deadlineTime: string, maxRequestsPerDay?: number, maxAccumulatedLeave?: number, maxDaysPerRequest?: number, name?: string) => {
-    // Need to get the current control data to provide defaults if not provided in arguments
-    const currentCtrl = controls[periodId] || {};
-    
+  const updateSchedule = async (periodId: string, openDate: string, openTime: string, deadlineDate: string, deadlineTime: string) => {
     await setDoc(doc(db, 'periodControls', periodId), {
       status: 'scheduled',
       openDate,
       openTime,
       deadlineDate,
       deadlineTime,
-      maxRequestsPerDay: maxRequestsPerDay ?? currentCtrl.maxRequestsPerDay ?? 7,
-      maxAccumulatedLeave: maxAccumulatedLeave ?? currentCtrl.maxAccumulatedLeave ?? 6,
-      maxDaysPerRequest: maxDaysPerRequest ?? currentCtrl.maxDaysPerRequest ?? 6,
-      name: name ?? currentCtrl.name ?? '',
       updatedAt: serverTimestamp()
     }, { merge: true });
   };
@@ -5505,103 +5509,6 @@ function EditTimeField({ label, current, onSave }: { label: string, current: any
 }
 
 // Helpers
-function ScheduleSettings({ ctrl, pValue, onUpdate }) {
-  const [local, setLocal] = useState({
-    openDate: ctrl.openDate || '',
-    openTime: ctrl.openTime || '08:00',
-    deadlineDate: ctrl.deadlineDate || '',
-    deadlineTime: ctrl.deadlineTime || '17:00',
-    maxRequestsPerDay: ctrl.maxRequestsPerDay || 7,
-    maxAccumulatedLeave: ctrl.maxAccumulatedLeave || 6,
-    maxDaysPerRequest: ctrl.maxDaysPerRequest || 6,
-    name: ctrl.name || ''
-  });
-
-  useEffect(() => {
-     setLocal({
-        openDate: ctrl.openDate || '',
-        openTime: ctrl.openTime || '08:00',
-        deadlineDate: ctrl.deadlineDate || '',
-        deadlineTime: ctrl.deadlineTime || '17:00',
-        maxRequestsPerDay: ctrl.maxRequestsPerDay || 7,
-        maxAccumulatedLeave: ctrl.maxAccumulatedLeave || 6,
-        maxDaysPerRequest: ctrl.maxDaysPerRequest || 6,
-        name: ctrl.name || ''
-     })
-  }, [ctrl.openDate, ctrl.openTime, ctrl.deadlineDate, ctrl.deadlineTime, ctrl.maxRequestsPerDay, ctrl.maxAccumulatedLeave, ctrl.maxDaysPerRequest, ctrl.name]);
-
-  return (
-    <div className="space-y-3">
-        <div className="space-y-1">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Buka</Label>
-          <Input type="date" value={local.openDate} onChange={(e) => setLocal({...local, openDate: e.target.value})} className="field-input h-9 text-white" />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Jam Buka</Label>
-          <Input type="time" value={local.openTime} onChange={(e) => setLocal({...local, openTime: e.target.value})} className="field-input h-9 text-white" />
-        </div>
-        <div className="space-y-1 mt-2">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Tanggal Penutupan</Label>
-          <Input type="date" value={local.deadlineDate} onChange={(e) => setLocal({...local, deadlineDate: e.target.value})} className="field-input h-9 text-white" />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Jam Penutupan</Label>
-          <Input type="time" value={local.deadlineTime} onChange={(e) => setLocal({...local, deadlineTime: e.target.value})} className="field-input h-9 text-white" />
-        </div>
-        
-        {ctrl.status === 'scheduled' && local.deadlineDate && local.openDate && (
-          <div className="bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-            <p className="text-[10px] text-amber-400 italic">
-              Buka: <span className="font-bold">{local.openDate} pkl {local.openTime}</span>
-              <br/>
-              Tutup: <span className="font-bold">{local.deadlineDate} pkl {local.deadlineTime}</span>
-            </p>
-          </div>
-        )}
-        
-        <div className="pt-2 border-t border-white/5 space-y-1">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Request Per Hari</Label>
-          <div className="flex items-center gap-2">
-            <Input type="number" value={local.maxRequestsPerDay} onChange={(e) => setLocal({...local, maxRequestsPerDay: parseInt(e.target.value) || 7})} className="field-input h-9 text-white w-20" />
-            <span className="text-[10px] text-white/30 italic">Orang / Hari</span>
-          </div>
-        </div>
-
-        <div className="pt-2 border-t border-white/5 space-y-1">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Tabungan Libur</Label>
-          <div className="flex items-center gap-2">
-            <Input type="number" value={local.maxAccumulatedLeave} onChange={(e) => setLocal({...local, maxAccumulatedLeave: parseInt(e.target.value) || 6})} className="field-input h-9 text-white w-20" />
-            <span className="text-[10px] text-white/30 italic">Hari / Periode</span>
-          </div>
-        </div>
-        
-        <div className="pt-2 border-t border-white/5 space-y-1">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Maks Ambil Libur</Label>
-          <div className="flex items-center gap-2">
-            <Input type="number" value={local.maxDaysPerRequest} onChange={(e) => setLocal({...local, maxDaysPerRequest: parseInt(e.target.value) || 6})} className="field-input h-9 text-white w-20" />
-            <span className="text-[10px] text-white/30 italic">Hari / User</span>
-          </div>
-        </div>
-
-        <div className="pt-2 border-t border-white/5 space-y-1">
-          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">Custom Nama Periode</Label>
-          <Input value={local.name} onChange={(e) => setLocal({...local, name: e.target.value})} className="field-input h-9 text-white" />
-        </div>
-        
-        <Button 
-          className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold" 
-          size="sm"
-          onClick={async () => {
-             if (!local.deadlineDate || !local.openDate) return alert("Pilih tanggal buka dan penutupan terlebih dahulu!");
-             await onUpdate(pValue, local.openDate, local.openTime, local.deadlineDate, local.deadlineTime, local.maxRequestsPerDay, local.maxAccumulatedLeave, local.maxDaysPerRequest, local.name);
-             alert("Jadwal dan pengaturan batas waktu telah disimpan!");
-          }}
-        >
-          Simpan Semua Pengaturan
-        </Button>
-    </div>
-  )
-}
 
 function LocalInput({ value, type = "text", placeholder, className, onSave }: { value: string | number, type?: string, placeholder?: string, className?: string, onSave: (v: string) => void }) {
 

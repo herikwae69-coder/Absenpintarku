@@ -15,7 +15,7 @@ export interface Employee {
   nickname?: string;
   pin: string;
   password?: string;
-  role: 'admin' | 'employee' | 'superadmin';
+  role: 'admin' | 'employee' | 'superadmin' | 'spv';
   isActive?: boolean;
   shiftId: string;
   division: string;
