@@ -180,8 +180,14 @@ const calculateEffectiveQuota = (
     const uniqueDates = new Set<string>();
     usedRequests.forEach(r => {
       const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
-      dArr.forEach(d => {
-        if (d) uniqueDates.add(d);
+      dArr.forEach((d, i) => {
+        if (d) {
+          if (d === 'TRASH' || d === 'WAITING') {
+            uniqueDates.add(`${r.id}-${d}-${i}`);
+          } else {
+            uniqueDates.add(d);
+          }
+        }
       });
     });
     const used = uniqueDates.size;
@@ -2379,7 +2385,8 @@ function DraggableLeaveBadge({
   isSunday, 
   getNickname, 
   getSectionInitials,
-  disabled
+  disabled,
+  dragId
 }: { 
   request: LeaveRequest, 
   dateStr: string, 
@@ -2387,10 +2394,11 @@ function DraggableLeaveBadge({
   getNickname: (id: string, name: string) => string,
   getSectionInitials: (id: string) => string,
   disabled?: boolean,
+  dragId?: string,
   key?: string
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `${request.id}|${dateStr}`,
+    id: dragId || `${request.id}|${dateStr}`,
     disabled,
     data: { request, dateStr }
   });
@@ -2429,12 +2437,14 @@ function DroppableCell({
   dateStr, 
   children, 
   isSunday, 
-  isToday 
+  isToday,
+  className
 }: { 
   dateStr: string, 
   children: React.ReactNode, 
   isSunday: boolean, 
   isToday: boolean,
+  className?: string,
   key?: string 
 }) {
   const { isOver, setNodeRef } = useDroppable({
@@ -2444,7 +2454,7 @@ function DroppableCell({
   return (
     <div 
       ref={setNodeRef}
-      className={`min-h-[160px] border-r border-b border-white/10 last:border-r-0 flex flex-col group transition-all duration-300 ${
+      className={className ? `${className} ${isOver ? 'bg-primary/20 scale-[0.98]' : ''}` : `min-h-[160px] border-r border-b border-white/10 last:border-r-0 flex flex-col group transition-all duration-300 ${
         isOver ? 'bg-primary/20 scale-[0.98]' : 
         isSunday ? 'bg-rose-500/[0.03]' : 
         isToday ? 'bg-primary/[0.05]' : ''
@@ -2519,13 +2529,21 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     const [requestId, originalDate] = active.id.toString().split('|');
     const newDate = over.id.toString();
 
-    if (originalDate === newDate) return;
+    if (originalDate === newDate && newDate !== 'TRASH') return;
 
     const request = leaveRequests.find(r => r.id === requestId);
     if (!request) return;
 
     const currentDates = request.dates || [request.date1, request.date2, request.date3, request.date4, request.date5, request.date6];
-    const newDates = currentDates.map(d => d === originalDate ? newDate : d);
+    
+    let replaced = false;
+    const newDates = currentDates.map(d => {
+      if (d === originalDate && !replaced) {
+        replaced = true;
+        return newDate;
+      }
+      return d;
+    }).filter(Boolean) as string[];
 
     try {
       // Store original dates if not already present
@@ -2535,18 +2553,54 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
         updatedAt: serverTimestamp()
       };
 
+      // Clear all date fields first for backward compatibility
+      for (let i = 1; i <= 6; i++) updateData[`date${i}`] = null;
+      
       // Also update individual date fields for backward compatibility
       newDates.forEach((d, i) => {
-        if (d) updateData[`date${i + 1}`] = d;
+        if (d && i < 6) updateData[`date${i + 1}`] = d;
       });
 
       if (!request.originalDates) {
         updateData.originalDates = currentDates.filter(Boolean);
       }
+      
+      if (newDate === 'TRASH' && newDates.length === 0) {
+        updateData.status = 'rejected';
+      }
 
       await updateDoc(doc(db, 'leaveRequests', requestId), updateData);
     } catch (error) {
       console.error("Error updating leave request position:", error);
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    try {
+      const trashRequests = leaveRequests.filter(r => (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).some(d => d === 'TRASH'));
+      if (trashRequests.length === 0) return;
+
+      const confirmDelete = window.confirm(`Anda yakin ingin menghapus permanen ${trashRequests.length} request libur dari tempat sampah? Kuota karyawan akan dikembalikan.`);
+      if (!confirmDelete) return;
+
+      const batchOps = trashRequests.map(r => {
+        const currentDates = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+        const newDArr = currentDates.filter(d => !!d && d !== 'TRASH') as string[];
+        const updateData: any = { dates: newDArr, updatedAt: serverTimestamp() };
+        for (let i = 1; i <= 6; i++) updateData[`date${i}`] = null;
+        newDArr.forEach((d, i) => { if (i < 6) updateData[`date${i + 1}`] = d; });
+        if (newDArr.length === 0) updateData.status = 'rejected';
+        return { ref: doc(db, 'leaveRequests', r.id), data: updateData };
+      });
+
+      for (const op of batchOps) {
+        await updateDoc(op.ref, op.data);
+      }
+      
+      alert('Tempat sampah berhasil dikosongkan. Kuota telah dikembalikan.');
+    } catch(err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat menghapus permanen.');
     }
   };
 
@@ -2641,12 +2695,14 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     rDates.forEach(d => {
       if (d) {
         if (!dateMap[d]) dateMap[d] = [];
-        if (!dateMap[d].some(r => r.employeeId === req.employeeId)) {
+        if (d === 'TRASH' || d === 'WAITING' || !dateMap[d].some(r => r.employeeId === req.employeeId)) {
           dateMap[d].push(req);
         }
       }
     });
   });
+
+  const hasPendingTrashOrWaiting = (dateMap['WAITING'] && dateMap['WAITING'].length > 0) || (dateMap['TRASH'] && dateMap['TRASH'].length > 0);
 
   const activePeriod = periodOptions.find(p => p.value === selectedPeriod);
 
@@ -2666,7 +2722,12 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 mr-2">
               <Button 
-                onClick={() => setIsEditingSchedule(!isEditingSchedule)}
+                onClick={() => {
+                  if (isEditingSchedule && hasPendingTrashOrWaiting) {
+                    return alert("Masih ada request di Kotak Tunggu atau Tempat Sampah. Harap diproses sebelum mengunci jadwal.");
+                  }
+                  setIsEditingSchedule(!isEditingSchedule);
+                }}
                 className={`h-8 px-3 text-[10px] font-bold rounded-lg transition-all ${
                    isEditingSchedule ? 'bg-primary text-white shadow-lg' : 'bg-transparent text-white/40 hover:text-white'
                 }`}
@@ -2697,7 +2758,12 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
               </SelectContent>
             </Select>
             <Button 
-              onClick={handleExportExcel}
+              onClick={() => {
+                if (hasPendingTrashOrWaiting) {
+                  return alert("Jadwal belum sepenuhnya difinalisasi. Pastikan Kotak Tunggu dan Tempat Sampah kosong sebelum mendownload!");
+                }
+                handleExportExcel();
+              }}
               disabled={!activePeriod}
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold h-10 px-4 rounded-xl flex items-center gap-2 w-full md:w-auto shadow-lg shadow-emerald-900/20 transition-all"
               id="download-jadwal-btn"
@@ -2741,7 +2807,44 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                 days.forEach(d => calendarCells.push(d));
 
                 return (
-                  <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/40 backdrop-blur-md shadow-2xl">
+                  <div className="space-y-4">
+                    {isEditingSchedule && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <DroppableCell dateStr="WAITING" className="border-amber-500/30 bg-amber-500/5 min-h-[120px] rounded-2xl flex flex-col items-center justify-center border-dashed border-2" isSunday={false} isToday={false}>
+                           <div className="text-amber-500 flex flex-col items-center gap-2 mt-4 pointer-events-none">
+                             <Clock className="w-6 h-6" />
+                             <span className="text-[10px] uppercase tracking-widest font-bold">Kotak Tunggu</span>
+                           </div>
+                           <div className="w-full mt-4 flex flex-wrap gap-2 px-4 pb-4 justify-center">
+                              {(dateMap['WAITING'] || []).map((r, i) => (
+                                <DraggableLeaveBadge key={`${r.id}-WAITING-${i}`} dragId={`${r.id}|WAITING|${i}`} request={r} dateStr="WAITING" isSunday={false} getNickname={getNickname} getSectionInitials={getSectionInitials} disabled={!isEditingSchedule} />
+                              ))}
+                           </div>
+                        </DroppableCell>
+                        <DroppableCell dateStr="TRASH" className="border-rose-500/30 bg-rose-500/5 min-h-[120px] rounded-2xl flex flex-col items-center justify-center border-dashed border-2 relative group" isSunday={false} isToday={false}>
+                           <div className="text-rose-500 flex flex-col items-center gap-2 mt-4 pointer-events-none transition-transform duration-300">
+                             <Trash2 className="w-8 h-8 group-hover:scale-110 transition-transform" />
+                             <span className="text-[10px] uppercase tracking-widest font-bold mt-2">Tempat Sampah</span>
+                           </div>
+                           <div className="w-full mt-4 flex flex-wrap gap-2 px-4 pb-4 justify-center">
+                              {(dateMap['TRASH'] || []).map((r, i) => (
+                                <DraggableLeaveBadge key={`${r.id}-TRASH-${i}`} dragId={`${r.id}|TRASH|${i}`} request={r} dateStr="TRASH" isSunday={false} getNickname={getNickname} getSectionInitials={getSectionInitials} disabled={!isEditingSchedule} />
+                              ))}
+                           </div>
+                           {dateMap['TRASH'] && dateMap['TRASH'].length > 0 && (
+                             <Button 
+                               size="sm" 
+                               variant="destructive" 
+                               className="absolute bottom-4 right-4 shadow-lg text-[10px] uppercase font-bold tracking-wider" 
+                               onClick={handleEmptyTrash}
+                             >
+                               Hapus Permanen
+                             </Button>
+                           )}
+                        </DroppableCell>
+                      </div>
+                    )}
+                    <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/40 backdrop-blur-md shadow-2xl">
                     <div className="grid grid-cols-7 bg-white/5 border-b border-white/10">
                       {weekDays.map(wd => (
                         <div key={wd} className="p-4 text-center text-[10px] md:text-xs font-black text-white/40 tracking-widest border-r border-white/10 last:border-r-0 uppercase">
@@ -2766,9 +2869,10 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                               <span className="text-[9px] scale-90 origin-right">{format(date, 'MM/yy')}</span>
                             </div>
                             <div className="flex-1 p-2 space-y-1.5 overflow-y-auto no-scrollbar scroll-smooth">
-                              {requests.map(r => (
+                              {requests.map((r, i) => (
                                 <DraggableLeaveBadge 
-                                  key={`${r.id}-${dateStr}`} 
+                                  key={`${r.id}-${dateStr}-${i}`} 
+                                  dragId={`${r.id}|${dateStr}|${i}`}
                                   request={r} 
                                   dateStr={dateStr} 
                                   isSunday={isSunday}
@@ -2784,6 +2888,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                         );
                       })}
                     </div>
+                  </div>
                   </div>
                 );
               })()}
@@ -2906,8 +3011,14 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
         const uniqueDates = new Set<string>();
         usedRequests.forEach(r => {
           const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
-          dArr.forEach(d => {
-            if (d) uniqueDates.add(d);
+          dArr.forEach((d, i) => {
+            if (d) {
+              if (d === 'TRASH' || d === 'WAITING') {
+                uniqueDates.add(`${r.id}-${d}-${i}`);
+              } else {
+                uniqueDates.add(d);
+              }
+            }
           });
         });
         const usedLeave = uniqueDates.size;
@@ -2997,8 +3108,14 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
                 const uniqueDates = new Set<string>();
                 employeeRequests.forEach(r => {
                   const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
-                  dArr.forEach(d => {
-                    if (d) uniqueDates.add(d);
+                  dArr.forEach((d, i) => {
+                    if (d) {
+                      if (d === 'TRASH' || d === 'WAITING') {
+                        uniqueDates.add(`${r.id}-${d}-${i}`);
+                      } else {
+                        uniqueDates.add(d);
+                      }
+                    }
                   });
                 });
                 const usedLeave = uniqueDates.size;
