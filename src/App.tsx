@@ -38,6 +38,8 @@ import {
   useDraggable, 
   useDroppable,
   PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragOverlay,
@@ -2317,8 +2319,11 @@ function DraggableLeaveBadge({
 
   const style = transform ? {
     transform: CSS.Translate.toString(transform),
-    zIndex: 999
-  } : undefined;
+    zIndex: 999,
+    touchAction: 'none'
+  } : {
+    touchAction: 'none'
+  };
 
   return (
     <motion.div 
@@ -2382,9 +2387,11 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor),
+    useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 8,
+        delay: 250,
+        tolerance: 5,
       },
     })
   );
