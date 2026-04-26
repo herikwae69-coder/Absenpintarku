@@ -2386,7 +2386,8 @@ function DraggableLeaveBadge({
   getNickname, 
   getSectionInitials,
   disabled,
-  dragId
+  dragId,
+  displayDate
 }: { 
   request: LeaveRequest, 
   dateStr: string, 
@@ -2395,6 +2396,7 @@ function DraggableLeaveBadge({
   getSectionInitials: (id: string) => string,
   disabled?: boolean,
   dragId?: string,
+  displayDate?: string | null,
   key?: string
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -2429,6 +2431,9 @@ function DraggableLeaveBadge({
       <span className="text-primary mr-1">●</span>
       {getNickname(request.employeeId, request.employeeName)} 
       <span className="ml-1 opacity-50 font-normal">{getSectionInitials(request.sectionId)}</span>
+      {displayDate && !isNaN(new Date(displayDate).getTime()) && (
+        <span className="ml-2 px-1.5 py-0.5 rounded bg-black/40 text-[9px] font-mono opacity-80 whitespace-nowrap">{format(new Date(displayDate), 'dd MMM yy')}</span>
+      )}
     </motion.div>
   );
 }
@@ -2688,15 +2693,15 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
   };
 
   // Group requests by date
-  const dateMap: Record<string, LeaveRequest[]> = {};
+  const dateMap: Record<string, (LeaveRequest & { _dateIndex?: number })[]> = {};
   leaveRequests.forEach(req => {
     if (req.division !== selectedDivision) return;
     const rDates = req.dates || [req.date1, req.date2, req.date3, req.date4, req.date5, req.date6];
-    rDates.forEach(d => {
+    rDates.forEach((d, dateIndex) => {
       if (d) {
         if (!dateMap[d]) dateMap[d] = [];
         if (d === 'TRASH' || d === 'WAITING' || !dateMap[d].some(r => r.employeeId === req.employeeId)) {
-          dateMap[d].push(req);
+          dateMap[d].push({ ...req, _dateIndex: dateIndex });
         }
       }
     });
@@ -2817,7 +2822,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                            </div>
                            <div className="w-full mt-4 flex flex-wrap gap-2 px-4 pb-4 justify-center">
                               {(dateMap['WAITING'] || []).map((r, i) => (
-                                <DraggableLeaveBadge key={`${r.id}-WAITING-${i}`} dragId={`${r.id}|WAITING|${i}`} request={r} dateStr="WAITING" isSunday={false} getNickname={getNickname} getSectionInitials={getSectionInitials} disabled={!isEditingSchedule} />
+                                <DraggableLeaveBadge key={`${r.id}-WAITING-${i}`} dragId={`${r.id}|WAITING|${r._dateIndex}`} request={r} dateStr="WAITING" isSunday={false} getNickname={getNickname} getSectionInitials={getSectionInitials} disabled={!isEditingSchedule} displayDate={r.originalDates ? r.originalDates[r._dateIndex as number] : null} />
                               ))}
                            </div>
                         </DroppableCell>
@@ -2828,7 +2833,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                            </div>
                            <div className="w-full mt-4 flex flex-wrap gap-2 px-4 pb-4 justify-center">
                               {(dateMap['TRASH'] || []).map((r, i) => (
-                                <DraggableLeaveBadge key={`${r.id}-TRASH-${i}`} dragId={`${r.id}|TRASH|${i}`} request={r} dateStr="TRASH" isSunday={false} getNickname={getNickname} getSectionInitials={getSectionInitials} disabled={!isEditingSchedule} />
+                                <DraggableLeaveBadge key={`${r.id}-TRASH-${i}`} dragId={`${r.id}|TRASH|${r._dateIndex}`} request={r} dateStr="TRASH" isSunday={false} getNickname={getNickname} getSectionInitials={getSectionInitials} disabled={!isEditingSchedule} displayDate={r.originalDates ? r.originalDates[r._dateIndex as number] : null} />
                               ))}
                            </div>
                            {dateMap['TRASH'] && dateMap['TRASH'].length > 0 && (
@@ -2872,7 +2877,7 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
                               {requests.map((r, i) => (
                                 <DraggableLeaveBadge 
                                   key={`${r.id}-${dateStr}-${i}`} 
-                                  dragId={`${r.id}|${dateStr}|${i}`}
+                                  dragId={`${r.id}|${dateStr}|${r._dateIndex}`}
                                   request={r} 
                                   dateStr={dateStr} 
                                   isSunday={isSunday}
