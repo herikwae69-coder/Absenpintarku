@@ -32,6 +32,7 @@ import {
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse, eachDayOfInterval, startOfWeek, endOfWeek, getDay, addDays, isSameDay } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { generateBackupZip } from './lib/backupService';
+import { handleFirestoreError, OperationType } from './lib/firestoreUtils';
 import * as XLSX from 'xlsx';
 import { 
   DndContext, 
@@ -364,31 +365,19 @@ export default function App() {
     const unsubEmployees = onSnapshot(collection(db, 'employees'), (snapshot) => {
       setEmployees(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Employee)));
       setLoading(false);
-    }, (err) => {
-      console.error("Employee snapshot error:", err);
-      // Suppress permission errors, assuming app handles login/auth state dynamically
-      if (err instanceof Error && !err.message.includes('permission-denied')) {
-        setAuthError("Gagal memuat data. Mohon cek koneksi atau database.");
-      }
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'employees'));
 
     const unsubShifts = onSnapshot(collection(db, 'shifts'), (snapshot) => {
       setShifts(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Shift)));
-    }, (err) => {
-      console.error("Shift snapshot error:", err);
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'shifts'));
 
     const unsubSections = onSnapshot(collection(db, 'sections'), (snapshot) => {
       setSections(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Section)));
-    }, (err) => {
-      console.error("Section snapshot error:", err);
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'sections'));
 
     const unsubDivisions = onSnapshot(collection(db, 'divisions'), (snapshot) => {
       setDivisions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Division)));
-    }, (err) => {
-      console.error("Division snapshot error:", err);
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'divisions'));
 
     return () => {
       unsubEmployees();
@@ -898,7 +887,7 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
         orderBy('date', 'desc')
      );
      // Filter by period logic will be applied in render based on start/end dates
-     const unsub = onSnapshot(q, (snap) => setHistory(snap.docs.map(d => ({id: d.id, ...d.data()} as Attendance))));
+     const unsub = onSnapshot(q, (snap) => setHistory(snap.docs.map(d => ({id: d.id, ...d.data()} as Attendance))), (err) => handleFirestoreError(err, OperationType.LIST, 'attendance_history'));
      return unsub;
   }, [employee.id]);
 
@@ -930,7 +919,7 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
           }
         }
       }
-    }, (err) => console.error("Employee attendance error:", err));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'employee_attendance_today'));
     return unsub;
   }, [employee.id, today, currentTime.getDay(), shifts]);
 
@@ -984,14 +973,18 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
     setConfirmAction(null);
     try {
         // Log to activityLogs for historical record
-        await addDoc(collection(db, 'activityLogs'), {
-          employeeId: employee.id,
-          employeeName: employee.name,
-          action,
-          timestamp: serverTimestamp(),
-          location: location || (pendingAction?.location || ""),
-          photoUrl: photoData || "",
-        });
+        try {
+          await addDoc(collection(db, 'activityLogs'), {
+            employeeId: employee.id,
+            employeeName: employee.name,
+            action,
+            timestamp: serverTimestamp(),
+            location: location || (pendingAction?.location || ""),
+            photoUrl: photoData || "",
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, 'activityLogs');
+        }
 
         if (action === 'checkIn') {
           if (attendance) return alert("Anda sudah melakukan check-in hari ini.");
@@ -1001,32 +994,44 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
             if (selectedShiftId !== dayOffShift?.id) return alert("Hari Minggu hanya boleh shift Dayoff!");
           }
           
-          await addDoc(collection(db, 'attendance'), {
-            employeeId: employee.id,
-            employeeName: employee.name,
-            shiftId: selectedShiftId,
-            date: today,
-            checkIn: time,
-            status: 'present',
-            location: location || (pendingAction?.location || ""),
-            photoUrl: photoData || "",
-            updatedAt: serverTimestamp()
-          });
+          try {
+            await addDoc(collection(db, 'attendance'), {
+              employeeId: employee.id,
+              employeeName: employee.name,
+              shiftId: selectedShiftId,
+              date: today,
+              checkIn: time,
+              status: 'present',
+              location: location || (pendingAction?.location || ""),
+              photoUrl: photoData || "",
+              updatedAt: serverTimestamp()
+            });
+          } catch (err) {
+            handleFirestoreError(err, OperationType.CREATE, 'attendance');
+          }
         } else if (action === 'breakStart') {
           if (!attendance) return alert("Silakan check-in terlebih dahulu!");
           if (attendance.breakStart) return alert("Anda sudah mulai istirahat.");
           
           const payload = { breakStart: time };
-          await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
-          setAttendance({ ...attendance, ...payload } as Attendance);
+          try {
+            await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
+            setAttendance({ ...attendance, ...payload } as Attendance);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `attendance/${attendance.id}`);
+          }
         } else if (action === 'breakEnd') {
           if (!attendance) return alert("Silakan check-in terlebih dahulu!");
           if (!attendance.breakStart) return alert("Anda belum mulai istirahat.");
           if (attendance.breakEnd) return alert("Anda sudah selesai istirahat.");
           
           const payload = { breakEnd: time };
-          await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
-          setAttendance({ ...attendance, ...payload } as Attendance);
+          try {
+            await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
+            setAttendance({ ...attendance, ...payload } as Attendance);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `attendance/${attendance.id}`);
+          }
         } else if (action === 'checkOut') {
           if (!attendance) return alert("Silakan check-in terlebih dahulu!");
           if (!!attendance.breakStart && !attendance.breakEnd) return alert("Selesaikan istirahat terlebih dahulu!");
@@ -1034,8 +1039,12 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
           if (attendance.checkOut) return alert("Anda sudah check-out hari ini.");
           
           const payload = { checkOut: time };
-          await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
-          setAttendance({ ...attendance, ...payload } as Attendance);
+          try {
+            await updateDoc(doc(db, 'attendance', attendance.id), { ...payload, updatedAt: serverTimestamp() });
+            setAttendance({ ...attendance, ...payload } as Attendance);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `attendance/${attendance.id}`);
+          }
         }
         
         setStatusMessage("Berhasil!");
@@ -1512,7 +1521,7 @@ function AdminOfficeConfig() {
       if (snap.exists()) setConfig(snap.data());
       else setConfig({ lat: -6.2088, lng: 106.8456, radius: 100 });
       setLoading(false);
-    });
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'config/office'));
     return unsub;
   }, []);
 
@@ -1798,7 +1807,7 @@ function AdminMusic() {
         setMusicUrl(doc.data().url || '');
       }
       setLoading(false);
-    });
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'systemConfig/musicSettings'));
     return unsub;
   }, []);
 
@@ -4285,7 +4294,7 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
       where('division', '==', selectedDivision),
       orderBy('createdAt', 'desc')
     );
-    const unsub = onSnapshot(q, (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as LeaveRequest))), (err) => console.error("Admin leave error:", err));
+    const unsub = onSnapshot(q, (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as LeaveRequest))), (err) => handleFirestoreError(err, OperationType.LIST, 'leaveRequests'));
     return unsub;
   }, [selectedPeriod, selectedDivision]);
 
@@ -5441,7 +5450,7 @@ function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Sh
       where('date', '<=', format(dateRange.end, 'yyyy-MM-dd')),
       orderBy('date', 'desc')
     );
-    const unsub = onSnapshot(q, (snap) => setAttendances(snap.docs.map(d => ({id: d.id, ...d.data()} as Attendance))), (err) => console.error("Reports attendance error:", err));
+    const unsub = onSnapshot(q, (snap) => setAttendances(snap.docs.map(d => ({id: d.id, ...d.data()} as Attendance))), (err) => handleFirestoreError(err, OperationType.LIST, 'attendance_reports'));
     return unsub;
   }, [dateRange]);
 

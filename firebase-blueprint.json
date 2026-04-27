@@ -115,6 +115,19 @@
       },
       "required": ["employeeId", "action", "timestamp"]
     },
+    "PeriodQuota": {
+      "title": "Period Quota",
+      "description": "Leave quota for an employee in a specific period.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "period": { "type": "string" },
+        "quota": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "period", "quota"]
+    },
     "OfficeConfig": {
       "title": "OfficeConfig",
       "description": "Office location and geofencing settings.",
@@ -155,6 +168,10 @@
     "/activityLogs/{logId}": {
       "schema": "ActivityLog",
       "description": "Granular activity logs for audit trails."
+    },
+    "/periodQuotas/{quotaId}": {
+      "schema": "PeriodQuota",
+      "description": "Leave quotas per employee and period."
     },
     "/config/office": {
       "schema": "OfficeConfig",

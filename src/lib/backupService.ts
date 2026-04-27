@@ -1,18 +1,29 @@
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import { db } from '../lib/firebase';
-import { collection, query, getDocs, where } from 'firebase/firestore';
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { collection, getDocs } from 'firebase/firestore';
+import { format, parseISO, isWithinInterval } from 'date-fns';
+import { handleFirestoreError, OperationType } from './firestoreUtils';
 
 export const generateBackupZip = async (startDate: Date, endDate: Date) => {
   // 1. Fetch Data
-  const [snapAttendance, snapManual, snapLeaves, snapQuotas, snapPeriods] = await Promise.all([
-    getDocs(collection(db, 'attendance')),
-    getDocs(collection(db, 'manualAttendance')),
-    getDocs(collection(db, 'leaveRequests')),
-    getDocs(collection(db, 'periodQuotas')),
-    getDocs(collection(db, 'periodControls'))
-  ]);
+  const collections = ['attendance', 'manualAttendance', 'leaveRequests', 'periodQuotas', 'periodControls'];
+  const fetchPromises = collections.map(async (name) => {
+    try {
+      return await getDocs(collection(db, name));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, name);
+      throw error;
+    }
+  });
+
+  let snapAttendance, snapManual, snapLeaves, snapQuotas, snapPeriods;
+  try {
+    [snapAttendance, snapManual, snapLeaves, snapQuotas, snapPeriods] = await Promise.all(fetchPromises);
+  } catch (error) {
+    // Error already handled in map
+    throw error;
+  }
 
   const attendanceData = snapAttendance.docs.map(doc => doc.data());
   const manualData = snapManual.docs.map(doc => doc.data());
