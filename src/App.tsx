@@ -1674,9 +1674,9 @@ function AdminDashboard({
   const allMenuItems = menuGroups.flatMap(g => g.items);
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-screen flex-col overflow-hidden bg-[#0A0F1E] w-full">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-screen flex-col overflow-hidden bg-background w-full">
       {/* Header with Integrated Menu */}
-      <header className="h-16 w-full glass-panel border-x-0 border-t-0 rounded-none px-4 md:px-8 flex items-center sticky top-0 z-30 bg-black/40 backdrop-blur-xl shrink-0 gap-4">
+      <header className="h-16 w-full glass-panel border-x-0 border-t-0 rounded-none px-4 md:px-8 flex items-center sticky top-0 z-30 bg-background/40 backdrop-blur-xl shrink-0 gap-4">
         <Dialog open={isMobileOpen} onOpenChange={setIsMobileOpen}>
           <DialogTrigger 
             render={
@@ -1685,7 +1685,7 @@ function AdminDashboard({
               </Button>
             }
           />
-          <DialogContent className="glass-panel text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl bg-[#0A0F1E]/95 border-[#0A0F1E]">
+          <DialogContent className="glass-panel text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl bg-background/95 border-border">
             <div className="flex items-center gap-3 mb-10 px-2">
               <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
                 <Settings className="w-5 h-5 text-primary" />
@@ -1732,8 +1732,8 @@ function AdminDashboard({
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 relative flex flex-col min-w-0 bg-[#0A0F1E] overflow-y-auto no-scrollbar">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0A0F1E] to-[#12182B] pointer-events-none" />
+      <main className="flex-1 relative flex flex-col min-w-0 bg-background/50 overflow-y-auto no-scrollbar">
+        <div className="absolute inset-0 bg-gradient-to-br from-background to-secondary/30 pointer-events-none" />
         
         {/* Content Area */}
         <div className="flex-1 p-4 md:p-8 relative z-0">
@@ -5014,9 +5014,9 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                 <Table>
                   <TableHeader>
                     <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
-                      <TableHead className="text-white/40 sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Nama</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tanggal Libur</TableHead>
-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Alasan</TableHead>
+                      <TableHead className="text-white/40 sticky top-0 bg-secondary/80 backdrop-blur-md">Nama</TableHead>
+                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-secondary/80 backdrop-blur-md">Tanggal Libur</TableHead>
+                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-secondary/80 backdrop-blur-md">Alasan</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -5241,7 +5241,7 @@ function AdminManualAttendance({ employees, divisions }: { employees: Employee[]
             </Button>
           } />
           <PopoverContent className="glass-panel border-white/20 p-0 shadow-2xl">
-            <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)} className="bg-[#0A0F1E]" />
+            <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)} className="bg-background/80" />
           </PopoverContent>
         </Popover>
 
