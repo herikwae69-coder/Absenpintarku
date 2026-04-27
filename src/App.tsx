@@ -80,7 +80,8 @@ import {
   MapPin,
   Camera,
   Map,
-  Locate
+  Locate,
+  X
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -509,7 +510,7 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
   const selectedAdmin = employees.find(e => String(e.pin || '').trim() === adminAbsenId.trim());
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center py-10 px-4 overflow-y-auto relative">
+    <div className="min-h-screen flex flex-col items-center justify-center py-10 px-4 overflow-x-hidden overflow-y-auto relative">
       {/* Decorative atmospheric elements */}
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[120px] rounded-full animate-pulse" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/10 blur-[100px] rounded-full" />
@@ -820,10 +821,27 @@ function BreakSlider({
   disabled: boolean 
 }) {
   const controls = useAnimation();
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [dragRight, setDragRight] = useState(260);
 
   useEffect(() => {
-    controls.start({ x: isBreak ? 260 : 0 });
-  }, [isBreak, controls]);
+    if (containerRef.current) {
+      const width = containerRef.current.offsetWidth;
+      setDragRight(width - 40); // 40 is button width
+    }
+    
+    const handleResize = () => {
+      if (containerRef.current) {
+        setDragRight(containerRef.current.offsetWidth - 40);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    controls.start({ x: isBreak ? dragRight : 0 });
+  }, [isBreak, controls, dragRight]);
 
   return (
     <div className={`relative h-14 rounded-full border border-white/10 transition-all overflow-hidden ${disabled ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}
@@ -832,21 +850,20 @@ function BreakSlider({
         {isBreak ? 'Geser ke kiri untuk Selesai' : 'Geser ke kanan untuk Istirahat'}
       </div>
       <div className="absolute inset-2 flex items-center">
-        <div className="relative w-full h-full">
+        <div ref={containerRef} className="relative w-full h-full">
            <motion.div
             drag="x"
-            dragConstraints={{ left: 0, right: 260 }} // Assume max drag 260px
+            dragConstraints={{ left: 0, right: dragRight }}
             dragElastic={0.1}
             onDragEnd={async (_, info) => {
               try {
-                if (!isBreak && info.offset.x > 150) {
+                if (!isBreak && info.offset.x > dragRight * 0.5) {
                   await onComplete();
-                } else if (isBreak && info.offset.x < -150) {
+                } else if (isBreak && info.offset.x < -(dragRight * 0.5)) {
                   await onComplete();
                 }
               } finally {
-                // Force snap back; if isBreak is actually changed by onComplete, useEffect overrides this seamlessly later
-                controls.start({ x: isBreak ? 260 : 0 });
+                controls.start({ x: isBreak ? dragRight : 0 });
               }
             }}
             animate={controls}
@@ -1096,7 +1113,7 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
   };
 
   return (
-    <div className="h-screen overflow-y-auto p-4 md:p-10">
+    <div className="h-screen overflow-x-hidden overflow-y-auto p-4 md:p-10">
       <div className="max-w-4xl mx-auto pb-20">
       {/* Change Password Dialog */}
       <Dialog open={showChangePass} onOpenChange={setShowChangePass}>
@@ -1148,7 +1165,7 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
         </DialogContent>
       </Dialog>
 
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
           <h2 className="text-3xl font-bold text-white tracking-tight">Halo, {employee.nickname || employee.name.split(' ')[0]}</h2>
           <p className="text-white/40 text-xs font-bold uppercase tracking-widest mt-1">
@@ -1162,17 +1179,17 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
             })()}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button 
             variant="outline" 
             size="sm" 
             onClick={() => setShowChangePass(true)} 
-            className="glass-panel text-white/60 hover:text-white hover:bg-white/10 rounded-xl flex gap-2 border-white/10 h-10 px-4"
+            className="glass-panel text-white/60 hover:text-white hover:bg-white/10 rounded-xl flex gap-2 border-white/10 h-10 px-4 flex-1 md:flex-none justify-center"
           >
-            <Lock className="w-4 h-4" /> Password
+            <Lock className="w-4 h-4 shrink-0" /> Password
           </Button>
-          <Button variant="outline" size="sm" onClick={onLogout} className="glass-panel text-white hover:bg-white/10 rounded-xl flex gap-2 border-white/10 h-10 px-4">
-            <LogOut className="w-4 h-4" /> Keluar
+          <Button variant="outline" size="sm" onClick={onLogout} className="glass-panel text-white hover:bg-white/10 rounded-xl flex gap-2 border-white/10 h-10 px-4 flex-1 md:flex-none justify-center">
+            <LogOut className="w-4 h-4 shrink-0" /> Keluar
           </Button>
         </div>
       </div>
@@ -1418,10 +1435,10 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
 
         <TabsContent value="riwayat" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
           <Card className="glass-panel border-none shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
               <CardTitle className="text-white">Riwayat Absensi</CardTitle>
               <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white">
+                <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white">
                   <SelectValue placeholder="Pilih Periode" />
                 </SelectTrigger>
                 <SelectContent className="glass-panel border-white/20 text-white">
@@ -4355,9 +4372,9 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
             <CardTitle className="text-white font-bold">Request Libur - Bagian {selectedDivision}</CardTitle>
             <CardDescription className="text-white/50">Daftar karyawan {selectedDivision} yang sudah mengajukan libur.</CardDescription>
           </div>
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white">
+              <SelectTrigger className="w-full sm:w-[200px] glass-panel border-white/10 text-white">
                 <SelectValue placeholder="Pilih Periode" />
               </SelectTrigger>
               <SelectContent className="glass-panel border-white/20 text-white">
@@ -4892,16 +4909,33 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                     {formData.dates.map((d, index) => (
                       <div className="grid gap-1.5" key={index}>
                         <Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Libur Ke-{index + 1}</Label>
-                        <Input 
-                          type="date" 
-                          value={d} 
-                          onChange={(e) => {
-                            const newDates = [...formData.dates];
-                            newDates[index] = e.target.value;
-                            setFormData({...formData, dates: newDates});
-                          }} 
-                          className="field-input text-xs" 
-                        />
+                        <div className="flex gap-2">
+                          <Input 
+                            type="date" 
+                            value={d} 
+                            onChange={(e) => {
+                              const newDates = [...formData.dates];
+                              newDates[index] = e.target.value;
+                              setFormData({...formData, dates: newDates});
+                            }} 
+                            className="field-input text-xs w-full" 
+                          />
+                          {d && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => {
+                                const newDates = [...formData.dates];
+                                newDates[index] = "";
+                                setFormData({...formData, dates: newDates});
+                              }}
+                              className="shrink-0 glass-panel border-white/10 text-rose-400 hover:text-rose-300 w-10 h-10"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ))}
                     <div className="grid gap-1.5 col-span-2">
