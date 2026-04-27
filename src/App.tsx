@@ -465,6 +465,7 @@ export default function App() {
         {view === 'employee' && currentUser && (
           <EmployeeView 
             employee={currentUser} 
+            employees={employees}
             shifts={shifts}
             sections={sections}
             divisions={divisions}
@@ -861,8 +862,9 @@ function BreakSlider({
 }
 
 // --- EMPLOYEE VIEW ---
-function EmployeeView({ employee, shifts, sections, divisions, onLogout }: { 
+function EmployeeView({ employee, employees, shifts, sections, divisions, onLogout }: { 
   employee: Employee, 
+  employees: Employee[],
   shifts: Shift[],
   sections: Section[],
   divisions: Division[],
@@ -1411,7 +1413,7 @@ function EmployeeView({ employee, shifts, sections, divisions, onLogout }: {
         </TabsContent>
 
         <TabsContent value="libur" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-          <EmployeeLeave employee={employee} sections={sections} />
+          <EmployeeLeave employee={employee} employees={employees} sections={sections} />
         </TabsContent>
 
         <TabsContent value="riwayat" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
@@ -4438,7 +4440,7 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
 }
 
 // --- EMPLOYEE: LEAVE REQUEST ---
-function EmployeeLeave({ employee, sections }: { employee: Employee, sections: Section[] }) {
+function EmployeeLeave({ employee, employees, sections }: { employee: Employee, employees: Employee[], sections: Section[] }) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
   const [periodControl, setPeriodControl] = useState<any>(null);
@@ -4815,10 +4817,10 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
         )}
       </AnimatePresence>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 glass-panel p-4 rounded-2xl border-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-4 glass-panel p-4 rounded-2xl border-white/5 bg-transparent">
         <div>
           <p className="text-xs text-white/40 font-bold uppercase tracking-widest mb-1">Divisi: <span className="text-primary">{employee.division || 'Depan'}</span> | Periode Aktif</p>
-          <div className="w-[300px] h-12 glass-panel border border-white/10 text-white font-bold flex items-center px-4 rounded-xl">
+          <div className="w-full sm:w-[300px] h-12 glass-panel border border-white/10 text-white font-bold flex items-center px-4 rounded-xl bg-transparent overflow-hidden text-ellipsis whitespace-nowrap">
              {selectedPeriod ? periodOptions.find(p => p.value === selectedPeriod)?.label || selectedPeriod : "Tidak ada periode aktif"}
           </div>
           {periodControl && (
@@ -5014,17 +5016,23 @@ function EmployeeLeave({ employee, sections }: { employee: Employee, sections: S
                     <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
                       <TableHead className="text-white/40 sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Nama</TableHead>
                       <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Tanggal Libur</TableHead>
+                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-[#0F172A]/80 backdrop-blur-md">Alasan</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentAllRequests.filter(r => r.employeeId !== employee.id).map(r => (
-                      <TableRow key={r.id} className="border-white/5 hover:bg-white/5">
-                        <TableCell className="font-semibold text-white/80">{r.employeeName}</TableCell>
-                        <TableCell className="text-emerald-400/80 font-bold text-[10px]">
-                          {(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).map(d => format(new Date(d), 'dd/MM')).join(', ') || '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {currentAllRequests.filter(r => r.employeeId !== employee.id).map(r => {
+                      const emp = employees.find(e => e.id === r.employeeId);
+                      const displayName = emp?.nickname || r.employeeName;
+                      return (
+                        <TableRow key={r.id} className="border-white/5 hover:bg-white/5">
+                          <TableCell className="font-medium text-white/80 text-[11px] whitespace-nowrap">{displayName}</TableCell>
+                          <TableCell className="text-emerald-400 font-bold text-[10px] whitespace-nowrap">
+                            {(r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).map(d => format(new Date(d), 'dd/MM')).join(', ') || '-'}
+                          </TableCell>
+                          <TableCell className="text-white/50 text-[10px] italic min-w-[80px]">{r.reason || '-'}</TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -5646,25 +5654,25 @@ function LocalInput({ value, type = "text", placeholder, className, onSave }: { 
 function StatCard({ label, value, icon, size = 'default' }: { label: string, value: number, icon: React.ReactNode, size?: 'default' | 'sm' }) {
   if (size === 'sm') {
     return (
-      <Card className="glass-panel border-none shadow-sm flex items-center px-4 py-2 gap-3 bg-white/5">
+      <Card className="glass-panel border-none shadow-sm flex flex-col items-center justify-center p-4 gap-2 bg-transparent">
         <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-sm border border-white/10">
           {icon}
         </div>
-        <div>
-          <p className="text-[8px] font-bold uppercase tracking-widest text-white/40 uppercase">{label}</p>
-          <p className="text-xl font-bold text-white tracking-tighter">{value}</p>
+        <div className="text-center">
+          <p className="text-[10px] font-bold text-white/60 uppercase tracking-tight">{label}</p>
+          <p className="text-xl font-bold text-white tracking-tighter leading-none">{value}</p>
         </div>
       </Card>
     );
   }
   return (
-    <Card className="glass-panel border-none shadow-sm flex items-center p-6 gap-6 bg-white/5">
-      <div className="w-12 h-12 rounded-2xl bg-white/10 shadow-sm flex items-center justify-center text-xl border border-white/10">
+    <Card className="glass-panel border-none shadow-xl flex items-center p-6 gap-6 bg-transparent">
+      <div className="w-14 h-14 rounded-2xl bg-white/10 shadow-inner flex items-center justify-center text-2xl border border-white/10">
         {icon}
       </div>
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-1">{label}</p>
-        <p className="text-4xl font-bold text-white tracking-tighter">{value}</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-white/50 mb-1">{label}</p>
+        <p className="text-5xl font-extrabold text-white tracking-tighter">{value}</p>
       </div>
     </Card>
   );
