@@ -935,18 +935,8 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
     if (action === 'checkIn' || action === 'checkOut' || action === 'breakEnd') {
       try {
         const position: any = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, (err) => {
-                if (err.code === err.TIMEOUT) {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {
-                        timeout: 5000,
-                        enableHighAccuracy: false,
-                        maximumAge: 300000
-                    });
-                } else {
-                    reject(err);
-                }
-            }, { 
-                timeout: 7000, 
+            navigator.geolocation.getCurrentPosition(resolve, reject, { 
+                timeout: 20000, 
                 enableHighAccuracy: true,
                 maximumAge: 60000 
             });
