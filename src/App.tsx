@@ -81,7 +81,9 @@ import {
   Camera,
   Map,
   Locate,
-  X
+  X,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -329,6 +331,21 @@ import {
 } from 'firebase/auth';
 
 export default function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
@@ -460,7 +477,9 @@ export default function App() {
           <LoginView 
             employees={employees} 
             onLogin={handleLogin} 
-            onAdminAuth={handleAdminAuth} 
+            onAdminAuth={handleAdminAuth}
+            theme={theme}
+            toggleTheme={toggleTheme}
           />
         )}
         {view === 'employee' && currentUser && (
@@ -471,6 +490,8 @@ export default function App() {
             sections={sections}
             divisions={divisions}
             onLogout={handleLogout} 
+            theme={theme}
+            toggleTheme={toggleTheme}
           />
         )}
         {view === 'admin' && isAdmin && (
@@ -481,6 +502,8 @@ export default function App() {
             divisions={divisions}
             onLogout={handleLogout} 
             currentUser={currentUser}
+            theme={theme}
+            toggleTheme={toggleTheme}
           />
         )}
       </div>
@@ -494,11 +517,37 @@ export default function App() {
   );
 }
 
+function ThemeToggle({ theme, toggleTheme, className }: { theme: 'light' | 'dark', toggleTheme: () => void, className?: string }) {
+  return (
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={toggleTheme}
+        className={`rounded-full w-10 h-10 border-border glass-panel hover:bg-accent text-foreground shadow-md transition-all duration-300 ${className || ""}`}
+        title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+      >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={theme}
+          initial={{ y: 10, opacity: 0, rotate: -90 }}
+          animate={{ y: 0, opacity: 1, rotate: 0 }}
+          exit={{ y: -10, opacity: 0, rotate: 90 }}
+          transition={{ duration: 0.2 }}
+        >
+          {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+        </motion.div>
+      </AnimatePresence>
+    </Button>
+  );
+}
+
 // --- LOGIN VIEW ---
-function LoginView({ employees, onLogin, onAdminAuth }: { 
+function LoginView({ employees, onLogin, onAdminAuth, theme, toggleTheme }: { 
   employees: Employee[], 
   onLogin: (e: Employee, pin: string) => void,
-  onAdminAuth: (e: Employee, pwd: string) => void
+  onAdminAuth: (e: Employee, pwd: string) => void,
+  theme: 'light' | 'dark',
+  toggleTheme: () => void
 }) {
   const [absenId, setAbsenId] = useState("");
   const [pin, setPin] = useState("");
@@ -511,9 +560,10 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center py-10 px-4 overflow-x-hidden overflow-y-auto relative">
+      <ThemeToggle theme={theme} toggleTheme={toggleTheme} className="fixed top-4 right-4 z-50" />
       {/* Decorative atmospheric elements */}
-      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/20 blur-[120px] rounded-full animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/10 blur-[100px] rounded-full" />
+      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/10 dark:bg-primary/20 blur-[120px] rounded-full animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 dark:bg-blue-500/10 blur-[100px] rounded-full" />
 
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
@@ -532,14 +582,14 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
             <div className="absolute inset-0 bg-primary/40 blur-[30px] rounded-full scale-110 animate-pulse" />
             
             {/* Cool glassy badge for JG1 */}
-            <div className="w-full h-full bg-gradient-to-br from-slate-900 via-black to-slate-800 rounded-[2rem] border border-white/10 shadow-2xl shadow-black/80 flex items-center justify-center relative overflow-hidden transition-transform duration-500 group-hover:scale-110 group-hover:-translate-y-2">
+            <div className="w-full h-full bg-linear-to-br from-card via-card to-secondary rounded-[2rem] border border-border shadow-2xl flex items-center justify-center relative overflow-hidden transition-transform duration-500 group-hover:scale-110 group-hover:-translate-y-2">
               {/* Glass reflection */}
               <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent rounded-t-[2rem]" />
               {/* Bottom colored accent light */}
               <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-primary blur-2xl rounded-full opacity-60" />
               
               <div className="relative z-10 flex items-baseline drop-shadow-2xl">
-                <span className="text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/60">
+                <span className="text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/60">
                   JG
                 </span>
                 <span className="relative text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-amber-400 to-orange-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)] ml-0.5">
@@ -554,7 +604,7 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="text-4xl md:text-5xl font-black tracking-tighter text-white mb-2 uppercase"
+            className="text-4xl md:text-5xl font-black tracking-tighter text-foreground mb-2 uppercase"
           >
             JENGGO 1 APP
           </motion.h1>
@@ -563,7 +613,7 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.4 }}
-            className="text-white/60 font-medium tracking-[0.2em] uppercase text-[10px] mb-1"
+            className="text-muted-foreground font-medium tracking-[0.2em] uppercase text-[10px] mb-1"
           >
             Demangan dalam genggaman
           </motion.p>
@@ -572,19 +622,19 @@ function LoginView({ employees, onLogin, onAdminAuth }: {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.5 }}
-            className="inline-block px-3 py-1 rounded-full bg-white/5 border border-white/10"
+            className="inline-block px-3 py-1 rounded-full bg-secondary/50 border border-border"
           >
-            <p className="text-white/60 italic text-[11px] tracking-wide">Only one click</p>
+            <p className="text-muted-foreground italic text-[11px] tracking-wide">Only one click</p>
           </motion.div>
         </div>
 
-        <Card className="glass-panel border border-white/10 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] overflow-hidden backdrop-blur-3xl bg-black/40">
+        <Card className="glass-panel border border-border shadow-2xl overflow-hidden backdrop-blur-3xl bg-card/60">
           <div className="h-1 w-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
           <CardHeader className="pb-4 pt-8 text-center">
-            <CardTitle className="text-white text-xl font-bold tracking-tight">
+            <CardTitle className="text-foreground text-xl font-bold tracking-tight">
               {showAdminLogin ? "Akses Administrator" : "Login Karyawan"}
             </CardTitle>
-            <CardDescription className="text-white/30 text-xs">
+            <CardDescription className="text-muted-foreground text-xs">
               {showAdminLogin ? "Silakan masukkan password admin" : "Masukkan No. Absen Anda"}
             </CardDescription>
           </CardHeader>
@@ -879,13 +929,15 @@ function BreakSlider({
 }
 
 // --- EMPLOYEE VIEW ---
-function EmployeeView({ employee, employees, shifts, sections, divisions, onLogout }: { 
+function EmployeeView({ employee, employees, shifts, sections, divisions, onLogout, theme, toggleTheme }: { 
   employee: Employee, 
   employees: Employee[],
   shifts: Shift[],
   sections: Section[],
   divisions: Division[],
-  onLogout: () => void 
+  onLogout: () => void,
+  theme: 'light' | 'dark',
+  toggleTheme: () => void
 }) {
   const [attendance, setAttendance] = useState<Attendance | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1117,7 +1169,7 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
       <div className="max-w-4xl mx-auto pb-20">
       {/* Change Password Dialog */}
       <Dialog open={showChangePass} onOpenChange={setShowChangePass}>
-        <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[400px]">
+        <DialogContent className="glass-panel text-foreground border-border sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle className="text-white">Ganti Password Dashboard</DialogTitle>
             <DialogDescription className="text-white/60">
@@ -1180,6 +1232,7 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
           <Button 
             variant="outline" 
             size="sm" 
@@ -1585,14 +1638,18 @@ function AdminDashboard({
   sections, 
   divisions,
   onLogout,
-  currentUser
+  currentUser,
+  theme,
+  toggleTheme
 }: { 
   employees: Employee[], 
   shifts: Shift[],
   sections: Section[],
   divisions: Division[],
   onLogout: () => void,
-  currentUser: Employee | null
+  currentUser: Employee | null,
+  theme: 'light' | 'dark',
+  toggleTheme: () => void
 }) {
   const isSuper = currentUser?.role === 'superadmin';
 
@@ -1707,7 +1764,7 @@ function AdminDashboard({
               <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
                 <Settings className="w-5 h-5 text-primary" />
               </div>
-              <span className="font-bold text-lg text-white">Menu Admin</span>
+              <span className="font-bold text-lg text-foreground">Menu Admin</span>
             </div>
             <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar">
               <TabsList className="flex flex-col h-auto bg-transparent w-full gap-6 items-stretch p-0">
@@ -1720,7 +1777,7 @@ function AdminDashboard({
                           key={item.value}
                           value={item.value} 
                           onClick={() => setIsMobileOpen(false)}
-                          className="w-full justify-start gap-4 h-11 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-semibold text-white/50 hover:text-white hover:bg-white/5"
+                          className="w-full justify-start gap-4 h-11 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-semibold text-muted-foreground hover:text-foreground hover:bg-accent"
                         >
                           <div className={`p-1.5 rounded-lg ${activeTab === item.value ? 'bg-primary/20 text-primary' : 'bg-white/5'}`}>
                             {item.icon}
@@ -1743,7 +1800,8 @@ function AdminDashboard({
 
         <span className="font-bold text-white tracking-tight text-lg">Panel Administrasi</span>
           
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <ThemeToggle theme={theme} toggleTheme={toggleTheme} className="h-9 w-9" />
           <Button variant="ghost" size="icon" onClick={onLogout} className="text-white/30 hover:text-white hover:bg-rose-500/10 rounded-full h-9 w-9"><LogOut className="w-4 h-4" /></Button>
         </div>
       </header>
@@ -2082,7 +2140,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
             />
             <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle className="text-white">{isEditing ? "Edit Karyawan" : "Tambah Karyawan Baru"}</DialogTitle>
+              <DialogTitle className="text-foreground">{isEditing ? "Edit Karyawan" : "Tambah Karyawan Baru"}</DialogTitle>
               <DialogDescription className="text-white/60">Masukkan informasi detail karyawan di bawah ini.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 py-4">
@@ -2190,7 +2248,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
                     {e.nickname && <div className="text-[10px] text-white/40 font-normal leading-tight">({e.nickname})</div>}
                   </TableCell>
                   <TableCell className="text-white/60 whitespace-nowrap">{e.division || '-'}</TableCell>
-                  <TableCell className="text-white/50 font-mono whitespace-nowrap">{e.pin}</TableCell>
+                  <TableCell className="text-muted-foreground font-mono whitespace-nowrap">{e.pin}</TableCell>
                   <TableCell className="text-white/70 whitespace-nowrap">{shifts.find(s => s.id === e.shiftId)?.name || "N/A"}</TableCell>
                   <TableCell className="text-white/70 font-mono whitespace-nowrap">{e.leaveQuota || 0} Hari</TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">

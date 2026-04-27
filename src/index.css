@@ -8,13 +8,117 @@
   --color-primary: #3b82f6;
   --color-primary-foreground: #FFFFFF;
 
-  --color-glass: rgba(255, 255, 255, 0.1);
-  --color-glass-border: rgba(255, 255, 255, 0.2);
+  --color-glass: var(--glass-bg);
+  --color-glass-border: var(--glass-border);
+}
+
+:root {
+    --background: hsl(210, 15%, 88%);
+    --foreground: hsl(222, 47%, 11%);
+    --card: hsl(210, 15%, 92%);
+    --card-foreground: hsl(222, 47%, 11%);
+    --popover: hsl(210, 15%, 92%);
+    --popover-foreground: hsl(222, 47%, 11%);
+    --primary: hsl(221.2, 83.2%, 53.3%);
+    --primary-foreground: hsl(210, 40%, 98%);
+    --secondary: hsl(210, 15%, 84%);
+    --secondary-foreground: hsl(222, 47.4%, 11.2%);
+    --muted: hsl(210, 15%, 84%);
+    --muted-foreground: hsl(215.4, 16.3%, 35%);
+    --accent: hsl(210, 15%, 84%);
+    --accent-foreground: hsl(222, 47.4%, 11.2%);
+    --destructive: hsl(0, 84.2%, 60.2%);
+    --border: rgba(0, 0, 0, 0.15);
+    --input: rgba(0, 0, 0, 0.15);
+    --ring: hsl(221.2, 83.2%, 53.3%);
+    --radius: 0.625rem;
+    --glass-bg: rgba(220, 227, 235, 0.75);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --glass-text: #0f172a;
+    --input-bg: rgba(200, 210, 220, 0.6);
+    --input-text: #0f172a;
+}
+
+.dark {
+    --background: hsl(222, 47%, 11%);
+    --foreground: hsl(210, 40%, 98%);
+    --card: hsl(222, 47%, 14%);
+    --card-foreground: hsl(210, 40%, 98%);
+    --popover: hsl(222, 47%, 11%);
+    --popover-foreground: hsl(210, 40%, 98%);
+    --primary: hsl(221.2, 83.2%, 53.3%);
+    --primary-foreground: hsl(210, 40%, 98%);
+    --secondary: hsl(217.2, 32.6%, 20%);
+    --secondary-foreground: hsl(210, 40%, 98%);
+    --muted: hsl(217.2, 32.6%, 20%);
+    --muted-foreground: hsl(215, 20.2%, 65.1%);
+    --accent: hsl(217.2, 32.6%, 20%);
+    --accent-foreground: hsl(210, 40%, 98%);
+    --destructive: hsl(0, 62.8%, 35%);
+    --border: rgba(255, 255, 255, 0.15);
+    --input: rgba(255, 255, 255, 0.15);
+    --ring: hsl(212.7, 26.8%, 83.9%);
+    --glass-bg: rgba(30, 41, 59, 0.5);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-text: #ffffff;
+    --input-bg: rgba(0, 0, 0, 0.2);
+    --input-text: #ffffff;
 }
 
 @layer base {
   body {
-    @apply text-white antialiased;
+    @apply bg-background text-foreground antialiased transition-colors duration-300;
+  }
+}
+
+@layer utilities {
+  /* Aggressive Light Mode Overrides */
+  :root:not(.dark) {
+    /* Set all common text colors that might be white to dark */
+    .text-white, 
+    .text-white\/100,
+    .text-white\/95,
+    .text-white\/90,
+    .text-white\/80,
+    .text-white\/75 {
+      color: var(--foreground) !important;
+    }
+    
+    .text-white\/70,
+    .text-white\/60,
+    .text-white\/50,
+    .text-white\/45 {
+      color: var(--muted-foreground) !important;
+    }
+
+    .text-white\/40, 
+    .text-white\/30,
+    .text-white\/20,
+    .text-white\/10 {
+      color: hsl(215.4, 16.3%, 45%) !important;
+    }
+
+    /* Set common white backgrounds to light gray tints */
+    .bg-white\/5, .bg-white\/10, .bg-white\/20 {
+      background-color: var(--secondary) !important;
+    }
+    
+    /* Set common white borders to slightly darker borders */
+    .border-white\/5, .border-white\/10, .border-white\/20 {
+      border-color: var(--border) !important;
+    }
+
+    /* Handle glass shadows */
+    .shadow-black\/80, .shadow-black\/50, .shadow-black\/40 {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+    }
+  }
+
+  .border-white\/10, .border-white\/20, .border-white\/5 {
+    border-color: var(--border);
+  }
+  .bg-white\/5, .bg-white\/10 {
+    background-color: var(--secondary);
   }
 }
 
@@ -24,41 +128,54 @@
   left: 0;
   width: 100%;
   height: 100%;
+  z-index: -1;
+  transition: background 0.5s ease;
+}
+
+:root .mesh-bg {
+  background: radial-gradient(circle at 10% 20%, hsl(210, 10%, 80%) 0%, transparent 40%),
+              radial-gradient(circle at 90% 80%, hsl(210, 10%, 75%) 0%, transparent 40%),
+              radial-gradient(circle at 50% 50%, hsl(210, 15%, 88%) 0%, hsl(210, 15%, 82%) 100%);
+}
+
+.dark .mesh-bg {
   background: radial-gradient(circle at 10% 20%, #2563eb 0%, transparent 40%),
               radial-gradient(circle at 90% 80%, #7c3aed 0%, transparent 40%),
               radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
-  z-index: -1;
 }
 
 .glass-panel {
-  background-color: rgba(30, 41, 59, 0.5);
+  background-color: var(--glass-bg);
   background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--glass-border);
   border-radius: 24px;
-  color: #ffffff;
+  color: var(--glass-text);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dark .glass-panel {
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
 /* Fallback for older browsers that don't handle glass well */
 @supports not (backdrop-filter: blur(16px)) {
   .glass-panel {
-    background-color: #1e293b;
+    background-color: var(--background);
   }
 }
 
 .field-input {
-  background: rgba(0, 0, 0, 0.2) !important;
-  border: 1px solid var(--color-glass-border) !important;
-  color: white !important;
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--input-text) !important;
 }
 
 .btn-masuk { background: linear-gradient(135deg, #10b981, #059669); }
 .btn-istirahat { background: linear-gradient(135deg, #f59e0b, #d97706); }
 .btn-selesai { background: linear-gradient(135deg, #3b82f6, #2563eb); }
 .btn-pulang { background: linear-gradient(135deg, #ef4444, #dc2626); }
-
 
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -107,49 +224,6 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-:root {
-    --background: hsl(222, 47%, 11%);
-    --foreground: hsl(210, 40%, 98%);
-    --card: hsl(222, 47%, 14%);
-    --card-foreground: hsl(210, 40%, 98%);
-    --popover: hsl(222, 47%, 11%);
-    --popover-foreground: hsl(210, 40%, 98%);
-    --primary: hsl(221.2, 83.2%, 53.3%);
-    --primary-foreground: hsl(210, 40%, 98%);
-    --secondary: hsl(217.2, 32.6%, 20%);
-    --secondary-foreground: hsl(210, 40%, 98%);
-    --muted: hsl(217.2, 32.6%, 20%);
-    --muted-foreground: hsl(215, 20.2%, 65.1%);
-    --accent: hsl(217.2, 32.6%, 20%);
-    --accent-foreground: hsl(210, 40%, 98%);
-    --destructive: hsl(0, 62.8%, 35%);
-    --border: rgba(255, 255, 255, 0.15);
-    --input: rgba(255, 255, 255, 0.15);
-    --ring: hsl(212.7, 26.8%, 83.9%);
-    --radius: 0.625rem;
-}
-
-.dark {
-    --background: hsl(222, 47%, 11%);
-    --foreground: hsl(210, 40%, 98%);
-    --card: hsl(222, 47%, 14%);
-    --card-foreground: hsl(210, 40%, 98%);
-    --popover: hsl(222, 47%, 11%);
-    --popover-foreground: hsl(210, 40%, 98%);
-    --primary: hsl(221.2, 83.2%, 53.3%);
-    --primary-foreground: hsl(210, 40%, 98%);
-    --secondary: hsl(217.2, 32.6%, 20%);
-    --secondary-foreground: hsl(210, 40%, 98%);
-    --muted: hsl(217.2, 32.6%, 20%);
-    --muted-foreground: hsl(215, 20.2%, 65.1%);
-    --accent: hsl(217.2, 32.6%, 20%);
-    --accent-foreground: hsl(210, 40%, 98%);
-    --destructive: hsl(0, 62.8%, 35%);
-    --border: rgba(255, 255, 255, 0.15);
-    --input: rgba(255, 255, 255, 0.15);
-    --ring: hsl(212.7, 26.8%, 83.9%);
 }
 
 @layer base {
