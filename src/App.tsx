@@ -88,6 +88,7 @@ import {
   Sun
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
+import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,7 +113,6 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import JSZip from 'jszip';
 import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance, ActivityLog } from './types';
@@ -433,17 +433,17 @@ export default function App() {
             localStorage.setItem('jg1_user', JSON.stringify(employee));
             localStorage.setItem('jg1_isAdmin', 'false');
         } else {
-            alert("Password Salah! (Default: 123456)");
+            customAlert("Password Salah! (Default: 123456)", "error");
         }
     } catch (e) {
         console.error("Login error:", e);
-        alert("Terjadi kesalahan saat login.");
+        customAlert("Terjadi kesalahan saat login.", "error");
     }
   };
 
   const handleAdminAuth = (employee: Employee, credential: string) => {
     if (employee.role !== 'admin' && employee.role !== 'superadmin' && employee.role !== 'spv') {
-      alert("Maaf kamu bukan admin!");
+      customAlert("Maaf kamu bukan admin!", "error");
       return;
     }
     const userPassword = employee.password || "123456";
@@ -454,7 +454,7 @@ export default function App() {
       localStorage.setItem('jg1_user', JSON.stringify(employee));
       localStorage.setItem('jg1_isAdmin', 'true');
     } else {
-      alert("Password Admin Salah!");
+      customAlert("Password Admin Salah!", "error");
     }
   };
 
@@ -482,14 +482,20 @@ export default function App() {
     const isSuccess = type === 'success';
     toast[type](message, {
       style: { 
-        fontSize: '20px', 
-        fontWeight: 'bold', 
-        padding: '24px',
-        backgroundColor: 'rgba(20, 20, 25, 0.95)',
+        fontSize: '28px', 
+        fontWeight: '900', 
+        padding: '40px',
+        maxWidth: '800px',
+        width: 'auto',
+        backgroundColor: 'rgba(15, 15, 20, 0.98)',
         color: '#fff',
-        border: `1px solid ${isSuccess ? '#10b981' : type === 'error' ? '#f43f5e' : '#3b82f6'}`
+        borderRadius: '30px',
+        boxShadow: '0 30px 60px -15px rgba(0, 0, 0, 0.8)',
+        border: `4px solid ${isSuccess ? '#10b981' : type === 'error' ? '#f43f5e' : '#3b82f6'}`,
+        letterSpacing: '-0.05em',
+        lineHeight: '1.1'
       },
-      duration: 5000
+      duration: 7000
     });
   }, []);
 
@@ -519,7 +525,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    window.alert = (msg) => customAlert(msg);
+    window.alert = (msg) => {
+      if (typeof msg === 'string' || typeof msg === 'number') {
+        customAlert(String(msg));
+      }
+    };
   }, [customAlert]);
 
   const [promptInput, setPromptInput] = useState("");
@@ -573,6 +583,7 @@ export default function App() {
             onAdminAuth={handleAdminAuth}
             theme={theme}
             toggleTheme={toggleTheme}
+            alert={customAlert}
           />
         )}
         {view === 'employee' && currentUser && (
@@ -609,22 +620,28 @@ export default function App() {
       
       {/* Custom Global Dialog */}
       <Dialog open={dialogConfig?.isOpen || false} onOpenChange={(open) => !open && handleDialogCancel()}>
-        <DialogContent className="glass-panel border-white/10 text-white min-w-[320px] max-w-[500px] p-8">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black mb-4 flex items-center gap-3">
-              <AlertCircle className="w-8 h-8 text-primary" />
+        <DialogContent className="glass-panel border-white/10 text-white min-w-[320px] max-w-[700px] p-12 md:p-16 overflow-hidden">
+          {/* Backlight effect */}
+          <div className="absolute -top-24 -left-24 w-64 h-64 bg-primary/20 blur-[100px] rounded-full" />
+          <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-500/10 blur-[100px] rounded-full" />
+          
+          <DialogHeader className="relative z-10">
+            <DialogTitle className="text-4xl md:text-5xl font-black mb-8 flex items-center gap-6 text-primary tracking-tighter">
+              <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0 border border-primary/30">
+                <AlertCircle className="w-10 h-10" />
+              </div>
               {dialogConfig?.title}
             </DialogTitle>
-            <DialogDescription className="text-xl text-white/80 leading-relaxed font-medium">
+            <DialogDescription className="text-2xl md:text-3xl text-white leading-snug font-bold tracking-tight">
               {dialogConfig?.message}
             </DialogDescription>
           </DialogHeader>
           
           {dialogConfig?.type === 'prompt' && (
-            <div className="py-6">
+            <div className="py-10 relative z-10">
               <Input
                 autoFocus
-                className="h-16 text-2xl font-bold tracking-wider text-center bg-white/5 border-white/10"
+                className="h-24 text-4xl font-black tracking-widest text-center bg-white/5 border-white/20 focus:border-primary/50 rounded-2xl"
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleDialogConfirm()}
@@ -633,17 +650,17 @@ export default function App() {
             </div>
           )}
 
-          <DialogFooter className="flex gap-3 sm:gap-0 mt-8">
+          <DialogFooter className="flex flex-col sm:flex-row gap-4 mt-12 relative z-10">
             <Button 
               variant="outline" 
               onClick={handleDialogCancel}
-              className="h-14 text-lg font-bold flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white"
+              className="h-20 text-2xl font-black flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-2xl"
             >
               BATAL
             </Button>
             <Button 
               onClick={handleDialogConfirm}
-              className="h-14 text-lg font-bold flex-1"
+              className="h-20 text-2xl font-black flex-1 shadow-2xl shadow-primary/40 rounded-2xl bg-primary hover:bg-primary/90"
             >
               OKE
             </Button>
@@ -688,12 +705,13 @@ function ThemeToggle({ theme, toggleTheme, className }: { theme: 'light' | 'dark
 }
 
 // --- LOGIN VIEW ---
-function LoginView({ employees, onLogin, onAdminAuth, theme, toggleTheme }: { 
+function LoginView({ employees, onLogin, onAdminAuth, theme, toggleTheme, alert }: { 
   employees: Employee[], 
   onLogin: (e: Employee, pin: string) => void,
   onAdminAuth: (e: Employee, pwd: string) => void,
   theme: 'light' | 'dark',
-  toggleTheme: () => void
+  toggleTheme: () => void,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [absenId, setAbsenId] = useState("");
   const [pin, setPin] = useState("");
@@ -833,7 +851,7 @@ function LoginView({ employees, onLogin, onAdminAuth, theme, toggleTheme }: {
                       <p className="text-[9px] text-white/20 italic">Default password: 123456</p>
                       <button 
                          type="button" 
-                         onClick={() => alert('Lupa password? Silakan hubungi Admin Anda untuk melakukan reset password melalui panel Admin.')} 
+                         onClick={() => alert('Lupa password? Silakan hubungi Admin Anda untuk melakukan reset password melalui panel Admin.', 'info')} 
                          className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer">
                         Lupa Password?
                       </button>
@@ -897,7 +915,7 @@ function LoginView({ employees, onLogin, onAdminAuth, theme, toggleTheme }: {
                     <div className="flex justify-end px-1">
                       <button 
                          type="button" 
-                         onClick={() => alert(`Lupa password Admin?\n\nSilakan minta bantuan pemilik sistem atau developer untuk mengatur ulang password di Master Database.`)} 
+                         onClick={() => alert(`Lupa password Admin?\n\nSilakan minta bantuan pemilik sistem atau developer untuk mengatur ulang password di Master Database.`, 'info')} 
                          className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer">
                         Lupa Password Admin?
                       </button>
@@ -1119,6 +1137,7 @@ function EmployeeView({
   const periodOptions = getPeriodOptions();
   const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
   const [history, setHistory] = useState<Attendance[]>([]);
+  const [activeTab, setActiveTab] = useState("absen");
 
   useEffect(() => {
      const q = query(
@@ -1186,7 +1205,7 @@ function EmployeeView({
           const dist = calculateDistance(position.coords.latitude, position.coords.longitude, config.lat, config.lng);
           if (dist > config.radius) {
             setIsProcessing(false);
-            alert(`Anda berada di luar radius kantor! (Jarak: ${Math.round(dist)}m, Max: ${config.radius}m)`);
+            alert(`Anda berada di luar radius kantor! (Jarak: ${Math.round(dist)}m, Max: ${config.radius}m)`, "error");
             return;
           }
         }
@@ -1194,7 +1213,7 @@ function EmployeeView({
       } catch (e: any) {
         setIsProcessing(false);
         console.error("Geolocation error:", e);
-        alert(`Gagal mendapatkan lokasi: ${e.message || 'Izin ditolak atau timeout'}. Pastikan GPS aktif!`);
+        alert(`Gagal mendapatkan lokasi: ${e.message || 'Izin ditolak atau timeout'}. Pastikan GPS aktif!`, "error");
         return;
       }
     }
@@ -1226,11 +1245,11 @@ function EmployeeView({
         }
 
         if (action === 'checkIn') {
-          if (attendance) return alert("Anda sudah melakukan check-in hari ini.");
-          if (!selectedShiftId) return alert("Pilih shift terlebih dahulu!");
+          if (attendance) return alert("Anda sudah melakukan check-in hari ini.", "info");
+          if (!selectedShiftId) return alert("Pilih shift terlebih dahulu!", "info");
           if (new Date().getDay() === 0) {
             const dayOffShift = shifts.find(s => s.name.toLowerCase().replace(/\s/g, '') === 'dayoff');
-            if (selectedShiftId !== dayOffShift?.id) return alert("Hari Minggu hanya boleh shift Dayoff!");
+            if (selectedShiftId !== dayOffShift?.id) return alert("Hari Minggu hanya boleh shift Dayoff!", "info");
           }
           
           try {
@@ -1249,8 +1268,8 @@ function EmployeeView({
             handleFirestoreError(err, OperationType.CREATE, 'attendance');
           }
         } else if (action === 'breakStart') {
-          if (!attendance) return alert("Silakan check-in terlebih dahulu!");
-          if (attendance.breakStart) return alert("Anda sudah mulai istirahat.");
+          if (!attendance) return alert("Silakan check-in terlebih dahulu!", "info");
+          if (attendance.breakStart) return alert("Anda sudah mulai istirahat.", "info");
           
           const payload = { breakStart: time };
           try {
@@ -1260,9 +1279,9 @@ function EmployeeView({
             handleFirestoreError(err, OperationType.UPDATE, `attendance/${attendance.id}`);
           }
         } else if (action === 'breakEnd') {
-          if (!attendance) return alert("Silakan check-in terlebih dahulu!");
-          if (!attendance.breakStart) return alert("Anda belum mulai istirahat.");
-          if (attendance.breakEnd) return alert("Anda sudah selesai istirahat.");
+          if (!attendance) return alert("Silakan check-in terlebih dahulu!", "info");
+          if (!attendance.breakStart) return alert("Anda belum mulai istirahat.", "info");
+          if (attendance.breakEnd) return alert("Anda sudah selesai istirahat.", "info");
           
           const payload = { breakEnd: time };
           try {
@@ -1272,10 +1291,10 @@ function EmployeeView({
             handleFirestoreError(err, OperationType.UPDATE, `attendance/${attendance.id}`);
           }
         } else if (action === 'checkOut') {
-          if (!attendance) return alert("Silakan check-in terlebih dahulu!");
-          if (!!attendance.breakStart && !attendance.breakEnd) return alert("Selesaikan istirahat terlebih dahulu!");
-          if (!attendance.breakStart || !attendance.breakEnd) return alert("Istirahat wajib dilakukan (mulai dan selesai).");
-          if (attendance.checkOut) return alert("Anda sudah check-out hari ini.");
+          if (!attendance) return alert("Silakan check-in terlebih dahulu!", "info");
+          if (!!attendance.breakStart && !attendance.breakEnd) return alert("Selesaikan istirahat terlebih dahulu!", "info");
+          if (!attendance.breakStart || !attendance.breakEnd) return alert("Istirahat wajib dilakukan (mulai dan selesai).", "info");
+          if (attendance.checkOut) return alert("Anda sudah check-out hari ini.", "info");
           
           const payload = { checkOut: time };
           try {
@@ -1300,12 +1319,12 @@ function EmployeeView({
   };
 
   const handleUpdatePassword = async () => {
-    if (!newPass || newPass.length < 4) return alert("Password minimal 4 karakter!");
+    if (!newPass || newPass.length < 4) return alert("Password minimal 4 karakter!", "error");
     await updateDoc(doc(db, 'employees', employee.id), {
       password: newPass,
       updatedAt: serverTimestamp()
     });
-    alert("Password berhasil diperbarui!");
+    alert("Password berhasil diperbarui!", "success");
     setShowChangePass(false);
     setNewPass("");
   };
@@ -1532,6 +1551,29 @@ function EmployeeView({
                       }}
                     />
                   </div>
+
+                  {/* Timer Istirahat Realtime */}
+                  {attendance?.breakStart && !attendance?.breakEnd && (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="mt-6 p-4 rounded-2xl bg-primary/10 border border-primary/20 flex flex-col items-center gap-1 shadow-inner"
+                    >
+                      <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] mb-1">Durasi Istirahat Anda</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
+                        <p className="text-4xl font-mono font-black text-white tracking-widest">
+                          {(() => {
+                            const start = toDateSafe(attendance.breakStart);
+                            const diff = Math.floor((currentTime.getTime() - start.getTime()) / 1000);
+                            const mins = Math.floor(diff / 60);
+                            const secs = diff % 60;
+                            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                          })()}
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1996,19 +2038,19 @@ function AdminDashboard({
 
             <div className="focus-visible:outline-none min-h-[500px]">
               <TabsContent value="employees" className="mt-0 outline-none">
-                <AdminEmployees employees={employees} shifts={shifts} sections={sections} divisions={divisions} currentUser={currentUser} />
+                <AdminEmployees employees={employees} shifts={shifts} sections={sections} divisions={divisions} currentUser={currentUser} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="shifts" className="mt-0 outline-none">
-                <AdminShifts shifts={shifts} />
+                <AdminShifts shifts={shifts} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="divisions" className="mt-0 outline-none">
-                <AdminDivisions divisions={divisions} />
+                <AdminDivisions divisions={divisions} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="sections" className="mt-0 outline-none">
-                <AdminSections sections={sections} divisions={divisions} />
+                <AdminSections sections={sections} divisions={divisions} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="live" className="mt-0 outline-none">
-                <AdminLive employees={employees} shifts={shifts} />
+                <AdminLive employees={employees} shifts={shifts} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="manual" className="mt-0 outline-none">
                 <AdminManualAttendance employees={employees} divisions={divisions} />
@@ -2017,16 +2059,16 @@ function AdminDashboard({
                 <AdminOfficeConfig />
               </TabsContent>
               <TabsContent value="leaves" className="mt-0 outline-none">
-                <AdminLeave employees={employees} sections={sections} divisions={divisions} />
+                <AdminLeave employees={employees} sections={sections} divisions={divisions} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="quotas" className="mt-0 outline-none">
-                <AdminQuota employees={employees} />
+                <AdminQuota employees={employees} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="periods" className="mt-0 outline-none">
-                <AdminPeriods />
+                <AdminPeriods confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="jadwal" className="mt-0 outline-none">
-                <AdminJadwalLibur employees={employees} sections={sections} divisions={divisions} />
+                <AdminJadwalLibur employees={employees} sections={sections} divisions={divisions} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="backup" className="mt-0 outline-none">
                 <AdminBackup employees={employees} />
@@ -2035,7 +2077,7 @@ function AdminDashboard({
                  <AdminKata />
               </TabsContent>
               <TabsContent value="reports" className="mt-0 outline-none">
-                <AdminReports employees={employees} shifts={shifts} />
+                <AdminReports employees={employees} shifts={shifts} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="music" className="mt-0 outline-none">
                 <AdminMusic />
@@ -2087,7 +2129,25 @@ function AdminMusic() {
 }
 
 // --- ADMIN: EMPLOYEES ---
-function AdminEmployees({ employees, shifts, sections, divisions, currentUser }: { employees: Employee[], shifts: Shift[], sections: Section[], divisions: Division[], currentUser: Employee | null }) {
+function AdminEmployees({ 
+  employees, 
+  shifts, 
+  sections, 
+  divisions, 
+  currentUser,
+  confirm,
+  prompt,
+  alert
+}: { 
+  employees: Employee[], 
+  shifts: Shift[], 
+  sections: Section[], 
+  divisions: Division[], 
+  currentUser: Employee | null,
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [isEditing, setIsEditing] = useState<Employee | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -2364,13 +2424,13 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
                 <Select 
                   value={formData.role} 
                   disabled={isEditing?.role === 'superadmin' && currentUser?.role !== 'superadmin'}
-                  onValueChange={(val: any) => {
+                  onValueChange={async (val: any) => {
                   if (val === 'superadmin') {
-                    const pwd = prompt("Masukkan password untuk akses Super Admin:");
+                    const pwd = await prompt("Masukkan password untuk akses Super Admin:");
                     if (pwd === "adnan2301") {
                         setFormData(prev => ({...prev, role: val}));
                     } else {
-                        alert("Password Salah!");
+                        alert("Password Salah!", "error");
                     }
                   } else {
                     setFormData(prev => ({...prev, role: val}));
@@ -2454,7 +2514,17 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
 }
 
 // --- ADMIN: DIVISIONS ---
-function AdminDivisions({ divisions }: { divisions: Division[] }) {
+function AdminDivisions({ 
+  divisions,
+  confirm,
+  prompt,
+  alert
+}: { 
+  divisions: Division[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [isEditing, setIsEditing] = useState<Division | null>(null);
@@ -2478,13 +2548,15 @@ function AdminDivisions({ divisions }: { divisions: Division[] }) {
   };
 
   const handleDelete = async (id: string) => {
-    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
-    if (confirm("Hapus divisi ini? Semua bagian di divisi ini mungkin akan terdampak.")) {
+    const isConfirmed = await confirm("Hapus divisi ini? Semua bagian di divisi ini mungkin akan terdampak.");
+    if (isConfirmed) {
       await deleteDoc(doc(db, 'divisions', id));
+      alert("Divisi berhasil dihapus.", "success");
     }
   };
 
@@ -2547,7 +2619,19 @@ function AdminDivisions({ divisions }: { divisions: Division[] }) {
 }
 
 // --- ADMIN: SECTIONS ---
-function AdminSections({ sections, divisions }: { sections: Section[], divisions: Division[] }) {
+function AdminSections({ 
+  sections, 
+  divisions,
+  confirm,
+  prompt,
+  alert
+}: { 
+  sections: Section[], 
+  divisions: Division[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [division, setDivision] = useState<string>(divisions?.[0]?.name || 'Depan');
@@ -2566,13 +2650,15 @@ function AdminSections({ sections, divisions }: { sections: Section[], divisions
   };
 
   const handleDelete = async (id: string) => {
-    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
-    if (confirm("Hapus bagian ini?")) {
+    const isConfirmed = await confirm("Hapus bagian ini?");
+    if (isConfirmed) {
       await deleteDoc(doc(db, 'sections', id));
+      alert("Bagian berhasil dihapus.", "success");
     }
   };
 
@@ -2761,7 +2847,21 @@ function DroppableCell({
   );
 }
 
-function AdminJadwalLibur({ employees, sections, divisions }: { employees: Employee[], sections: Section[], divisions: Division[] }) {
+function AdminJadwalLibur({ 
+  employees, 
+  sections, 
+  divisions,
+  confirm,
+  prompt,
+  alert
+}: { 
+  employees: Employee[], 
+  sections: Section[], 
+  divisions: Division[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
@@ -2901,8 +3001,8 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
       const trashRequests = leaveRequests.filter(r => (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).some(d => d === 'TRASH'));
       if (trashRequests.length === 0) return;
 
-      const confirmDelete = window.confirm(`Anda yakin ingin menghapus permanen ${trashRequests.length} request libur dari tempat sampah? Kuota karyawan akan dikembalikan.`);
-      if (!confirmDelete) return;
+      const isConfirmed = await confirm(`Anda yakin ingin menghapus permanen ${trashRequests.length} request libur dari tempat sampah? Kuota karyawan akan dikembalikan.`);
+      if (!isConfirmed) return;
 
       const batchOps = trashRequests.map(r => {
         const currentDates = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
@@ -3118,13 +3218,13 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     }
   };
 
-  const handleStartEdit = () => {
+  const handleStartEdit = async () => {
     if (isFinished) {
-      const pwd = prompt("Jadwal sudah selesai disusun. Masukkan password admin untuk edit ulang:");
+      const pwd = await prompt("Jadwal sudah selesai disusun. Masukkan password admin untuk edit ulang:");
       if (pwd === 'admin123') {
         setIsEditingSchedule(true);
       } else {
-        alert("Password salah!");
+        alert("Password salah!", "error");
       }
     } else {
       setIsEditingSchedule(true);
@@ -3132,13 +3232,14 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
   };
 
   const handleResetToDefault = async () => {
-    const pwd = prompt("PERINGATAN: Semua perubahan jadwal yang Anda lakukan akan dihapus dan dikembalikan ke request awal karyawan. Masukkan password admin:");
+    const pwd = await prompt("PERINGATAN: Semua perubahan jadwal yang Anda lakukan akan dihapus dan dikembalikan ke request awal karyawan. Masukkan password admin:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
 
-    if (!confirm("Yakin ingin mengembalikan semua data jadwal libur ke request awal karyawan?")) return;
+    const isConfirmed = await confirm("Yakin ingin mengembalikan semua data jadwal libur ke request awal karyawan?");
+    if (!isConfirmed) return;
 
     try {
       // Find requests that haven't been reverted yet and have original data
@@ -3457,7 +3558,17 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
   );
 }
 
-function AdminQuota({ employees }: { employees: Employee[] }) {
+function AdminQuota({ 
+  employees,
+  confirm,
+  prompt,
+  alert
+}: { 
+  employees: Employee[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = getCombinedPeriods(controls);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
@@ -3677,9 +3788,9 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
                           className="text-white/30 hover:text-white hover:bg-white/10"
                           onClick={async () => {
                             if (controls[selectedPeriod]?.isPermanentlyClosed) {
-                              return alert("Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengubah kuota.");
+                              return alert("Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengubah kuota.", "error");
                             }
-                            const newVal = prompt(`Update Kuota untuk ${e.name}:`, String(currentQuota));
+                            const newVal = await prompt(`Update Kuota untuk ${e.name}:`, String(currentQuota));
                             if (newVal !== null) {
                               const quotaVal = parseInt(newVal);
                               if (!isNaN(quotaVal)) {
@@ -3690,6 +3801,9 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
                                   quota: quotaVal,
                                   updatedAt: serverTimestamp()
                                 });
+                                alert(`Kuota ${e.name} berhasil diubah!`, "success");
+                              } else {
+                                alert("Masukkan angka yang valid!", "error");
                               }
                             }
                           }}
@@ -3709,7 +3823,15 @@ function AdminQuota({ employees }: { employees: Employee[] }) {
 }
 
 // --- ADMIN: PERIODS ---
-function AdminPeriods() {
+function AdminPeriods({
+  confirm,
+  prompt,
+  alert
+}: {
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [controls, setControls] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -3803,12 +3925,13 @@ function AdminPeriods() {
   };
 
   const handleDelete = async (id: string) => {
-    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
-    if (confirm("Hapus pengaturan periode ini?")) {
+    const isConfirmed = await confirm("Hapus pengaturan periode ini?");
+    if (isConfirmed) {
       if (id.startsWith('custom_')) {
         await deleteDoc(doc(db, 'periodControls', id));
       } else {
@@ -3817,13 +3940,14 @@ function AdminPeriods() {
           updatedAt: serverTimestamp()
         }, { merge: true });
       }
+      alert("Periode berhasil dihapus.", "success");
     }
   }
 
   const togglePermanentClose = async (periodId: string, currentStatus: boolean) => {
-    const pwd = prompt(`Masukkan Password Admin untuk ${currentStatus ? 'membuka powermanen (unlock)' : 'menutup permanen'}:`);
+    const pwd = await prompt(`Masukkan Password Admin untuk ${currentStatus ? 'membuka permanen (unlock)' : 'menutup permanen'}:`);
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
     await setDoc(doc(db, 'periodControls', periodId), {
@@ -3831,6 +3955,7 @@ function AdminPeriods() {
       status: !currentStatus ? 'closed' : 'open',
       updatedAt: serverTimestamp()
     }, { merge: true });
+    alert(`Periode berhasil ${!currentStatus ? 'Ditutup' : 'Dibuka'}!`, "success");
   };
 
   if (loading) return <div className="text-white p-10 text-center">Memuat pengaturan periode...</div>;
@@ -4198,7 +4323,17 @@ function AdminKata() {
 }
 
 // --- ADMIN: SHIFTS ---
-function AdminShifts({ shifts }: { shifts: Shift[] }) {
+function AdminShifts({ 
+  shifts,
+  confirm,
+  prompt,
+  alert
+}: { 
+  shifts: Shift[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [showAdd, setShowAdd] = useState(false);
   const [formData, setFormData] = useState({ name: '', startTime: '08:00', endTime: '17:00', breakStart: '12:00', breakEnd: '13:00' });
 
@@ -4210,13 +4345,15 @@ function AdminShifts({ shifts }: { shifts: Shift[] }) {
   };
 
   const handleDelete = async (id: string) => {
-    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
-    if (confirm("Hapus shift ini?")) {
+    const isConfirmed = await confirm("Hapus shift ini?");
+    if (isConfirmed) {
       await deleteDoc(doc(db, 'shifts', id));
+      alert("Shift berhasil dihapus.", "success");
     }
   };
 
@@ -4398,7 +4535,19 @@ function AdminActivityLog({ employees, viewDate }: { employees: Employee[], view
 }
 
 // --- ADMIN: LIVE VIEW ---
-function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift[] }) {
+function AdminLive({ 
+  employees, 
+  shifts,
+  confirm,
+  prompt,
+  alert
+}: { 
+  employees: Employee[], 
+  shifts: Shift[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [liveAttendance, setLiveAttendance] = useState<Attendance[]>([]);
   const [showActivity, setShowActivity] = useState(false);
   const [date, setDate] = useState<Date>(new Date());
@@ -4425,13 +4574,15 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
   }, [date]);
 
   const handleDelete = async (id: string) => {
-    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
-    if (confirm("Hapus data absen ini?")) {
+    const isConfirmed = await confirm("Hapus data absen ini?");
+    if (isConfirmed) {
       await deleteDoc(doc(db, 'attendance', id));
+      alert("Data absen berhasil dihapus.", "success");
     }
   };
 
@@ -4731,7 +4882,21 @@ function AdminLive({ employees, shifts }: { employees: Employee[], shifts: Shift
 }
 
 // --- ADMIN: LEAVE REQUESTS ---
-function AdminLeave({ employees, sections, divisions }: { employees: Employee[], sections: Section[], divisions: Division[] }) {
+function AdminLeave({ 
+  employees, 
+  sections, 
+  divisions,
+  confirm,
+  prompt,
+  alert
+}: { 
+  employees: Employee[], 
+  sections: Section[], 
+  divisions: Division[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
   const [controls, setControls] = useState<Record<string, any>>({});
@@ -4796,13 +4961,15 @@ function AdminLeave({ employees, sections, divisions }: { employees: Employee[],
   };
 
   const handleDelete = async (id: string) => {
-    const pwd = prompt("Masukkan Password Admin untuk menghapus:");
+    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
-    if (confirm("Hapus request libur ini?")) {
+    const isConfirmed = await confirm("Hapus request libur ini?");
+    if (isConfirmed) {
       await deleteDoc(doc(db, 'leaveRequests', id));
+      alert("Request libur berhasil dihapus.", "success");
     }
   };
 
@@ -5530,6 +5697,112 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
               </div>
             </CardContent>
           </Card>
+
+          {/* Quota Calendar - Task 2 */}
+          <Card className="glass-panel border-none shadow-xl bg-white/5 overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-white text-lg flex items-center gap-3 font-black uppercase tracking-widest">
+                <CalendarIcon className="w-6 h-6 text-rose-400" /> Status Kuota Harian
+              </CardTitle>
+              <CardDescription className="text-xs text-white/40 font-bold">
+                Tanggal dengan warna <span className="text-rose-500 font-black italic underline decoration-rose-500/50 underline-offset-4">MERAH</span> menunjukkan kuota sudah penuh ({periodControl?.maxRequestsPerDay || 7} orang).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="py-8">
+              <div className="space-y-6">
+                <div className="grid grid-cols-7 gap-2 mb-2">
+                  {['S', 'S', 'R', 'K', 'J', 'S', 'M'].map((day, i) => (
+                    <div key={i} className="text-center text-[10px] font-black text-white/20 uppercase tracking-widest">{day}</div>
+                  ))}
+                </div>
+                
+                <div className="grid grid-cols-7 gap-2">
+                  {(() => {
+                    const period = periodOptions.find(p => p.value === selectedPeriod);
+                    if (!period) return null;
+                    
+                    const daysInRange = eachDayOfInterval({
+                      start: startOfDay(period.start),
+                      end: endOfDay(period.end)
+                    });
+                    
+                    // Add padding for the first day of the period to align with day of week
+                    const firstDayPadding = period.start.getDay() === 0 ? 6 : period.start.getDay() - 1;
+                    const padding = Array(firstDayPadding).fill(null);
+                    
+                    return [...padding, ...daysInRange].map((date, i) => {
+                      if (!date) return <div key={`pad-${i}`} className="aspect-square" />;
+                      
+                      const dateStr = format(date, 'yyyy-MM-dd');
+                      const count = usageMap[dateStr] || 0;
+                      const maxLimit = periodControl?.maxRequestsPerDay || 7;
+                      const isFull = count >= maxLimit;
+                      const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr;
+                      
+                      return (
+                        <div 
+                          key={dateStr}
+                          className={`
+                            aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-300
+                            ${isFull ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)] scale-105 z-10' : 'bg-white/5 border border-white/5 hover:bg-white/10'}
+                            ${isToday ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}
+                          `}
+                        >
+                          <span className={`text-sm font-black ${isFull ? 'text-white' : 'text-white/80'}`}>
+                            {format(date, 'd')}
+                          </span>
+                          <span className={`text-[8px] font-bold ${isFull ? 'text-white/80' : 'text-white/20'}`}>
+                            {format(date, 'MMM')}
+                          </span>
+                          
+                          {/* Mini usage indicator */}
+                          {!isFull && count > 0 && (
+                            <div className="absolute top-1 right-1 flex gap-0.5">
+                              {Array.from({ length: count }).map((_, idx) => (
+                                <div key={idx} className="w-1 h-1 rounded-full bg-primary/40" />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-6 mt-10 pt-6 border-t border-white/5">
+                <div className="flex-1 space-y-4">
+                    <h4 className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] border-l-2 border-primary pl-3">Legenda Kalender</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-1 gap-3">
+                        <div className="flex items-center gap-3 glass-panel p-3 rounded-2xl bg-rose-500/10 border-rose-500/20">
+                            <div className="w-4 h-4 rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)]" />
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider leading-none">Kuota Penuh</span>
+                              <span className="text-[9px] text-rose-400/60 font-bold tracking-tight">Tidak bisa diajukan</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 glass-panel p-3 rounded-2xl bg-white/5 border-white/10">
+                            <div className="w-4 h-4 rounded-full bg-white/20" />
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black text-white/40 uppercase tracking-wider leading-none">Tersedia</span>
+                              <span className="text-[9px] text-white/20 font-bold tracking-tight">Silakan ajukan request</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex-1 p-5 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] text-white/70 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-2 opacity-5 scale-150 rotate-12 group-hover:scale-175 transition-transform duration-700">
+                      <AlertCircle className="w-20 h-20" />
+                    </div>
+                    <p className="text-[10px] leading-relaxed italic relative z-10">
+                        <span className="font-black text-amber-400 not-italic uppercase tracking-widest block mb-1">Penting:</span>
+                        Tampilan di atas adalah rentang periode <span className="text-white font-bold">24 s/d 23</span>. Data diperbarui secara realtime sesuai jumlah request yang masuk.
+                    </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar info */}
@@ -5934,7 +6207,19 @@ function AdminBackup({ employees }: { employees: Employee[] }) {
 }
 
 // --- ADMIN: REPORTS ---
-function AdminReports({ employees, shifts }: { employees: Employee[], shifts: Shift[] }) {
+function AdminReports({ 
+  employees, 
+  shifts,
+  confirm,
+  prompt,
+  alert
+}: { 
+  employees: Employee[], 
+  shifts: Shift[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [dateRange, setDateRange] = useState({ 
     start: startOfDay(new Date()), 
     end: endOfDay(new Date()) 
