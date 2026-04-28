@@ -1113,10 +1113,17 @@ function EmployeeSelector({
 }) {
   const [search, setSearch] = useState('');
   
-  const filtered = employees.filter(e => 
+  const filteredMatches = employees.filter(e => 
     !selectedIds.includes(e.id) && 
-    (e.name.toLowerCase().includes(search.toLowerCase()))
+    (e.name.toLowerCase().includes(search.toLowerCase()) || (e.pin && e.pin.toLowerCase().includes(search.toLowerCase())))
   );
+  
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && filteredMatches.length === 1) {
+      onAdd(filteredMatches[0].id);
+      setSearch('');
+    }
+  };
   
   return (
     <div className="flex flex-col gap-2">
@@ -1133,16 +1140,17 @@ function EmployeeSelector({
       </div>
       <div className="relative">
         <input 
-          placeholder="Cari karyawan..." 
+          placeholder="Cari karyawan (nama/pin)..." 
           className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-xs"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleKeyDown}
         />
-        {search && filtered.length > 0 && (
+        {search && filteredMatches.length > 0 && (
           <div className="absolute z-10 bg-black/90 border border-white/20 rounded shadow-lg max-h-40 overflow-auto w-full">
-            {filtered.map(emp => (
+            {filteredMatches.map(emp => (
               <button key={emp.id} className="w-full text-left px-2 py-1 text-xs text-white hover:bg-white/10" onClick={() => { onAdd(emp.id); setSearch(''); }}>
-                {emp.name}
+                {emp.name} ({emp.pin})
               </button>
             ))}
           </div>
@@ -1154,8 +1162,26 @@ function EmployeeSelector({
 
 // --- ADMIN BONUS ESTAFET ---
 function AdminBonusEstafet({ employees }: { employees: Employee[] }) {
-  const periodOptions = getPeriodOptions(12, 1).reverse();
-  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions.find(p => format(new Date(), 'MMM yyyy').includes(p.label))?.value || periodOptions[0].value);
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[0]?.value || '');
+  
+  useEffect(() => {
+      if (periodOptions.length > 0 && !selectedPeriod) {
+          setSelectedPeriod(periodOptions[0].value);
+      }
+  }, [periodOptions, selectedPeriod]);
+
   const [bonusMaster, setBonusMaster] = useState<Record<string, number>>({});
   const [dailyAssignments, setDailyAssignments] = useState<Record<string, { bonusAmount: number, employeeIds: string[] }>>({});
   const [loading, setLoading] = useState(true);
@@ -1176,26 +1202,45 @@ function AdminBonusEstafet({ employees }: { employees: Employee[] }) {
 
   const employeeTotals = React.useMemo(() => {
     const totals: Record<string, number> = {};
-    Object.values(dailyAssignments).forEach((day: { bonusAmount: number, employeeIds: string[] }) => {
-      day.employeeIds.forEach(empId => {
-        totals[empId] = (totals[empId] || 0) + day.bonusAmount;
-      });
+    console.log('DEBUG: Calculating totals. dailyAssignments keys:', Object.keys(dailyAssignments).length);
+    Object.entries(dailyAssignments).forEach(([dateStr, day]) => {
+      // Use bonus from master if available as it is the source of truth, fallback to stored bonusAmount
+      const bonusValue = bonusMaster[dateStr] ?? (typeof day === 'object' && day && 'bonusAmount' in day ? (day as any).bonusAmount : 0);
+      const employeeIds = typeof day === 'object' && day && 'employeeIds' in day ? (day as any).employeeIds : [];
+
+      if (Array.isArray(employeeIds)) {
+        employeeIds.forEach((empId: string) => {
+          totals[empId] = (totals[empId] || 0) + (Number(bonusValue) || 0);
+        });
+      }
     });
+    console.log('DEBUG: Final Totals:', totals);
     return totals;
-  }, [dailyAssignments]);
+  }, [dailyAssignments, bonusMaster]);
+
+  const grandTotal = React.useMemo(() => {
+    return Object.values(employeeTotals).reduce((sum: number, val: number) => sum + val, 0);
+  }, [employeeTotals]);
 
   const downloadAccumulation = () => {
-    if (!currentPeriod) return;
+    if (!currentPeriod || employees.length === 0) return;
+    
     const data = employees
       .map(emp => ({
-        "No Absen": emp.pin,
+        "No. Absen": emp.pin || "-",
         "Nama": emp.name,
         "Total Bonus Estafet": employeeTotals[emp.id] || 0
-      }));
+      }))
+      .filter(item => item["Total Bonus Estafet"] > 0);
+
+    if (data.length === 0) {
+      toast.error("Tidak ada data bonus untuk diunduh (Semua Rp 0)");
+      return;
+    }
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Bonus Estafet");
+    XLSX.utils.book_append_sheet(wb, ws, "Akumulasi Bonus");
     XLSX.writeFile(wb, `Bonus_Estafet_${currentPeriod.label}.xlsx`);
   };
 
@@ -1288,17 +1333,31 @@ function AdminBonusEstafet({ employees }: { employees: Employee[] }) {
 
       <Card className="glass-panel border-none bg-black/40">
         <CardContent className="p-6">
-          <h3 className="text-sm font-bold text-white mb-4">Akumulasi Bonus Per Karyawan</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-             {employees.map(emp => {
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-bold text-white uppercase tracking-tight">Akumulasi Bonus Per Karyawan</h3>
+            <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+              <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Total Periode:</span>
+              <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+             {employees.filter(emp => (employeeTotals[emp.id] || 0) > 0).map(emp => {
                const total = employeeTotals[emp.id] || 0;
                return (
-                 <div key={emp.id} className="bg-white/5 p-3 rounded-xl border border-white/10 flex justify-between items-center">
-                   <span className="text-white/60 text-xs font-bold">{emp.name}</span>
-                   <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(total)}</span>
+                 <div key={emp.id} className="bg-white/5 p-3 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-colors flex flex-col gap-1">
+                   <div className="flex justify-between items-start gap-2">
+                     <span className="text-white/40 text-[9px] font-bold uppercase truncate">{emp.pin || '-'}</span>
+                   </div>
+                   <span className="text-white font-bold text-[11px] truncate">{emp.name}</span>
+                   <span className="text-emerald-400 font-black text-xs">Rp {new Intl.NumberFormat('id-ID').format(total)}</span>
                  </div>
                );
              })}
+             {Object.keys(employeeTotals).length === 0 && (
+               <div className="col-span-full py-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
+                 <p className="text-white/20 text-xs italic">Belum ada data akumulasi untuk periode ini.</p>
+               </div>
+             )}
           </div>
         </CardContent>
       </Card>
