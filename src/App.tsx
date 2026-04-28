@@ -87,7 +87,8 @@ import {
   X,
   Calculator,
   Moon,
-  Sun
+  Sun,
+  ShieldAlert
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -1109,12 +1110,14 @@ function EmployeeSelector({
   employees, 
   onAdd, 
   onRemove, 
-  selectedIds 
+  selectedIds,
+  disabled = false
 }: { 
   employees: Employee[], 
   onAdd: (id: string) => void, 
   onRemove: (id: string) => void, 
-  selectedIds: string[] 
+  selectedIds: string[],
+  disabled?: boolean
 }) {
   const [search, setSearch] = useState('');
   
@@ -1124,6 +1127,7 @@ function EmployeeSelector({
   );
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return;
     if (e.key === 'Enter' && filteredMatches.length === 1) {
       onAdd(filteredMatches[0].id);
       setSearch('');
@@ -1138,18 +1142,19 @@ function EmployeeSelector({
           return emp ? (
             <span key={id} className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded flex items-center gap-1">
               {emp.name}
-              <button onClick={() => onRemove(id)}><X className="w-3 h-3 cursor-pointer" /></button>
+              {!disabled && <button onClick={() => onRemove(id)}><X className="w-3 h-3 cursor-pointer" /></button>}
             </span>
           ) : null;
         })}
       </div>
       <div className="relative">
         <input 
-          placeholder="Cari karyawan (nama/pin)..." 
-          className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-xs"
+          placeholder={disabled ? "Periode dikunci" : "Cari karyawan (nama/pin)..."} 
+          className={`w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-xs ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={handleKeyDown}
+          disabled={disabled}
         />
         {search && filteredMatches.length > 0 && (
           <div className="absolute z-10 bg-black/90 border border-white/20 rounded shadow-lg max-h-40 overflow-auto w-full">
@@ -1185,7 +1190,9 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
   const [bonusMaster, setBonusMaster] = useState<Record<string, number>>({});
   const [dailyAssignments, setDailyAssignments] = useState<Record<string, { bonusAmount: number, employeeIds: string[] }>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState('');
 
   const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
   
@@ -1258,7 +1265,9 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
 
     const unsubEstafet = onSnapshot(doc(db, 'bonusEstafet', selectedPeriod), (snap) => {
       if (componentMounted) {
-        setDailyAssignments(snap.exists() ? (snap.data().dailyAssignments || {}) : {});
+        const data = snap.exists() ? snap.data() : {};
+        setDailyAssignments(data.dailyAssignments || {});
+        setIsLocked(data.isLocked || false);
         setLoading(false);
       }
     }, (error) => {
@@ -1275,20 +1284,43 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
     };
   }, [selectedPeriod]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const toggleLock = async () => {
+    if (isLocked) {
+      setShowUnlockDialog(true);
+    } else {
+      try {
+        await setDoc(doc(db, 'bonusEstafet', selectedPeriod), { isLocked: true }, { merge: true });
+        toast.success("Periode dikunci");
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusEstafet/${selectedPeriod}`);
+      }
+    }
+  };
+
+  const confirmUnlock = async () => {
+    if (unlockPassword === 'admin123') {
+      try {
+        await setDoc(doc(db, 'bonusEstafet', selectedPeriod), { isLocked: false }, { merge: true });
+        setShowUnlockDialog(false);
+        setUnlockPassword('');
+        toast.success("Periode berhasil dibuka");
+      } catch(e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusEstafet/${selectedPeriod}`);
+      }
+    } else {
+      toast.error("Password salah!");
+    }
+  };
+
+  const autoSaveAssignments = async (assignments: Record<string, any>) => {
     try {
       await setDoc(doc(db, 'bonusEstafet', selectedPeriod), {
         periodId: selectedPeriod,
-        dailyAssignments,
+        dailyAssignments: assignments,
         updatedAt: serverTimestamp(),
-      });
-      toast.success("Data bonus estafet berhasil disimpan");
+      }, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `bonusEstafet/${selectedPeriod}`);
-      toast.error("Gagal menyimpan data");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1325,11 +1357,29 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button onClick={handleSave} disabled={saving || loading} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
-            {saving ? 'Saving...' : 'Simpan'}
-          </Button>
+          {currentPeriod && (
+            <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
+              {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            </Button>
+          )}
         </div>
       </div>
+
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogTitle>Buka Kunci Periode (Estafet)</DialogTitle>
+          <div className="space-y-4 pt-4">
+            <Input 
+              type="password" 
+              placeholder="Masukkan Password Admin"
+              value={unlockPassword}
+              onChange={(e) => setUnlockPassword(e.target.value)}
+              className="bg-white/5 border-white/10 text-white"
+            />
+            <Button onClick={confirmUnlock} className="w-full bg-emerald-600 hover:bg-emerald-500">Konfirmasi Buka Kunci</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Card className="glass-panel border-none bg-black/40">
         <CardContent className="p-6">
@@ -1386,17 +1436,28 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
                         <EmployeeSelector 
                           employees={employees}
                           selectedIds={selectedEmpIds}
+                          disabled={isLocked}
                           onAdd={(id) => {
-                            setDailyAssignments(prev => {
-                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
-                              return { ...prev, [dateStr]: { ...current, employeeIds: [...current.employeeIds, id], bonusAmount: bonusMaster[dateStr] || 0 } };
-                            });
+                            if (isLocked) {
+                                toast.error("Periode ini sudah dikunci!");
+                                return;
+                            }
+                            const updated = { ...dailyAssignments };
+                            const current = updated[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                            updated[dateStr] = { ...current, employeeIds: [...current.employeeIds, id], bonusAmount: bonusMaster[dateStr] || 0 };
+                            setDailyAssignments(updated);
+                            autoSaveAssignments(updated);
                           }}
                           onRemove={(id) => {
-                            setDailyAssignments(prev => {
-                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
-                              return { ...prev, [dateStr]: { ...current, employeeIds: current.employeeIds.filter(empId => empId !== id), bonusAmount: bonusMaster[dateStr] || 0 } };
-                            });
+                            if (isLocked) {
+                                toast.error("Periode ini sudah dikunci!");
+                                return;
+                            }
+                            const updated = { ...dailyAssignments };
+                            const current = updated[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                            updated[dateStr] = { ...current, employeeIds: current.employeeIds.filter(empId => empId !== id), bonusAmount: bonusMaster[dateStr] || 0 };
+                            setDailyAssignments(updated);
+                            autoSaveAssignments(updated);
                           }}
                         />
                       </TableCell>
@@ -1687,7 +1748,9 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
   const [bonusMaster, setBonusMaster] = useState<Record<string, number>>({});
   const [dailyAssignments, setDailyAssignments] = useState<Record<string, { bonusAmount: number, employeeIds: string[] }>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState('');
 
   const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
   
@@ -1758,7 +1821,9 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
 
     const unsubJagaDepan = onSnapshot(doc(db, 'bonusJagaDepan', selectedPeriod), (snap) => {
       if (componentMounted) {
-        setDailyAssignments(snap.exists() ? (snap.data().dailyAssignments || {}) : {});
+        const data = snap.exists() ? snap.data() : {};
+        setDailyAssignments(data.dailyAssignments || {});
+        setIsLocked(data.isLocked || false);
         setLoading(false);
       }
     }, (error) => {
@@ -1775,20 +1840,43 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
     };
   }, [selectedPeriod]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const toggleLock = async () => {
+    if (isLocked) {
+      setShowUnlockDialog(true);
+    } else {
+      try {
+        await setDoc(doc(db, 'bonusJagaDepan', selectedPeriod), { isLocked: true }, { merge: true });
+        toast.success("Periode dikunci");
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusJagaDepan/${selectedPeriod}`);
+      }
+    }
+  };
+
+  const confirmUnlock = async () => {
+    if (unlockPassword === 'admin123') {
+      try {
+        await setDoc(doc(db, 'bonusJagaDepan', selectedPeriod), { isLocked: false }, { merge: true });
+        setShowUnlockDialog(false);
+        setUnlockPassword('');
+        toast.success("Periode berhasil dibuka");
+      } catch(e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusJagaDepan/${selectedPeriod}`);
+      }
+    } else {
+      toast.error("Password salah!");
+    }
+  };
+
+  const autoSaveAssignments = async (assignments: Record<string, any>) => {
     try {
       await setDoc(doc(db, 'bonusJagaDepan', selectedPeriod), {
         periodId: selectedPeriod,
-        dailyAssignments,
+        dailyAssignments: assignments,
         updatedAt: serverTimestamp(),
-      });
-      toast.success("Data bonus jaga depan berhasil disimpan");
+      }, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `bonusJagaDepan/${selectedPeriod}`);
-      toast.error("Gagal menyimpan data");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1799,7 +1887,7 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
-            <Zap className="w-5 h-5 text-emerald-400" /> Bonus Jaga Depan
+            <ShieldAlert className="w-5 h-5 text-emerald-400" /> Bonus Jaga Depan
           </h2>
           <p className="text-white/40 text-xs">Pilih karyawan yang mendapatkan bonus jaga depan harian.</p>
         </div>
@@ -1815,11 +1903,29 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button onClick={handleSave} disabled={saving || loading} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
-            {saving ? 'Saving...' : 'Simpan'}
-          </Button>
+          {currentPeriod && (
+            <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
+              {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            </Button>
+          )}
         </div>
       </div>
+
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogTitle>Buka Kunci Periode (Jaga Depan)</DialogTitle>
+          <div className="space-y-4 pt-4">
+            <Input 
+              type="password" 
+              placeholder="Masukkan Password Admin"
+              value={unlockPassword}
+              onChange={(e) => setUnlockPassword(e.target.value)}
+              className="bg-white/5 border-white/10 text-white"
+            />
+            <Button onClick={confirmUnlock} className="w-full bg-emerald-600 hover:bg-emerald-500">Konfirmasi Buka Kunci</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Card className="glass-panel border-none bg-black/40">
         <CardContent className="p-6">
@@ -1876,17 +1982,28 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
                         <EmployeeSelector 
                           employees={employees}
                           selectedIds={selectedEmpIds}
+                          disabled={isLocked}
                           onAdd={(id) => {
-                            setDailyAssignments(prev => {
-                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
-                              return { ...prev, [dateStr]: { ...current, employeeIds: [...current.employeeIds, id], bonusAmount: bonusMaster[dateStr] || 0 } };
-                            });
+                            if (isLocked) {
+                                toast.error("Periode ini sudah dikunci!");
+                                return;
+                            }
+                            const updated = { ...dailyAssignments };
+                            const current = updated[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                            updated[dateStr] = { ...current, employeeIds: [...current.employeeIds, id], bonusAmount: bonusMaster[dateStr] || 0 };
+                            setDailyAssignments(updated);
+                            autoSaveAssignments(updated);
                           }}
                           onRemove={(id) => {
-                            setDailyAssignments(prev => {
-                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
-                              return { ...prev, [dateStr]: { ...current, employeeIds: current.employeeIds.filter(empId => empId !== id), bonusAmount: bonusMaster[dateStr] || 0 } };
-                            });
+                            if (isLocked) {
+                                toast.error("Periode ini sudah dikunci!");
+                                return;
+                            }
+                            const updated = { ...dailyAssignments };
+                            const current = updated[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                            updated[dateStr] = { ...current, employeeIds: current.employeeIds.filter(empId => empId !== id), bonusAmount: bonusMaster[dateStr] || 0 };
+                            setDailyAssignments(updated);
+                            autoSaveAssignments(updated);
                           }}
                         />
                       </TableCell>
