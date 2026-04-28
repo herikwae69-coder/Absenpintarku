@@ -2605,16 +2605,21 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
 
-  const [notaRate, setNotaRate] = useState<number>(0);
-  const [balenRate, setBalenRate] = useState<number>(0);
+  const [notaRate, setNotaRate] = useState<number>(50);
+  const [balenRate, setBalenRate] = useState<number>(70);
   const [entries, setEntries] = useState<Record<string, { notaCount: number, balenCount: number }>>({});
   const [isLocked, setIsLocked] = useState(false);
+  const [isEditingRates, setIsEditingRates] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [showRateUnlockDialog, setShowRateUnlockDialog] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
+  const [rateUnlockPassword, setRateUnlockPassword] = useState('');
 
   // Selected employee for new entry
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [inputNota, setInputNota] = useState<string>('');
   const [inputBalen, setInputBalen] = useState<string>('');
 
@@ -2625,13 +2630,13 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
     const unsub = onSnapshot(doc(db, 'bonusOperator', selectedPeriod), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        setNotaRate(data.notaRate || 0);
-        setBalenRate(data.balenRate || 0);
+        setNotaRate(data.notaRate ?? 50);
+        setBalenRate(data.balenRate ?? 70);
         setEntries(data.entries as Record<string, { notaCount: number, balenCount: number }> || {});
         setIsLocked(data.isLocked || false);
       } else {
-        setNotaRate(0);
-        setBalenRate(0);
+        setNotaRate(50);
+        setBalenRate(70);
         setEntries({});
         setIsLocked(false);
       }
@@ -2732,6 +2737,17 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
     }
   };
 
+  const confirmRateUnlock = () => {
+    if (rateUnlockPassword === 'admin123') {
+        setIsEditingRates(true);
+        setShowRateUnlockDialog(false);
+        setRateUnlockPassword('');
+        toast.success("Akses edit tarif diberikan");
+    } else {
+        toast.error("Password salah!");
+    }
+  };
+
   const downloadExcel = () => {
     if (!currentPeriod || Object.keys(entries).length === 0) return;
 
@@ -2750,9 +2766,15 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Bonus Operator");
-    XLSX.writeFile(workbook, `Bonus_Operator_${selectedPeriod}.xlsx`);
+    XLSX.writeFile(workbook, `Bonus_Operator_${currentPeriod?.label || selectedPeriod}.xlsx`);
     toast.success("Excel berhasil diunduh");
   };
+
+  const selectedEmployee = employees.find(e => e.id === selectedEmpId);
+  const filteredEmployees = employees.filter(e => 
+    e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    e.pin.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -2803,16 +2825,45 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showRateUnlockDialog} onOpenChange={setShowRateUnlockDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogTitle>Otorisasi Edit Tarif</DialogTitle>
+          <div className="space-y-4 pt-4">
+            <p className="text-white/60 text-sm">Masukkan password admin untuk mengubah tarif nota dan balen.</p>
+            <Input 
+              type="password" 
+              placeholder="Masukkan Password Admin"
+              value={rateUnlockPassword}
+              onChange={(e) => setRateUnlockPassword(e.target.value)}
+              className="bg-white/5 border-white/10 text-white"
+            />
+            <Button onClick={confirmRateUnlock} className="w-full bg-emerald-600 hover:bg-emerald-500">Konfirmasi</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Card className="glass-panel border-none bg-black/40">
         <CardContent className="p-6">
-          <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-4">Konfigurasi Rumus (Per Nota/Balen)</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-bold text-white uppercase tracking-widest">Konfigurasi Rumus (Per Nota/Balen)</h3>
+            {!isLocked && (
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => isEditingRates ? setIsEditingRates(false) : setShowRateUnlockDialog(true)}
+                    className="text-white/60 hover:text-white flex items-center gap-2"
+                >
+                    {isEditingRates ? 'Selesai Edit' : <><Lock className="w-3 h-3" /> Ubah Tarif</>}
+                </Button>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label className="text-white/40 text-xs">Nominal per Nota (Rp)</Label>
               <Input 
                 type="number" 
                 value={notaRate} 
-                disabled={isLocked}
+                disabled={isLocked || !isEditingRates}
                 onChange={(e) => {
                   const val = parseInt(e.target.value) || 0;
                   setNotaRate(val);
@@ -2826,7 +2877,7 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
               <Input 
                 type="number" 
                 value={balenRate} 
-                disabled={isLocked}
+                disabled={isLocked || !isEditingRates}
                 onChange={(e) => {
                   const val = parseInt(e.target.value) || 0;
                   setBalenRate(val);
@@ -2844,16 +2895,51 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
           <CardContent className="p-6">
             <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-4">Tambah Data Hasil Kerja</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div className="space-y-2">
-                <Label className="text-white/40 text-xs">Pilih Karyawan</Label>
-                <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                    <SelectValue placeholder="Pilih Karyawan" />
-                  </SelectTrigger>
-                  <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
-                     {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name} ({e.pin})</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2 relative">
+                <Label className="text-white/40 text-xs">Pilih Karyawan (Cari Nama/PIN)</Label>
+                <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      role="combobox" 
+                      className="w-full justify-between bg-white/5 border-white/10 text-white hover:bg-white/10 hover:text-white h-10 px-3"
+                    >
+                      {selectedEmployee ? `${selectedEmployee.name} (${selectedEmployee.pin})` : "Cari Karyawan..."}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0 glass-panel border-white/20 bg-black/95 z-50">
+                    <div className="p-2 border-b border-white/10">
+                      <Input 
+                        placeholder="Ketik nama atau pin..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-transparent border-none focus-visible:ring-0 text-white"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto no-scrollbar">
+                      {filteredEmployees.length === 0 ? (
+                        <div className="p-4 text-center text-white/40 text-sm">Tidak ditemukan</div>
+                      ) : (
+                        filteredEmployees.map(e => (
+                          <div 
+                            key={e.id}
+                            onClick={() => {
+                              setSelectedEmpId(e.id);
+                              setIsSearchOpen(false);
+                              setSearchTerm('');
+                            }}
+                            className="p-3 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-none flex justify-between items-center group"
+                          >
+                            <span className="text-white group-hover:text-emerald-400 transition-colors font-medium">{e.name}</span>
+                            <span className="text-white/40 text-xs font-mono">{e.pin}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label className="text-white/40 text-xs">Jumlah Nota</Label>
@@ -5555,7 +5641,8 @@ function AdminQuota({
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Data Kuota Libur");
-    XLSX.writeFile(wb, `Data_Kuota_Libur_${selectedPeriod}.xlsx`);
+    const activePeriod = periodOptions.find(p => p.value === selectedPeriod);
+    XLSX.writeFile(wb, `Data_Kuota_Libur_${activePeriod?.label || selectedPeriod}.xlsx`);
   };
 
   return (
@@ -6809,14 +6896,15 @@ function AdminLeave({
   const handleExport = () => {
     setExportLoading(true);
     try {
-    const data = requests.map(r => {
+      const activePeriod = periodOptions.find(p => p.value === selectedPeriod);
+      const data = requests.map(r => {
         const dArr = (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean);
         const row: any = {
           'Nama Karyawan': r.employeeName,
           'Bagian': sections.find(s => s.id === r.sectionId)?.name || '-',
           'Divisi': r.division,
           'Alasan': r.reason,
-          'Periode': r.period,
+          'Periode': activePeriod?.label || r.period,
         };
 
         // Add each date into its own cell
@@ -6830,7 +6918,7 @@ function AdminLeave({
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, `Request Libur ${selectedDivision}`);
-      XLSX.writeFile(wb, `Rekap_Liburan_${selectedDivision}_${selectedPeriod}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
+      XLSX.writeFile(wb, `Rekap_Liburan_${selectedDivision}_${activePeriod?.label || selectedPeriod}_${format(new Date(), 'yyyyMMdd')}.xlsx`);
     } finally {
       setExportLoading(false);
     }
