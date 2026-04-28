@@ -2021,12 +2021,17 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
     }
   };
 
+  const updateBonusTypes = async (newTypes: Record<string, string>) => {
+    await setDoc(doc(db, 'systemConfig', 'bonusLainLainTypes'), { types: newTypes });
+  };
+
   const addBonusType = async () => {
     if (!newTypeName) return;
     const id = 'type_' + Date.now();
     const updatedTypes = { ...bonusTypes, [id]: newTypeName };
-    await setDoc(doc(db, 'systemConfig', 'bonusLainLainTypes'), { types: updatedTypes });
+    await updateBonusTypes(updatedTypes);
     setNewTypeName('');
+    toast.success("Jenis bonus berhasil disimpan");
   };
 
   const addEntry = () => {
@@ -2045,8 +2050,6 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
     setEntries(prev => prev.filter(e => e.id !== id));
   };
 
-  if (!currentPeriod) return null;
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -2057,9 +2060,11 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
           <p className="text-white/40 text-xs">Kelola bonus tambahan selain dari sistem utama.</p>
         </div>
         <div className="flex gap-3">
-          <Button onClick={downloadExcel} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
-            <Download className="w-4 h-4" /> Download
-          </Button>
+          {currentPeriod && (
+            <Button onClick={downloadExcel} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
+              <Download className="w-4 h-4" /> Download
+            </Button>
+          )}
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
               <SelectValue placeholder="Pilih Periode" />
@@ -2068,13 +2073,15 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button onClick={handleSave} disabled={saving || loading} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
-            {saving ? 'Saving...' : 'Simpan'}
-          </Button>
+          {currentPeriod && (
+            <Button onClick={handleSave} disabled={saving || loading} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
+              {saving ? 'Saving...' : 'Simpan'}
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card className="glass-panel border-none bg-black/40">
             <CardContent className="p-6">
                 <h3 className="text-sm font-bold text-white mb-4">Jenis Bonus</h3>
@@ -2086,78 +2093,89 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
                     {Object.entries(bonusTypes).map(([id, name]) => (
                         <div key={id} className="flex justify-between items-center bg-white/5 p-2 rounded text-xs text-white">
                             {name}
-                            <Button variant="ghost" size="sm" onClick={() => setBonusTypes(prev => { const next = {...prev}; delete next[id]; return next; })}><Trash2 className="w-3 h-3 text-rose-500" /></Button>
+                            <Button variant="ghost" size="sm" onClick={async () => { const next = {...bonusTypes}; delete next[id]; await updateBonusTypes(next); }}><Trash2 className="w-3 h-3 text-rose-500" /></Button>
                         </div>
                     ))}
                 </div>
             </CardContent>
         </Card>
-        
-        <Card className="glass-panel border-none bg-black/40">
-          <CardContent className="p-6">
-            <h3 className="text-sm font-bold text-white mb-4">Tambah Entri Bonus</h3>
-            <div className="grid grid-cols-2 gap-2 mb-2 relative">
-                <Input 
-                    placeholder="No Absen / Nama" 
-                    value={entryPin} 
-                    onChange={e => { setEntryPin(e.target.value); setShowEmployeeCandidates(true); }} 
-                    className="bg-white/5 border-white/10 text-white" 
-                />
-                {showEmployeeCandidates && filteredEmployees.length > 0 && (
-                    <div className="absolute top-12 left-0 right-1/2 z-10 bg-black border border-white/10 rounded shadow-lg max-h-40 overflow-y-auto">
-                        {filteredEmployees.map(e => (
-                            <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.pin || ''); setShowEmployeeCandidates(false); }}>
-                                {e.pin} - {e.name}
-                            </div>
-                        ))}
-                    </div>
-                )}
-                <Select value={entryTypeId} onValueChange={setEntryTypeId}>
-                    <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Jenis Bonus" /></SelectTrigger>
-                    <SelectContent className="bg-black/80 text-white">
-                        {Object.entries(bonusTypes).map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            </div>
-            <Input placeholder="Nominal" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} className="bg-white/5 border-white/10 text-white mb-2" />
-            <Button onClick={addEntry} className="w-full bg-primary">Tambah</Button>
-          </CardContent>
-        </Card>
       </div>
 
-      <Card className="glass-panel border-none bg-black/40">
-        <CardContent className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-tight">Daftar Bonus & Akumulasi</h3>
-            <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
-              <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Grand Total:</span>
-              <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-white/5 bg-white/5">
-                  <TableHead className="text-white/40">Karyawan</TableHead>
-                  <TableHead className="text-white/40">Jenis</TableHead>
-                  <TableHead className="text-white/40">Nominal</TableHead>
-                  <TableHead className="text-white/40"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {entries.map(entry => (
-                  <TableRow key={entry.id} className="border-white/5">
-                    <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || entry.pin}</TableCell>
-                    <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId]}</TableCell>
-                    <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(entry.amount)}</TableCell>
-                    <TableCell><Button variant="ghost" size="sm" onClick={() => removeEntry(entry.id)}><Trash2 className="w-4 h-4 text-rose-500" /></Button></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      {!selectedPeriod && (
+        <Card className="glass-panel border-white/10 bg-black/40 p-12 text-center">
+            <h3 className="text-xl font-bold text-white mb-2">Pilih Periode</h3>
+            <p className="text-white/60">Pilih periode di atas untuk mulai menambah entri bonus karyawan.</p>
+        </Card>
+      )}
+
+      {currentPeriod && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="glass-panel border-none bg-black/40">
+            <CardContent className="p-6">
+              <h3 className="text-sm font-bold text-white mb-4">Tambah Entri Bonus</h3>
+              <div className="grid grid-cols-2 gap-2 mb-2 relative">
+                  <Input 
+                      placeholder="No Absen / Nama" 
+                      value={entryPin} 
+                      onChange={e => { setEntryPin(e.target.value); setShowEmployeeCandidates(true); }} 
+                      className="bg-white/5 border-white/10 text-white" 
+                  />
+                  {showEmployeeCandidates && filteredEmployees.length > 0 && (
+                      <div className="absolute top-12 left-0 right-1/2 z-10 bg-black border border-white/10 rounded shadow-lg max-h-40 overflow-y-auto">
+                          {filteredEmployees.map(e => (
+                              <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.pin || ''); setShowEmployeeCandidates(false); }}>
+                                  {e.pin} - {e.name}
+                              </div>
+                          ))}
+                      </div>
+                  )}
+                  <Select value={entryTypeId} onValueChange={setEntryTypeId}>
+                      <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Jenis Bonus" /></SelectTrigger>
+                      <SelectContent className="bg-black/80 text-white">
+                          {Object.entries(bonusTypes).map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                      </SelectContent>
+                  </Select>
+              </div>
+              <Input placeholder="Nominal" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} className="bg-white/5 border-white/10 text-white mb-2" />
+              <Button onClick={addEntry} className="w-full bg-primary">Tambah</Button>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-panel border-none bg-black/40">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-bold text-white uppercase tracking-tight">Daftar Bonus & Akumulasi</h3>
+                <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+                  <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Grand Total:</span>
+                  <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/5 bg-white/5">
+                      <TableHead className="text-white/40">Karyawan</TableHead>
+                      <TableHead className="text-white/40">Jenis</TableHead>
+                      <TableHead className="text-white/40">Nominal</TableHead>
+                      <TableHead className="text-white/40"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {entries.map(entry => (
+                      <TableRow key={entry.id} className="border-white/5">
+                        <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || entry.pin}</TableCell>
+                        <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId]}</TableCell>
+                        <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(entry.amount)}</TableCell>
+                        <TableCell><Button variant="ghost" size="sm" onClick={() => removeEntry(entry.id)}><Trash2 className="w-4 h-4 text-rose-500" /></Button></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
