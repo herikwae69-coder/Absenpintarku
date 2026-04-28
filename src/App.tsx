@@ -4942,15 +4942,24 @@ function AdminLeave({
   const handleExport = () => {
     setExportLoading(true);
     try {
-      const data = requests.map(r => ({
-        'Nama Karyawan': r.employeeName,
-        'Bagian': sections.find(s => s.id === r.sectionId)?.name || '-',
-        'Divisi': r.division,
-        'Alasan': r.reason,
-        'Periode': r.period,
-        'Tanggal Libur': (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean).join(', ') || '-',
-        'Dibuat Pada': r.createdAt ? format(toDateSafe(r.createdAt), 'dd/MM/yyyy HH:mm') : '-'
-      }));
+    const data = requests.map(r => {
+        const dArr = (r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]).filter(Boolean);
+        const row: any = {
+          'Nama Karyawan': r.employeeName,
+          'Bagian': sections.find(s => s.id === r.sectionId)?.name || '-',
+          'Divisi': r.division,
+          'Alasan': r.reason,
+          'Periode': r.period,
+        };
+
+        // Add each date into its own cell
+        for (let i = 0; i < 6; i++) {
+          row[`Tgl Libur ${i + 1}`] = dArr[i] || '-';
+        }
+
+        row['Dibuat Pada'] = r.createdAt ? format(toDateSafe(r.createdAt), 'dd/MM/yyyy HH:mm') : '-';
+        return row;
+      });
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, `Request Libur ${selectedDivision}`);
@@ -5609,8 +5618,8 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                     <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
                       <TableHead className="text-white/40">Status</TableHead>
                       <TableHead className="text-white/40">Bagian</TableHead>
-                      <TableHead className="text-white/40">Alasan</TableHead>
                       <TableHead className="text-white/40 text-[10px]">Tanggal Libur</TableHead>
+                      <TableHead className="text-white/40">Alasan</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -5629,7 +5638,6 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                           </div>
                         </TableCell>
                         <TableCell className="text-white/50 text-xs">{sections.find(s => s.id === r.sectionId)?.name || '-'}</TableCell>
-                        <TableCell className="text-white/60 text-xs truncate max-w-[100px]" title={r.reason}>{r.reason}</TableCell>
                         <TableCell className="text-emerald-400/80 font-bold text-xs relative group/date">
                           <div className="flex flex-col gap-0.5">
                             <div className="flex flex-wrap gap-x-1">
@@ -5661,6 +5669,7 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                             )}
                           </div>
                         </TableCell>
+                        <TableCell className="text-white/60 text-xs truncate max-w-[100px]" title={r.reason}>{r.reason}</TableCell>
                       </TableRow>
                     ))}
                     {currentRequests.length === 0 && (
