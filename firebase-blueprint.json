@@ -138,6 +138,28 @@
         "radius": { "type": "number", "description": "Radius in meters" }
       },
       "required": ["lat", "lng", "radius"]
+    },
+    "BonusMasterConfig": {
+      "title": "BonusMasterConfig",
+      "description": "Daily bonus configurations managed by admin.",
+      "type": "object",
+      "properties": {
+        "periodId": { "type": "string" },
+        "dailyHighestReceipt": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["periodId", "dailyHighestReceipt"]
+    },
+    "BonusEstafet": {
+      "title": "BonusEstafet",
+      "description": "Daily relay bonus assignments and accumulation.",
+      "type": "object",
+      "properties": {
+        "periodId": { "type": "string" },
+        "dailyAssignments": { "type": "object", "description": "Mapping YYYY-MM-DD -> { bonusAmount: number, employeeIds: string[] }" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["periodId", "dailyAssignments"]
     }
   },
   "firestore": {
@@ -176,6 +198,14 @@
     "/config/office": {
       "schema": "OfficeConfig",
       "description": "Office location configuration."
+    },
+    "/bonusMasterConfig/{periodId}": {
+      "schema": "BonusMasterConfig",
+      "description": "Daily bonus configurations."
+    },
+    "/bonusEstafet/{periodId}": {
+      "schema": "BonusEstafet",
+      "description": "Relay bonus assignments."
     }
   }
 }

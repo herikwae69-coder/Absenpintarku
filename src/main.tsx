@@ -1,5 +1,5 @@
 import React, { StrictMode, Component, ReactNode, ErrorInfo } from 'react';
-import {createRoot} from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
@@ -41,10 +41,14 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
+const container = document.getElementById('root')!;
+const root = (window as any)._root || createRoot(container);
+(window as any)._root = root;
+
+root.render(
   <StrictMode>
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-  </StrictMode>,
+  </StrictMode>
 );

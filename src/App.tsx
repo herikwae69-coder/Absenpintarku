@@ -1100,6 +1100,428 @@ function BreakSlider({
   );
 }
 
+function EmployeeSelector({ 
+  employees, 
+  onAdd, 
+  onRemove, 
+  selectedIds 
+}: { 
+  employees: Employee[], 
+  onAdd: (id: string) => void, 
+  onRemove: (id: string) => void, 
+  selectedIds: string[] 
+}) {
+  const [search, setSearch] = useState('');
+  
+  const filtered = employees.filter(e => 
+    !selectedIds.includes(e.id) && 
+    (e.name.toLowerCase().includes(search.toLowerCase()))
+  );
+  
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1">
+        {selectedIds.map(id => {
+          const emp = employees.find(e => e.id === id);
+          return emp ? (
+            <span key={id} className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded flex items-center gap-1">
+              {emp.name}
+              <button onClick={() => onRemove(id)}><X className="w-3 h-3 cursor-pointer" /></button>
+            </span>
+          ) : null;
+        })}
+      </div>
+      <div className="relative">
+        <input 
+          placeholder="Cari karyawan..." 
+          className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-xs"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && filtered.length > 0 && (
+          <div className="absolute z-10 bg-black/90 border border-white/20 rounded shadow-lg max-h-40 overflow-auto w-full">
+            {filtered.map(emp => (
+              <button key={emp.id} className="w-full text-left px-2 py-1 text-xs text-white hover:bg-white/10" onClick={() => { onAdd(emp.id); setSearch(''); }}>
+                {emp.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- ADMIN BONUS ESTAFET ---
+function AdminBonusEstafet({ employees }: { employees: Employee[] }) {
+  const periodOptions = getPeriodOptions(12, 1).reverse();
+  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions.find(p => format(new Date(), 'MMM yyyy').includes(p.label))?.value || periodOptions[0].value);
+  const [bonusMaster, setBonusMaster] = useState<Record<string, number>>({});
+  const [dailyAssignments, setDailyAssignments] = useState<Record<string, { bonusAmount: number, employeeIds: string[] }>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+  
+  const dates = React.useMemo(() => {
+    if (!currentPeriod) return [];
+    const days: Date[] = [];
+    let curr = new Date(currentPeriod.start);
+    while (curr <= currentPeriod.end) {
+      days.push(new Date(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+    return days;
+  }, [currentPeriod]);
+
+  const employeeTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    Object.values(dailyAssignments).forEach((day: { bonusAmount: number, employeeIds: string[] }) => {
+      day.employeeIds.forEach(empId => {
+        totals[empId] = (totals[empId] || 0) + day.bonusAmount;
+      });
+    });
+    return totals;
+  }, [dailyAssignments]);
+
+  const downloadAccumulation = () => {
+    if (!currentPeriod) return;
+    const data = employees
+      .map(emp => ({
+        "No Absen": emp.pin,
+        "Nama": emp.name,
+        "Total Bonus Estafet": employeeTotals[emp.id] || 0
+      }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bonus Estafet");
+    XLSX.writeFile(wb, `Bonus_Estafet_${currentPeriod.label}.xlsx`);
+  };
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+    
+    // Fetch Bonus Master and Bonus Estafet
+    const unsubMaster = onSnapshot(doc(db, 'bonusMasterConfig', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        setBonusMaster(snap.exists() ? (snap.data().dailyHighestReceipt || {}) : {});
+      }
+    });
+
+    const unsubEstafet = onSnapshot(doc(db, 'bonusEstafet', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        setDailyAssignments(snap.exists() ? (snap.data().dailyAssignments || {}) : {});
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `bonusEstafet/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsubMaster();
+      unsubEstafet();
+    };
+  }, [selectedPeriod]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, 'bonusEstafet', selectedPeriod), {
+        periodId: selectedPeriod,
+        dailyAssignments,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success("Data bonus estafet berhasil disimpan");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `bonusEstafet/${selectedPeriod}`);
+      toast.error("Gagal menyimpan data");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleEmployee = (dateStr: string, empId: string) => {
+    setDailyAssignments(prev => {
+      const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+      const ids = current.employeeIds.includes(empId) 
+        ? current.employeeIds.filter(id => id !== empId)
+        : [...current.employeeIds, empId];
+      return { ...prev, [dateStr]: { ...current, employeeIds: ids, bonusAmount: bonusMaster[dateStr] || 0 } };
+    });
+  };
+
+  if (!currentPeriod) return null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Zap className="w-5 h-5 text-emerald-400" /> Bonus Estafet
+          </h2>
+          <p className="text-white/40 text-xs">Pilih karyawan yang mendapatkan bonus estafet harian.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button onClick={downloadAccumulation} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
+            <Download className="w-4 h-4" /> Download
+          </Button>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
+              <SelectValue placeholder="Pilih Periode" />
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
+              {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleSave} disabled={saving || loading} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
+            {saving ? 'Saving...' : 'Simpan'}
+          </Button>
+        </div>
+      </div>
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-6">
+          <h3 className="text-sm font-bold text-white mb-4">Akumulasi Bonus Per Karyawan</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+             {employees.map(emp => {
+               const total = employeeTotals[emp.id] || 0;
+               return (
+                 <div key={emp.id} className="bg-white/5 p-3 rounded-xl border border-white/10 flex justify-between items-center">
+                   <span className="text-white/60 text-xs font-bold">{emp.name}</span>
+                   <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(total)}</span>
+                 </div>
+               );
+             })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/5 bg-white/5">
+                  <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6">Tanggal</TableHead>
+                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">Bonus (Rp)</TableHead>
+                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">Karyawan</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dates.map(date => {
+                  const dateStr = format(date, 'yyyy-MM-dd');
+                  const bonus = bonusMaster[dateStr] || 0;
+                  const selectedEmpIds = dailyAssignments[dateStr]?.employeeIds || [];
+                  return (
+                    <TableRow key={dateStr} className="border-white/5">
+                      <TableCell className="pl-6 font-bold text-white text-sm">{format(date, 'dd MMM', { locale: id })}</TableCell>
+                      <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(bonus)}</TableCell>
+                      <TableCell>
+                        <EmployeeSelector 
+                          employees={employees}
+                          selectedIds={selectedEmpIds}
+                          onAdd={(id) => {
+                            setDailyAssignments(prev => {
+                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                              return { ...prev, [dateStr]: { ...current, employeeIds: [...current.employeeIds, id], bonusAmount: bonusMaster[dateStr] || 0 } };
+                            });
+                          }}
+                          onRemove={(id) => {
+                            setDailyAssignments(prev => {
+                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                              return { ...prev, [dateStr]: { ...current, employeeIds: current.employeeIds.filter(empId => empId !== id), bonusAmount: bonusMaster[dateStr] || 0 } };
+                            });
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// --- ADMIN BONUS MASTER ---
+function AdminBonusMaster() {
+  const periodOptions = getPeriodOptions(12, 1).reverse();
+  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions.find(p => format(new Date(), 'MMM yyyy').includes(p.label))?.value || periodOptions[0].value);
+  const [dailyData, setDailyData] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+  
+  // Generate list of dates for the period
+  const dates = React.useMemo(() => {
+    if (!currentPeriod) return [];
+    const days: Date[] = [];
+    let curr = new Date(currentPeriod.start);
+    while (curr <= currentPeriod.end) {
+      days.push(new Date(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+    return days;
+  }, [currentPeriod]);
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+    
+    // Fetch existing settings for this period
+    const unsub = onSnapshot(doc(db, 'bonusMasterConfig', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        if (snap.exists()) {
+          setDailyData(snap.data().dailyHighestReceipt || {});
+        } else {
+          setDailyData({});
+        }
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `bonusMasterConfig/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsub();
+    };
+  }, [selectedPeriod]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, 'bonusMasterConfig', selectedPeriod), {
+        periodId: selectedPeriod,
+        dailyHighestReceipt: dailyData,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success("Data nota tertinggi berhasil disimpan");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `bonusMasterConfig/${selectedPeriod}`);
+      toast.error("Gagal menyimpan data");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleInputChange = (dateStr: string, val: string) => {
+    const num = parseInt(val.replace(/\D/g, '')) || 0;
+    setDailyData(prev => ({ ...prev, [dateStr]: num }));
+  };
+
+  if (!currentPeriod) return null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Zap className="w-5 h-5 text-emerald-400" /> Master Nota Tertinggi
+          </h2>
+          <p className="text-white/40 text-xs">Tentukan nilai nota tertinggi harian sebagai acuan bonus.</p>
+        </div>
+        <div className="flex gap-3 w-full md:w-auto">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-full md:w-[250px] glass-panel border-white/10 text-white h-12 rounded-xl">
+              <SelectValue placeholder="Pilih Periode" />
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
+              {periodOptions.map(p => (
+                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button 
+            onClick={handleSave} 
+            disabled={saving || loading}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 h-12 rounded-xl"
+          >
+            {saving ? 'Saving...' : 'Simpan Data'}
+          </Button>
+        </div>
+      </div>
+
+      <Card className="glass-panel border-none shadow-2xl bg-black/40 overflow-hidden">
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="p-20 text-center text-white/20 animate-pulse font-black uppercase tracking-widest">Memuat Data Periode...</div>
+          ) : (
+            <div className="overflow-x-auto no-scrollbar">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/5 hover:bg-transparent bg-white/5">
+                    <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6 w-[200px]">Hari / Tanggal</TableHead>
+                    <TableHead className="text-white/40 font-bold uppercase text-[10px]">Nominal Nota Tertinggi (Rp)</TableHead>
+                    <TableHead className="text-white/40 font-bold uppercase text-[10px] text-right pr-6">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dates.map(date => {
+                    const dateStr = format(date, 'yyyy-MM-dd');
+                    const value = dailyData[dateStr] || 0;
+                    return (
+                      <TableRow key={dateStr} className="border-white/5 hover:bg-white/5 transition-colors group">
+                        <TableCell className="pl-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-white/40 text-[10px] font-black uppercase tracking-tighter">
+                              {format(date, 'EEEE', { locale: id })}
+                            </span>
+                            <span className="text-white font-bold text-sm">
+                              {format(date, 'dd MMMM yyyy', { locale: id })}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="relative max-w-[300px]">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 text-xs font-bold">Rp</span>
+                            <Input 
+                              type="text"
+                              value={new Intl.NumberFormat('id-ID').format(value)}
+                              onChange={(e) => handleInputChange(dateStr, e.target.value)}
+                              className="bg-white/5 border-white/10 text-white pl-11 h-11 rounded-xl font-bold focus:ring-emerald-500/50"
+                              placeholder="0"
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right pr-6">
+                          {value > 0 ? (
+                            <div className="flex items-center justify-end gap-1.5 text-emerald-400">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              <span className="text-[10px] font-black uppercase">Set</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-black uppercase text-white/10">Empty</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // --- EMPLOYEE VIEW ---
 function EmployeeView({ 
   employee, 
@@ -1932,6 +2354,13 @@ function AdminDashboard({
       ]
     },
     {
+      label: 'Bonus & Reward',
+      items: [
+        { value: 'bonus-master', label: 'Nota Tertinggi', icon: <Zap className="w-4 h-4" /> },
+        { value: 'bonus-estafet', label: 'Bonus Estafet', icon: <Zap className="w-4 h-4" /> },
+      ]
+    },
+    {
       label: 'Libur',
       items: [
         { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
@@ -2054,6 +2483,12 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="manual" className="mt-0 outline-none">
                 <AdminManualAttendance employees={employees} divisions={divisions} />
+              </TabsContent>
+              <TabsContent value="bonus-master" className="mt-0 outline-none">
+                <AdminBonusMaster />
+              </TabsContent>
+              <TabsContent value="bonus-estafet" className="mt-0 outline-none">
+                <AdminBonusEstafet employees={employees} />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />

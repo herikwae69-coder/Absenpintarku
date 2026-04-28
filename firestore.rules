@@ -31,5 +31,7 @@ service cloud.firestore {
     match /activityLogs/{id} { allow read: if true; allow write: if isValidId(id); }
     match /config/{id} { allow read: if true; allow write: if isValidId(id); }
     match /systemConfig/{id} { allow read: if true; allow write: if isValidId(id); }
+    match /bonusMasterConfig/{id} { allow read: if true; allow write: if isValidId(id); }
+    match /bonusEstafet/{id} { allow read: if true; allow write: if isValidId(id); }
   }
 }
