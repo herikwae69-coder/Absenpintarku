@@ -14,20 +14,11 @@ export default defineConfig(({mode}) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom', 'lucide-react', 'motion/react'],
-            firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
-            utils: ['date-fns', 'xlsx', 'exceljs'],
-          },
-        },
-      },
       chunkSizeWarningLimit: 2000,
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(process.cwd(), '.'),
       },
     },
     server: {

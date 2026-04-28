@@ -160,6 +160,20 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["periodId", "dailyAssignments"]
+    },
+    "BonusOperator": {
+      "title": "BonusOperator",
+      "description": "Period-based operator bonus based on quantity of work.",
+      "type": "object",
+      "properties": {
+        "periodId": { "type": "string" },
+        "notaRate": { "type": "number", "description": "Price per nota" },
+        "balenRate": { "type": "number", "description": "Price per balen" },
+        "entries": { "type": "object", "description": "Mapping employeeId -> { notaCount: number, balenCount: number }" },
+        "isLocked": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["periodId", "entries"]
     }
   },
   "firestore": {
@@ -206,6 +220,10 @@
     "/bonusEstafet/{periodId}": {
       "schema": "BonusEstafet",
       "description": "Relay bonus assignments."
+    },
+    "/bonusOperator/{periodId}": {
+      "schema": "BonusOperator",
+      "description": "Operator bonus data per period."
     }
   }
 }

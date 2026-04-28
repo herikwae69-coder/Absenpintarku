@@ -2587,6 +2587,354 @@ function AdminBonusLainLainCombined({ employees, activePeriodId, setActivePeriod
   );
 }
 
+// --- ADMIN BONUS OPERATOR ---
+function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+
+  const [notaRate, setNotaRate] = useState<number>(0);
+  const [balenRate, setBalenRate] = useState<number>(0);
+  const [entries, setEntries] = useState<Record<string, { notaCount: number, balenCount: number }>>({});
+  const [isLocked, setIsLocked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState('');
+
+  // Selected employee for new entry
+  const [selectedEmpId, setSelectedEmpId] = useState<string>('');
+  const [inputNota, setInputNota] = useState<string>('');
+  const [inputBalen, setInputBalen] = useState<string>('');
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(doc(db, 'bonusOperator', selectedPeriod), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setNotaRate(data.notaRate || 0);
+        setBalenRate(data.balenRate || 0);
+        setEntries(data.entries as Record<string, { notaCount: number, balenCount: number }> || {});
+        setIsLocked(data.isLocked || false);
+      } else {
+        setNotaRate(0);
+        setBalenRate(0);
+        setEntries({});
+        setIsLocked(false);
+      }
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `bonusOperator/${selectedPeriod}`);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [selectedPeriod]);
+
+  const autoSaveConfig = async (nRate: number, bRate: number) => {
+    try {
+      await setDoc(doc(db, 'bonusOperator', selectedPeriod), {
+        periodId: selectedPeriod,
+        notaRate: nRate,
+        balenRate: bRate,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `bonusOperator/${selectedPeriod}`);
+    }
+  };
+
+  const autoSaveEntries = async (updatedEntries: Record<string, any>) => {
+    try {
+      await setDoc(doc(db, 'bonusOperator', selectedPeriod), {
+        periodId: selectedPeriod,
+        entries: updatedEntries,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `bonusOperator/${selectedPeriod}`);
+    }
+  };
+
+  const handleAddEntry = () => {
+    if (!selectedEmpId) {
+      toast.error("Pilih karyawan terlebih dahulu");
+      return;
+    }
+    if (isLocked) {
+      toast.error("Periode ini sudah dikunci!");
+      return;
+    }
+
+    const n = parseInt(inputNota) || 0;
+    const b = parseInt(inputBalen) || 0;
+
+    const updated = { ...entries, [selectedEmpId]: { notaCount: n, balenCount: b } };
+    setEntries(updated);
+    autoSaveEntries(updated);
+
+    // Reset input
+    setSelectedEmpId('');
+    setInputNota('');
+    setInputBalen('');
+    toast.success("Data berhasil ditambahkan");
+  };
+
+  const handleRemoveEntry = (empId: string) => {
+    if (isLocked) {
+      toast.error("Periode ini sudah dikunci!");
+      return;
+    }
+    const updated = { ...entries };
+    delete updated[empId];
+    setEntries(updated);
+    autoSaveEntries(updated);
+  };
+
+  const toggleLock = async () => {
+    if (isLocked) {
+      setShowUnlockDialog(true);
+    } else {
+      try {
+        await setDoc(doc(db, 'bonusOperator', selectedPeriod), { isLocked: true }, { merge: true });
+        toast.success("Periode dikunci");
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusOperator/${selectedPeriod}`);
+      }
+    }
+  };
+
+  const confirmUnlock = async () => {
+    if (unlockPassword === 'admin123') {
+      try {
+        await setDoc(doc(db, 'bonusOperator', selectedPeriod), { isLocked: false }, { merge: true });
+        setShowUnlockDialog(false);
+        setUnlockPassword('');
+        toast.success("Periode berhasil dibuka");
+      } catch(e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusOperator/${selectedPeriod}`);
+      }
+    } else {
+      toast.error("Password salah!");
+    }
+  };
+
+  const downloadExcel = () => {
+    if (!currentPeriod || Object.keys(entries).length === 0) return;
+
+    const data = Object.entries(entries as Record<string, { notaCount: number, balenCount: number }>).map(([empId, val]) => {
+      const emp = employees.find(e => e.id === empId);
+      const totalBonus = (val.notaCount * notaRate) + (val.balenCount * balenRate);
+      return {
+        'No. Absen': emp?.pin || '',
+        'Nama': emp?.name || '',
+        'Nota': val.notaCount,
+        'Balen': val.balenCount,
+        'Total Bonus Operator': totalBonus
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Bonus Operator");
+    XLSX.writeFile(workbook, `Bonus_Operator_${selectedPeriod}.xlsx`);
+    toast.success("Excel berhasil diunduh");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-emerald-400" /> Bonus Operator
+          </h2>
+          <p className="text-white/40 text-xs">Hitung bonus operator berdasarkan jumlah nota dan balen.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white h-11 px-6 rounded-xl">
+              <SelectValue placeholder="Pilih Periode" />
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
+              {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {currentPeriod && (
+            <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-11 px-6`}>
+              {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            </Button>
+          )}
+          <Button 
+            onClick={downloadExcel} 
+            disabled={loading || Object.keys(entries).length === 0} 
+            className="bg-primary hover:bg-primary/80 text-white rounded-xl h-11 px-6 flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" /> Download Excel
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogTitle>Buka Kunci Periode (Operator)</DialogTitle>
+          <div className="space-y-4 pt-4">
+            <Input 
+              type="password" 
+              placeholder="Masukkan Password Admin"
+              value={unlockPassword}
+              onChange={(e) => setUnlockPassword(e.target.value)}
+              className="bg-white/5 border-white/10 text-white"
+            />
+            <Button onClick={confirmUnlock} className="w-full bg-emerald-600 hover:bg-emerald-500">Konfirmasi Buka Kunci</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-6">
+          <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-4">Konfigurasi Rumus (Per Nota/Balen)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label className="text-white/40 text-xs">Nominal per Nota (Rp)</Label>
+              <Input 
+                type="number" 
+                value={notaRate} 
+                disabled={isLocked}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  setNotaRate(val);
+                  autoSaveConfig(val, balenRate);
+                }}
+                className="bg-white/5 border-white/10 text-white font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-white/40 text-xs">Nominal per Balen (Rp)</Label>
+              <Input 
+                type="number" 
+                value={balenRate} 
+                disabled={isLocked}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  setBalenRate(val);
+                  autoSaveConfig(notaRate, val);
+                }}
+                className="bg-white/5 border-white/10 text-white font-mono"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {!isLocked && (
+        <Card className="glass-panel border-none bg-black/40">
+          <CardContent className="p-6">
+            <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-4">Tambah Data Hasil Kerja</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              <div className="space-y-2">
+                <Label className="text-white/40 text-xs">Pilih Karyawan</Label>
+                <Select value={selectedEmpId} onValueChange={setSelectedEmpId}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                    <SelectValue placeholder="Pilih Karyawan" />
+                  </SelectTrigger>
+                  <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
+                     {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name} ({e.pin})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-white/40 text-xs">Jumlah Nota</Label>
+                <Input 
+                   type="number" 
+                   value={inputNota} 
+                   onChange={(e) => setInputNota(e.target.value)} 
+                   placeholder="0"
+                   className="bg-white/5 border-white/10 text-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-white/40 text-xs">Jumlah Balen</Label>
+                <Input 
+                   type="number" 
+                   value={inputBalen} 
+                   onChange={(e) => setInputBalen(e.target.value)} 
+                   placeholder="0"
+                   className="bg-white/5 border-white/10 text-white"
+                />
+              </div>
+              <Button onClick={handleAddEntry} className="bg-emerald-600 hover:bg-emerald-500 rounded-xl h-10">
+                Tambah Data
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-6">
+          <div className="overflow-x-auto no-scrollbar">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/10 hover:bg-transparent text-xs text-white/40">
+                  <TableHead>Pin</TableHead>
+                  <TableHead>Nama</TableHead>
+                  <TableHead className="text-center">Nota</TableHead>
+                  <TableHead className="text-center">Balen</TableHead>
+                  <TableHead className="text-right">Total Bonus</TableHead>
+                  {!isLocked && <TableHead className="text-center">Aksi</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-10 text-white/20">Memuat data...</TableCell></TableRow>
+                ) : Object.keys(entries).length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-10 text-white/20 italic">Belum ada data input.</TableCell></TableRow>
+                ) : (
+                  Object.entries(entries as Record<string, { notaCount: number, balenCount: number }>).map(([empId, val]) => {
+                    const emp = employees.find(e => e.id === empId);
+                    const totalBonus = (val.notaCount * notaRate) + (val.balenCount * balenRate);
+                    return (
+                      <TableRow key={empId} className="border-white/5 hover:bg-white/5 transition-colors">
+                        <TableCell className="text-white/60 font-mono text-xs">{emp?.pin}</TableCell>
+                        <TableCell className="text-white font-bold">{emp?.name}</TableCell>
+                        <TableCell className="text-center text-white/80">{val.notaCount}</TableCell>
+                        <TableCell className="text-center text-white/80">{val.balenCount}</TableCell>
+                        <TableCell className="text-right text-emerald-400 font-mono font-black">
+                          Rp {new Intl.NumberFormat('id-ID').format(totalBonus)}
+                        </TableCell>
+                        {!isLocked && (
+                          <TableCell className="text-center">
+                            <Button variant="ghost" size="icon" onClick={() => handleRemoveEntry(empId)} className="text-rose-400 hover:bg-rose-400/10">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function EmployeeView({ 
   employee, 
   employees, 
@@ -3429,6 +3777,7 @@ function AdminDashboard({
         { value: 'bonus-estafet', label: 'Bonus Estafet', icon: <Zap className="w-4 h-4" /> },
         { value: 'bonus-lain-lain', label: 'Bonus Campuran', icon: <Zap className="w-4 h-4" /> },
         { value: 'bonus-lain-lain-combined', label: 'Bonus Lain-Lain', icon: <Calculator className="w-4 h-4" /> },
+        { value: 'bonus-operator', label: 'Bonus Operator', icon: <Calculator className="w-4 h-4 text-emerald-400" /> },
       ]
     },
     {
@@ -3569,6 +3918,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="bonus-jaga-depan" className="mt-0 outline-none">
                 <AdminBonusJagaDepan employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="bonus-operator" className="mt-0 outline-none">
+                <AdminBonusOperator employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />
