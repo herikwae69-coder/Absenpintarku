@@ -1111,55 +1111,76 @@ function EmployeeSelector({
   onAdd, 
   onRemove, 
   selectedIds,
+  onSelect,
+  selectedId,
+  placeholder,
   disabled = false
 }: { 
   employees: Employee[], 
-  onAdd: (id: string) => void, 
-  onRemove: (id: string) => void, 
-  selectedIds: string[],
+  onAdd?: (id: string) => void, 
+  onRemove?: (id: string) => void, 
+  selectedIds?: string[],
+  onSelect?: (id: string) => void,
+  selectedId?: string,
+  placeholder?: string,
   disabled?: boolean
 }) {
   const [search, setSearch] = useState('');
+  const isMulti = !!onAdd && !!onRemove && !!selectedIds;
   
-  const filteredMatches = employees.filter(e => 
-    !selectedIds.includes(e.id) && 
-    (e.name.toLowerCase().includes(search.toLowerCase()) || (e.pin && e.pin.toLowerCase().includes(search.toLowerCase())))
-  );
+  const filteredMatches = employees.filter(e => {
+    if (isMulti) {
+        return !selectedIds.includes(e.id) && 
+               (e.name.toLowerCase().includes(search.toLowerCase()) || (e.pin && e.pin.toLowerCase().includes(search.toLowerCase())));
+    } else {
+        return (e.name.toLowerCase().includes(search.toLowerCase()) || (e.pin && e.pin.toLowerCase().includes(search.toLowerCase())));
+    }
+  });
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
     if (e.key === 'Enter' && filteredMatches.length === 1) {
-      onAdd(filteredMatches[0].id);
+      if (isMulti && onAdd) onAdd(filteredMatches[0].id);
+      else if (onSelect) onSelect(filteredMatches[0].id);
       setSearch('');
     }
   };
   
+  const selectedEmp = !isMulti && selectedId ? employees.find(e => e.id === selectedId) : null;
+  
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-1">
-        {selectedIds.map(id => {
-          const emp = employees.find(e => e.id === id);
-          return emp ? (
-            <span key={id} className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded flex items-center gap-1">
-              {emp.name}
-              {!disabled && <button onClick={() => onRemove(id)}><X className="w-3 h-3 cursor-pointer" /></button>}
-            </span>
-          ) : null;
-        })}
-      </div>
+    <div className="flex flex-col gap-2 w-full">
+      {isMulti && selectedIds && (
+          <div className="flex flex-wrap gap-1">
+            {selectedIds.map(id => {
+              const emp = employees.find(e => e.id === id);
+              return emp ? (
+                <span key={id} className="bg-emerald-500 text-white text-[10px] px-2 py-0.5 rounded flex items-center gap-1">
+                  {emp.name}
+                  {!disabled && onRemove && <button onClick={() => onRemove(id)}><X className="w-3 h-3 cursor-pointer" /></button>}
+                </span>
+              ) : null;
+            })}
+          </div>
+      )}
       <div className="relative">
         <input 
-          placeholder={disabled ? "Periode dikunci" : "Cari karyawan (nama/pin)..."} 
-          className={`w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-xs ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          value={search}
+          placeholder={disabled ? "Terkunci" : (placeholder || "Cari karyawan...")} 
+          className={`w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-xs ${disabled ? 'opacity-50 cursor-not-allowed' : ''} h-10`}
+          value={search !== '' ? search : (selectedEmp ? selectedEmp.name : '')}
           onChange={(e) => setSearch(e.target.value)}
+          onFocus={() => { if (!isMulti && selectedEmp) setSearch(''); }}
           onKeyDown={handleKeyDown}
           disabled={disabled}
         />
         {search && filteredMatches.length > 0 && (
-          <div className="absolute z-10 bg-black/90 border border-white/20 rounded shadow-lg max-h-40 overflow-auto w-full">
+          <div className="absolute z-50 bg-black/90 border border-white/20 rounded shadow-lg max-h-40 overflow-auto w-full mt-1">
             {filteredMatches.map(emp => (
-              <button key={emp.id} className="w-full text-left px-2 py-1 text-xs text-white hover:bg-white/10" onClick={() => { onAdd(emp.id); setSearch(''); }}>
+              <button key={emp.id} className="w-full text-left px-2 py-2 text-xs text-white hover:bg-white/10 border-b border-white/5 last:border-0" onClick={() => { 
+                if (isMulti && onAdd) onAdd(emp.id);
+                else if (onSelect) onSelect(emp.id);
+                setSearch(''); 
+              }}>
                 {emp.name} ({emp.pin})
               </button>
             ))}
@@ -1351,7 +1372,9 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
           </Button>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
-              <SelectValue placeholder="Pilih Periode" />
+              <SelectValue placeholder="Pilih Periode">
+                {currentPeriod?.label || selectedPeriod}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
@@ -1897,7 +1920,9 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
           </Button>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
-              <SelectValue placeholder="Pilih Periode" />
+              <SelectValue placeholder="Pilih Periode">
+                {currentPeriod?.label || selectedPeriod}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
@@ -2230,7 +2255,9 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
           )}
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
-              <SelectValue placeholder="Pilih Periode" />
+              <SelectValue placeholder="Pilih Periode">
+                 {periodOptions.find(p => p.value === selectedPeriod)?.label || "Pilih Periode"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
@@ -2292,28 +2319,25 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="glass-panel border-none bg-black/40">
               <CardContent className="p-6">
-                <h3 className="text-sm font-bold text-white mb-4">Tambah Entri Bonus</h3>
                 <div className="grid grid-cols-2 gap-2 mb-2 relative">
-                    <Input 
-                        placeholder="No Absen / Nama" 
-                        value={entryPin} 
-                        onChange={e => { setEntryPin(e.target.value); setShowEmployeeCandidates(true); }} 
-                        className="bg-white/5 border-white/10 text-white" 
-                        disabled={isLocked}
+                  <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Karyawan</Label>
+                    <EmployeeSelector 
+                      employees={employees} 
+                      selectedId={employees.find(e => e.pin === entryPin || e.name === entryPin)?.id || ''} 
+                      onSelect={(id) => {
+                        const emp = employees.find(e => e.id === id);
+                        if (emp) setEntryPin(emp.pin);
+                      }}
+                      placeholder="Cari..."
                     />
-                    {showEmployeeCandidates && filteredEmployees.length > 0 && (
-                        <div className="absolute top-12 left-0 right-1/2 z-10 bg-black border border-white/10 rounded shadow-lg max-h-40 overflow-y-auto">
-                            {filteredEmployees.map(e => (
-                                <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.name || ''); setShowEmployeeCandidates(false); }}>
-                                    {e.name} ({e.pin})
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Jenis Bonus</Label>
                     <Select value={entryTypeId} onValueChange={setEntryTypeId} disabled={isLocked}>
-                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                          <SelectValue placeholder="Jenis Bonus">
-                            {entryTypeId ? bonusTypes[entryTypeId] : "Jenis Bonus"}
+                        <SelectTrigger className="bg-white/5 border-white/10 text-white h-10">
+                          <SelectValue placeholder="Pilih Jenis">
+                            {entryTypeId ? bonusTypes[entryTypeId] : "Pilih Jenis"}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent className="bg-black/80 text-white">
@@ -2322,6 +2346,7 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
                             ))}
                         </SelectContent>
                     </Select>
+                  </div>
                 </div>
                 <Input placeholder="Nominal" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} className="bg-white/5 border-white/10 text-white mb-2" disabled={isLocked} />
                 <Button onClick={addEntry} className="w-full bg-primary" disabled={isLocked}>Tambah</Button>
@@ -2788,7 +2813,9 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white h-11 px-6 rounded-xl">
-              <SelectValue placeholder="Pilih Periode" />
+              <SelectValue placeholder="Pilih Periode">
+                {currentPeriod?.label || selectedPeriod}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
@@ -3622,7 +3649,9 @@ function EmployeeView({
               <CardTitle className="text-white">Riwayat Absensi</CardTitle>
               <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
                 <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white">
-                  <SelectValue placeholder="Pilih Periode" />
+                  <SelectValue placeholder="Pilih Periode">
+                    {periodOptions.find(p => p.value === selectedPeriod)?.label || "Pilih Periode"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="glass-panel border-white/20 text-white">
                   {periodOptions.map(p => <SelectItem key={p.value} value={p.value} className="hover:bg-white/10">{p.label}</SelectItem>)}
@@ -5313,7 +5342,9 @@ function AdminJadwalLibur({
             </Select>
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
               <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white font-bold h-10">
-                <SelectValue placeholder={periodOptions.length > 0 ? "Pilih Periode" : "Memuat..."} />
+                <SelectValue placeholder={periodOptions.length > 0 ? "Pilih Periode" : "Memuat..."}>
+                  {periodOptions.find(p => p.value === selectedPeriod)?.label || (periodOptions.length > 0 ? "Pilih Periode" : "Memuat...")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="glass-panel border-white/20 text-white">
                 {periodOptions.map(p => (
@@ -5683,7 +5714,9 @@ function AdminQuota({
           <Label className="text-white/60 text-xs uppercase font-bold tracking-wider mb-2 block">Pilih Periode Aktif</Label>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-full md:w-[300px] glass-panel border-white/10 text-white font-bold h-12">
-              <SelectValue placeholder="Pilih Periode" />
+              <SelectValue placeholder="Pilih Periode">
+                {periodOptions.find(p => p.value === selectedPeriod)?.label || "Pilih Periode"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="glass-panel border-white/20 text-white">
               {periodOptions.map(p => (
@@ -6702,21 +6735,13 @@ function AdminLive({
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                      <Label className="text-white/70 text-xs">Cari Karyawan (Nama / PIN)</Label>
-                      <div className="relative">
-                        <Input 
-                          placeholder="Ketik nama atau PIN..." 
-                          className="field-input h-12 rounded-xl pl-4 pr-10"
-                          onChange={(e) => {
-                            const val = e.target.value.toLowerCase();
-                            const found = employees.find(e => e.name.toLowerCase().includes(val) || (e as any).pin?.includes(val));
-                            if (found) setLiburData({...liburData, employeeId: found.id});
-                          }}
-                        />
-                        <div className="absolute right-3 top-3 text-white/50 text-xs font-mono">
-                          {employees.find(e => e.id === liburData.employeeId)?.name || '...'}
-                        </div>
-                      </div>
+                      <Label className="text-white/70 text-xs">Pilih Karyawan</Label>
+                      <EmployeeSelector 
+                        employees={employees} 
+                        selectedId={liburData.employeeId} 
+                        onSelect={(id) => setLiburData({...liburData, employeeId: id})} 
+                        placeholder="Cari Karyawan..."
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label className="text-white/70 text-xs">Tanggal Libur</Label>
@@ -6963,7 +6988,9 @@ function AdminLeave({
           <div className="flex flex-col sm:flex-row gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
               <SelectTrigger className="w-full sm:w-[200px] glass-panel border-white/10 text-white">
-                <SelectValue placeholder="Pilih Periode" />
+                <SelectValue placeholder="Pilih Periode">
+                  {periodOptions.find(p => p.value === selectedPeriod)?.label || "Pilih Periode"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="glass-panel border-white/20 text-white">
                 {periodOptions.map(p => (
