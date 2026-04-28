@@ -34,5 +34,6 @@ service cloud.firestore {
     match /bonusMasterConfig/{id} { allow read: if true; allow write: if isValidId(id); }
     match /bonusEstafet/{id} { allow read: if true; allow write: if isValidId(id); }
     match /bonusJagaDepan/{id} { allow read: if true; allow write: if isValidId(id); }
+    match /bonusLainLain/{id} { allow read: if true; allow write: if isValidId(id); }
   }
 }

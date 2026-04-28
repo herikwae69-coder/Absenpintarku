@@ -1664,6 +1664,7 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
 }
 
 
+
 // --- ADMIN BONUS JAGA DEPAN ---
 function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
   const [controls, setControls] = useState<Record<string, any>>({});
@@ -1898,6 +1899,269 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
     </div>
   );
 }
+
+// --- ADMIN BONUS LAIN-LAIN ---
+function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+
+  const [bonusTypes, setBonusTypes] = useState<Record<string, string>>({}); // { id: name }
+  
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'systemConfig', 'bonusLainLainTypes'), (snap) => {
+      setBonusTypes(snap.exists() ? snap.data().types || {} : {});
+    });
+    return unsub;
+  }, []);
+
+  const [entries, setEntries] = useState<Array<{ id: string, pin: string, bonusTypeId: string, amount: number }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [entryPin, setEntryPin] = useState('');
+  const [entryTypeId, setEntryTypeId] = useState('');
+  const [entryAmount, setEntryAmount] = useState('');
+  const [showEmployeeCandidates, setShowEmployeeCandidates] = useState(false);
+
+  const filteredEmployees = React.useMemo(() => {
+    if (!entryPin) return [];
+    return employees.filter(e => e.pin?.includes(entryPin) || e.name.toLowerCase().includes(entryPin.toLowerCase())).slice(0, 5);
+  }, [entryPin, employees]);
+
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+  
+  const employeeTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    entries.forEach(entry => {
+      const emp = employees.find(e => e.pin === entry.pin);
+      if (emp) {
+        totals[emp.id] = (totals[emp.id] || 0) + Number(entry.amount);
+      }
+    });
+    return totals;
+  }, [entries, employees]);
+
+  const grandTotal = React.useMemo(() => {
+    return Object.values(employeeTotals).reduce((sum: number, val: number) => sum + val, 0);
+  }, [employeeTotals]);
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+    
+    const unsub = onSnapshot(doc(db, 'bonusLainLain', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        const data = snap.exists() ? snap.data() : {};
+        setBonusTypes(data.bonusTypes || {});
+        setEntries(data.entries || []);
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `bonusLainLain/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsub();
+    };
+  }, [selectedPeriod]);
+
+  const downloadExcel = () => {
+    if (!currentPeriod || employees.length === 0) return;
+    const data = employees
+      .filter(emp => (employeeTotals[emp.id] || 0) > 0)
+      .map(emp => ({
+        "No. Absen": emp.pin || "-",
+        "Nama": emp.name,
+        "Total Nominal": employeeTotals[emp.id]
+      }));
+
+    if (data.length === 0) {
+      toast.error("Tidak ada data untuk diunduh");
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bonus Lain-Lain");
+    XLSX.writeFile(wb, `Bonus_Lain_Lain_${currentPeriod.label}.xlsx`);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, 'bonusLainLain', selectedPeriod), {
+        periodId: selectedPeriod,
+        bonusTypes,
+        entries,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success("Data bonus lain-lain berhasil disimpan");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `bonusLainLain/${selectedPeriod}`);
+      toast.error("Gagal menyimpan data");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addBonusType = async () => {
+    if (!newTypeName) return;
+    const id = 'type_' + Date.now();
+    const updatedTypes = { ...bonusTypes, [id]: newTypeName };
+    await setDoc(doc(db, 'systemConfig', 'bonusLainLainTypes'), { types: updatedTypes });
+    setNewTypeName('');
+  };
+
+  const addEntry = () => {
+    const emp = employees.find(e => e.pin === entryPin);
+    if (!emp || !entryTypeId || !entryAmount) {
+        toast.error("Data tidak lengkap atau karyawan tidak ditemukan!");
+        return;
+    }
+    const amount = Number(entryAmount.replace(/\D/g, ''));
+    setEntries(prev => [...prev, { id: 'entry_' + Date.now(), pin: entryPin, bonusTypeId: entryTypeId, amount }]);
+    setEntryPin('');
+    setEntryAmount('');
+  };
+
+  const removeEntry = (id: string) => {
+    setEntries(prev => prev.filter(e => e.id !== id));
+  };
+
+  if (!currentPeriod) return null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Zap className="w-5 h-5 text-amber-400" /> Bonus Lain-Lain
+          </h2>
+          <p className="text-white/40 text-xs">Kelola bonus tambahan selain dari sistem utama.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button onClick={downloadExcel} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
+            <Download className="w-4 h-4" /> Download
+          </Button>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
+              <SelectValue placeholder="Pilih Periode" />
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
+              {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleSave} disabled={saving || loading} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
+            {saving ? 'Saving...' : 'Simpan'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="glass-panel border-none bg-black/40">
+            <CardContent className="p-6">
+                <h3 className="text-sm font-bold text-white mb-4">Jenis Bonus</h3>
+                <div className="flex gap-2 mb-4">
+                    <Input placeholder="Nama Bonus" value={newTypeName} onChange={e => setNewTypeName(e.target.value)} className="bg-white/5 border-white/10 text-white" />
+                    <Button onClick={addBonusType} variant="outline" className="border-white/10">+</Button>
+                </div>
+                <div className="space-y-2">
+                    {Object.entries(bonusTypes).map(([id, name]) => (
+                        <div key={id} className="flex justify-between items-center bg-white/5 p-2 rounded text-xs text-white">
+                            {name}
+                            <Button variant="ghost" size="sm" onClick={() => setBonusTypes(prev => { const next = {...prev}; delete next[id]; return next; })}><Trash2 className="w-3 h-3 text-rose-500" /></Button>
+                        </div>
+                    ))}
+                </div>
+            </CardContent>
+        </Card>
+        
+        <Card className="glass-panel border-none bg-black/40">
+          <CardContent className="p-6">
+            <h3 className="text-sm font-bold text-white mb-4">Tambah Entri Bonus</h3>
+            <div className="grid grid-cols-2 gap-2 mb-2 relative">
+                <Input 
+                    placeholder="No Absen / Nama" 
+                    value={entryPin} 
+                    onChange={e => { setEntryPin(e.target.value); setShowEmployeeCandidates(true); }} 
+                    className="bg-white/5 border-white/10 text-white" 
+                />
+                {showEmployeeCandidates && filteredEmployees.length > 0 && (
+                    <div className="absolute top-12 left-0 right-1/2 z-10 bg-black border border-white/10 rounded shadow-lg max-h-40 overflow-y-auto">
+                        {filteredEmployees.map(e => (
+                            <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.pin || ''); setShowEmployeeCandidates(false); }}>
+                                {e.pin} - {e.name}
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <Select value={entryTypeId} onValueChange={setEntryTypeId}>
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Jenis Bonus" /></SelectTrigger>
+                    <SelectContent className="bg-black/80 text-white">
+                        {Object.entries(bonusTypes).map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <Input placeholder="Nominal" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} className="bg-white/5 border-white/10 text-white mb-2" />
+            <Button onClick={addEntry} className="w-full bg-primary">Tambah</Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-bold text-white uppercase tracking-tight">Daftar Bonus & Akumulasi</h3>
+            <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+              <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Grand Total:</span>
+              <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/5 bg-white/5">
+                  <TableHead className="text-white/40">Karyawan</TableHead>
+                  <TableHead className="text-white/40">Jenis</TableHead>
+                  <TableHead className="text-white/40">Nominal</TableHead>
+                  <TableHead className="text-white/40"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map(entry => (
+                  <TableRow key={entry.id} className="border-white/5">
+                    <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || entry.pin}</TableCell>
+                    <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId]}</TableCell>
+                    <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(entry.amount)}</TableCell>
+                    <TableCell><Button variant="ghost" size="sm" onClick={() => removeEntry(entry.id)}><Trash2 className="w-4 h-4 text-rose-500" /></Button></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 
 // --- EMPLOYEE VIEW ---
 function EmployeeView({ 
@@ -2740,6 +3004,7 @@ function AdminDashboard({
         { value: 'bonus-master', label: 'Nota Tertinggi', icon: <Zap className="w-4 h-4" /> },
         { value: 'bonus-jaga-depan', label: 'Bonus Jaga Depan', icon: <Zap className="w-4 h-4" /> },
         { value: 'bonus-estafet', label: 'Bonus Estafet', icon: <Zap className="w-4 h-4" /> },
+        { value: 'bonus-lain-lain', label: 'Bonus Lain-Lain', icon: <Zap className="w-4 h-4" /> },
       ]
     },
     {
@@ -2871,6 +3136,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="bonus-estafet" className="mt-0 outline-none">
                 <AdminBonusEstafet employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="bonus-lain-lain" className="mt-0 outline-none">
+                <AdminBonusLainLain employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
               <TabsContent value="bonus-jaga-depan" className="mt-0 outline-none">
                 <AdminBonusJagaDepan employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
