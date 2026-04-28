@@ -1535,12 +1535,13 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="glass-panel border-white/10 text-white h-12 rounded-xl flex items-center gap-2">
+              <div 
+                className="glass-panel border-white/10 text-white h-12 rounded-xl flex items-center gap-2 cursor-pointer px-4"
+                onClick={() => setIsDialogOpen(true)}
+              >
                 <CalendarIcon className="w-4 h-4 text-primary" />
                 {currentPeriod?.label || "Pilih/Buat Periode"}
-              </Button>
-            </DialogTrigger>
+              </div>
             <DialogContent className="glass-panel border-white/10 text-white">
               <DialogHeader>
                 <DialogTitle>Manajemen Periode</DialogTitle>
@@ -1656,6 +1657,242 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
               </Table>
             </div>
           )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
+// --- ADMIN BONUS JAGA DEPAN ---
+function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+
+  const [bonusMaster, setBonusMaster] = useState<Record<string, number>>({});
+  const [dailyAssignments, setDailyAssignments] = useState<Record<string, { bonusAmount: number, employeeIds: string[] }>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+  
+  const dates = React.useMemo(() => {
+    if (!currentPeriod) return [];
+    const days: Date[] = [];
+    let curr = new Date(currentPeriod.start);
+    while (curr <= currentPeriod.end) {
+      days.push(new Date(curr));
+      curr.setDate(curr.getDate() + 1);
+    }
+    return days;
+  }, [currentPeriod]);
+
+  const employeeTotals = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    Object.entries(dailyAssignments).forEach(([dateStr, day]) => {
+      // Use bonus from master if available as it is the source of truth, fallback to stored bonusAmount
+      const bonusValue = bonusMaster[dateStr] ?? (typeof day === 'object' && day && 'bonusAmount' in day ? (day as any).bonusAmount : 0);
+      const employeeIds = typeof day === 'object' && day && 'employeeIds' in day ? (day as any).employeeIds : [];
+
+      if (Array.isArray(employeeIds)) {
+        employeeIds.forEach((empId: string) => {
+          totals[empId] = (totals[empId] || 0) + (Number(bonusValue) || 0);
+        });
+      }
+    });
+    return totals;
+  }, [dailyAssignments, bonusMaster]);
+
+  const grandTotal = React.useMemo(() => {
+    return Object.values(employeeTotals).reduce((sum: number, val: number) => sum + val, 0);
+  }, [employeeTotals]);
+
+  const downloadAccumulation = () => {
+    if (!currentPeriod || employees.length === 0) return;
+    
+    const data = employees
+      .map(emp => ({
+        "No. Absen": emp.pin || "-",
+        "Nama": emp.name,
+        "Total Bonus Jaga Depan": employeeTotals[emp.id] || 0
+      }))
+      .filter(item => item["Total Bonus Jaga Depan"] > 0);
+
+    if (data.length === 0) {
+      toast.error("Tidak ada data bonus untuk diunduh (Semua Rp 0)");
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Akumulasi Bonus");
+    XLSX.writeFile(wb, `Bonus_Jaga_Depan_${currentPeriod.label}.xlsx`);
+  };
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+    
+    // Fetch Bonus Master and Bonus Jaga Depan
+    const unsubMaster = onSnapshot(doc(db, 'bonusMasterConfig', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        setBonusMaster(snap.exists() ? (snap.data().dailyHighestReceipt || {}) : {});
+      }
+    });
+
+    const unsubJagaDepan = onSnapshot(doc(db, 'bonusJagaDepan', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        setDailyAssignments(snap.exists() ? (snap.data().dailyAssignments || {}) : {});
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `bonusJagaDepan/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsubMaster();
+      unsubJagaDepan();
+    };
+  }, [selectedPeriod]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, 'bonusJagaDepan', selectedPeriod), {
+        periodId: selectedPeriod,
+        dailyAssignments,
+        updatedAt: serverTimestamp(),
+      });
+      toast.success("Data bonus jaga depan berhasil disimpan");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `bonusJagaDepan/${selectedPeriod}`);
+      toast.error("Gagal menyimpan data");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!currentPeriod) return null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Zap className="w-5 h-5 text-emerald-400" /> Bonus Jaga Depan
+          </h2>
+          <p className="text-white/40 text-xs">Pilih karyawan yang mendapatkan bonus jaga depan harian.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button onClick={downloadAccumulation} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
+            <Download className="w-4 h-4" /> Download
+          </Button>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
+              <SelectValue placeholder="Pilih Periode" />
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
+              {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleSave} disabled={saving || loading} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl">
+            {saving ? 'Saving...' : 'Simpan'}
+          </Button>
+        </div>
+      </div>
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-sm font-bold text-white uppercase tracking-tight">Akumulasi Bonus Per Karyawan</h3>
+            <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+              <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Total Periode:</span>
+              <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+             {employees.filter(emp => (employeeTotals[emp.id] || 0) > 0).map(emp => {
+               const total = employeeTotals[emp.id] || 0;
+               return (
+                 <div key={emp.id} className="bg-white/5 p-3 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-colors flex flex-col gap-1">
+                   <div className="flex justify-between items-start gap-2">
+                     <span className="text-white/40 text-[9px] font-bold uppercase truncate">{emp.pin || '-'}</span>
+                   </div>
+                   <span className="text-white font-bold text-[11px] truncate">{emp.name}</span>
+                   <span className="text-emerald-400 font-black text-xs">Rp {new Intl.NumberFormat('id-ID').format(total)}</span>
+                 </div>
+               );
+             })}
+             {Object.keys(employeeTotals).length === 0 && (
+               <div className="col-span-full py-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
+                 <p className="text-white/20 text-xs italic">Belum ada data akumulasi untuk periode ini.</p>
+               </div>
+             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/5 bg-white/5">
+                  <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6">Tanggal</TableHead>
+                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">Bonus (Rp)</TableHead>
+                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">Karyawan</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dates.map(date => {
+                  const dateStr = format(date, 'yyyy-MM-dd');
+                  const bonus = bonusMaster[dateStr] || 0;
+                  const selectedEmpIds = dailyAssignments[dateStr]?.employeeIds || [];
+                  return (
+                    <TableRow key={dateStr} className="border-white/5">
+                      <TableCell className="pl-6 font-bold text-white text-sm">{format(date, 'dd MMM', { locale: id })}</TableCell>
+                      <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(bonus)}</TableCell>
+                      <TableCell>
+                        <EmployeeSelector 
+                          employees={employees}
+                          selectedIds={selectedEmpIds}
+                          onAdd={(id) => {
+                            setDailyAssignments(prev => {
+                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                              return { ...prev, [dateStr]: { ...current, employeeIds: [...current.employeeIds, id], bonusAmount: bonusMaster[dateStr] || 0 } };
+                            });
+                          }}
+                          onRemove={(id) => {
+                            setDailyAssignments(prev => {
+                              const current = prev[dateStr] || { bonusAmount: bonusMaster[dateStr] || 0, employeeIds: [] };
+                              return { ...prev, [dateStr]: { ...current, employeeIds: current.employeeIds.filter(empId => empId !== id), bonusAmount: bonusMaster[dateStr] || 0 } };
+                            });
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -2501,6 +2738,7 @@ function AdminDashboard({
       label: 'Bonus & Reward',
       items: [
         { value: 'bonus-master', label: 'Nota Tertinggi', icon: <Zap className="w-4 h-4" /> },
+        { value: 'bonus-jaga-depan', label: 'Bonus Jaga Depan', icon: <Zap className="w-4 h-4" /> },
         { value: 'bonus-estafet', label: 'Bonus Estafet', icon: <Zap className="w-4 h-4" /> },
       ]
     },
@@ -2633,6 +2871,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="bonus-estafet" className="mt-0 outline-none">
                 <AdminBonusEstafet employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="bonus-jaga-depan" className="mt-0 outline-none">
+                <AdminBonusJagaDepan employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />
