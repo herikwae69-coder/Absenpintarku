@@ -34,6 +34,8 @@ import { id } from 'date-fns/locale';
 import { generateBackupZip } from './lib/backupService';
 import { handleFirestoreError, OperationType } from './lib/firestoreUtils';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import Holidays from 'date-holidays';
 import { 
   DndContext, 
   DragEndEvent, 
@@ -896,7 +898,7 @@ function BreakSlider({
   return (
     <div className={`relative h-14 rounded-full border border-white/10 transition-all overflow-hidden ${disabled ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}
          style={{ background: isBreak ? 'rgba(59, 130, 246, 0.1)' : 'rgba(245, 158, 11, 0.1)' }}>
-      <div className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold uppercase tracking-[0.2em] pointer-events-none transition-all ${isBreak ? 'text-blue-400/40' : 'text-amber-400/40'}`}>
+      <div className={`absolute inset-0 flex items-center justify-center text-[11px] font-extrabold uppercase tracking-[0.25em] pointer-events-none transition-all ${isBreak ? 'text-blue-300' : 'text-amber-300'}`}>
         {isBreak ? 'Geser ke kiri untuk Selesai' : 'Geser ke kanan untuk Istirahat'}
       </div>
       <div className="absolute inset-2 flex items-center">
@@ -906,13 +908,21 @@ function BreakSlider({
             dragConstraints={{ left: 0, right: dragRight }}
             dragElastic={0.1}
             onDragEnd={async (_, info) => {
-              try {
-                if (!isBreak && info.offset.x > dragRight * 0.5) {
+              const threshold = dragRight * 0.4;
+              const shouldComplete = !isBreak ? info.offset.x > threshold : info.offset.x < -threshold;
+              
+              if (shouldComplete) {
+                // Animate to end position immediately for better UX
+                controls.start({ x: isBreak ? 0 : dragRight });
+                try {
                   await onComplete();
-                } else if (isBreak && info.offset.x < -(dragRight * 0.5)) {
-                  await onComplete();
+                } catch (e) {
+                  console.error(e);
+                  // Snap back on error
+                  controls.start({ x: isBreak ? dragRight : 0 });
                 }
-              } finally {
+              } else {
+                // Snap back if didn't reach threshold
                 controls.start({ x: isBreak ? dragRight : 0 });
               }
             }}
@@ -2589,6 +2599,13 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+  const [showExcelHeaderDialog, setShowExcelHeaderDialog] = useState(false);
+  const [excelHeader, setExcelHeader] = useState("");
+
+  const statusKey = `status_${selectedPeriod}_${selectedDivision}`;
+  const statusData = controls[statusKey] || { isFinished: false, isLocked: false };
+  const isFinished = statusData.isFinished || false;
+  const isLocked = statusData.isLocked || false;
 
   const sensors = useSensors(
     useSensor(MouseSensor),
@@ -2759,8 +2776,11 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     return fullName.split(' ')[0];
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!activePeriod) return;
+    
+    // Initialize Indonesian holidays
+    const hd = new Holidays('ID');
     
     const startDate = startOfDay(activePeriod.start);
     const endDate = endOfDay(activePeriod.end);
@@ -2774,51 +2794,215 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
     for (let i = 0; i < paddingBefore; i++) calendarCells.push(null);
     days.forEach(d => calendarCells.push(d));
 
-    // To create a "Grid" in Excel, we can arrange rows in groups of 7 columns
-    const rows: any[] = [];
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Jadwal Libur');
     
-    // Header Row (SENIN to MINGGU)
-    rows.push(weekDays);
+    // Custom Header Styling & Insertion
+    const finalHeader = excelHeader || `JADWAL LIBUR ${selectedDivision} - ${activePeriod.label}`;
+    
+    // 1. Add Title Row (Header)
+    const titleRow = worksheet.addRow([finalHeader]);
+    worksheet.mergeCells(`A1:G1`);
+    titleRow.getCell(1).font = { bold: true, size: 18 };
+    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.getRow(1).height = 30; // Better for size 18
 
-    // Data rows
+    worksheet.addRow([]); // Spacer
+    
+    // 2. Header Row (SENIN to MINGGU)
+    const dayHeaderRow = worksheet.addRow(weekDays);
+    dayHeaderRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FF000000' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF87CEEB' } // Sky Blue
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+
+    // 3. Data rows
     for (let i = 0; i < calendarCells.length; i += 7) {
       const weekDates = calendarCells.slice(i, i + 7);
       
       // Row for Dates
-      const dateRow = weekDates.map(date => date ? format(date, 'dd/MM/yyyy') : "");
-      rows.push(dateRow);
+      const dateRowValues = weekDates.map(date => date ? format(date, 'dd/MM/yyyy') : "");
+      const excelDateRow = worksheet.addRow(dateRowValues);
+      
+      excelDateRow.eachCell((cell, colNumber) => {
+        const currentDate = weekDates[colNumber - 1];
+        if (!currentDate) return;
 
-      // Row for Employees (Multiple rows if multiple employees on same day)
-      // We find the max employees in any day of this week
+        // All dates are blue background with black text per request
+        const bgColor = 'FF87CEEB'; // Sky Blue
+        const textColor = 'FF000000'; // Black
+        
+        cell.font = { bold: true, size: 12, color: { argb: textColor } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: bgColor }
+        };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+
       const weekRequests = weekDates.map(date => {
         if (!date) return [];
         const dateStr = date ? format(date, 'yyyy-MM-dd') : "";
         return dateMap[dateStr] || [];
       });
 
-      const maxInWeek = Math.max(...weekRequests.map(reqs => reqs.length), 1);
-      
-      for (let r = 0; r < maxInWeek; r++) {
-        const empRow = weekRequests.map(reqs => {
+      // Fixed 10 rows per date as requested
+      for (let r = 0; r < 10; r++) {
+        const empRowValues = weekRequests.map(reqs => {
           const req = reqs[r];
           if (!req) return "";
           return `${getNickname(req.employeeId, req.employeeName || "")} ${getSectionInitials(req.sectionId)}`;
         });
-        rows.push(empRow);
+        
+        const excelEmpRow = worksheet.addRow(empRowValues);
+        excelEmpRow.eachCell((cell, colNumber) => {
+          const currentDate = weekDates[colNumber - 1];
+          const isSunday = colNumber === 7;
+          const isPublicHoliday = currentDate ? !!hd.isHoliday(currentDate) : false;
+          const isRedDay = isSunday || isPublicHoliday;
+
+          // Maroon (soft/faded) for red days, Pale Yellow for regular days
+          const bgColor = isRedDay ? 'FF800000' : 'FFFFFFE0'; 
+          const textColor = isRedDay ? 'FFFFFFFF' : 'FF000000';
+
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: bgColor }
+          };
+          cell.font = { color: { argb: textColor }, bold: isRedDay };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
       }
       
       // Empty row as separator
-      rows.push(new Array(7).fill(""));
+      worksheet.addRow(new Array(7).fill(""));
     }
 
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Jadwal Libur");
-    
     // Set column widths
-    worksheet['!cols'] = new Array(7).fill({ wch: 20 });
+    worksheet.columns = [
+      { width: 25 }, { width: 25 }, { width: 25 }, { width: 25 }, { width: 25 }, { width: 25 }, { width: 25 }
+    ];
 
-    XLSX.writeFile(workbook, `Jadwal_Libur_${selectedDivision}_${activePeriod.label}.xlsx`);
+    // Export & Download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Jadwal_Libur_${selectedDivision}_${activePeriod.label}.xlsx`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    setShowExcelHeaderDialog(false);
+    setExcelHeader("");
+  };
+
+  const handleToggleLock = async (type: 'lock' | 'finish') => {
+    try {
+      const statusId = `status_${selectedPeriod}_${selectedDivision}`;
+      if (type === 'lock') {
+        await setDoc(doc(db, 'periodControls', statusId), { 
+          ...statusData, 
+          isLocked: true,
+          updatedAt: serverTimestamp() 
+        }, { merge: true });
+        alert("Terima kasih! Data telah dikunci sementara. Anda bisa melanjutkannya nanti.");
+      } else {
+        await setDoc(doc(db, 'periodControls', statusId), { 
+          ...statusData, 
+          isFinished: true,
+          isLocked: false,
+          updatedAt: serverTimestamp() 
+        }, { merge: true });
+        setIsEditingSchedule(false);
+        alert("Jadwal Libur telah SELESAI disusun. Tombol Download sekarang aktif.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Gagal merubah status jadwal.");
+    }
+  };
+
+  const handleStartEdit = () => {
+    if (isFinished) {
+      const pwd = prompt("Jadwal sudah selesai disusun. Masukkan password admin untuk edit ulang:");
+      if (pwd === 'admin123') {
+        setIsEditingSchedule(true);
+      } else {
+        alert("Password salah!");
+      }
+    } else {
+      setIsEditingSchedule(true);
+    }
+  };
+
+  const handleResetToDefault = async () => {
+    const pwd = prompt("PERINGATAN: Semua perubahan jadwal yang Anda lakukan akan dihapus dan dikembalikan ke request awal karyawan. Masukkan password admin:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!");
+      return;
+    }
+
+    if (!confirm("Yakin ingin mengembalikan semua data jadwal libur ke request awal karyawan?")) return;
+
+    try {
+      // Find requests that haven't been reverted yet and have original data
+      const batchRequests = leaveRequests.filter(r => r.originalDates && r.originalDates.length > 0);
+      
+      if (batchRequests.length === 0) {
+        alert("Tidak ada data 'original' yang ditemukan untuk dikembalikan pada periode ini.");
+        return;
+      }
+
+      const promises = batchRequests.map(async (r) => {
+        const payload: any = {
+           dates: r.originalDates,
+           isModifiedByAdmin: false,
+           updatedAt: serverTimestamp()
+        };
+        // Reset legacy date1..6 fields
+        r.originalDates?.forEach((d, i) => {
+          payload[`date${i+1}`] = d;
+        });
+        // Clear extra dates
+        for (let i = (r.originalDates?.length || 0); i < 6; i++) {
+          payload[`date${i+1}`] = "";
+        }
+
+        return updateDoc(doc(db, 'leaveRequests', r.id), payload);
+      });
+
+      await Promise.all(promises);
+      alert("Jadwal libur berhasil dikembalikan ke request awal karyawan.");
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengembalikan data.");
+    }
   };
 
   // Group requests by date
@@ -2856,24 +3040,42 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             <div className="flex items-center gap-2 bg-white/5 p-1 rounded-xl border border-white/10 mr-2">
               <Button 
-                onClick={() => {
-                  const currentControl = selectedPeriod ? controls[selectedPeriod] : null;
-                  if (currentControl?.isPermanentlyClosed) {
-                    return alert("Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengedit jadwal.");
-                  }
-                  if (isEditingSchedule && hasPendingTrashOrWaiting) {
-                    return alert("Masih ada request di Kotak Tunggu atau Tempat Sampah. Harap diproses sebelum mengunci jadwal.");
-                  }
-                  setIsEditingSchedule(!isEditingSchedule);
-                }}
+                onClick={handleStartEdit}
+                disabled={activePeriod && controls[selectedPeriod]?.isPermanentlyClosed}
                 className={`h-8 px-3 text-[10px] font-bold rounded-lg transition-all ${
                    isEditingSchedule ? 'bg-primary text-white shadow-lg' : 'bg-transparent text-white/40 hover:text-white'
                 }`}
               >
                 {isEditingSchedule ? <Edit className="w-3 h-3 mr-2" /> : <Lock className="w-3 h-3 mr-2" />}
-                {isEditingSchedule ? 'SEDANG EDIT' : 'KUNCI JADWAL'}
+                {isEditingSchedule ? 'SEDANG EDIT' : isFinished ? 'EDIT ULANG' : 'MULAIL EDIT'}
               </Button>
+
+              {isEditingSchedule && (
+                <>
+                  <Button 
+                    variant="outline"
+                    onClick={() => handleToggleLock('lock')}
+                    className="h-8 px-3 text-[10px] font-bold rounded-lg border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
+                  >
+                    KUNCI SEMENTARA
+                  </Button>
+                  <Button 
+                    onClick={() => handleToggleLock('finish')}
+                    className="h-8 px-3 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white"
+                  >
+                    SELESAI
+                  </Button>
+                </>
+              )}
             </div>
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={handleResetToDefault}
+              className="h-8 px-3 text-[10px] font-bold rounded-lg border-rose-500/50 text-rose-500 hover:bg-rose-500/10"
+            >
+              <History className="w-3 h-3 mr-2" /> SET DEFAULT AWAL
+            </Button>
             <Select value={selectedDivision} onValueChange={setSelectedDivision}>
               <SelectTrigger className="w-full md:w-[150px] glass-panel border-white/10 text-white font-bold h-10">
                 <SelectValue placeholder="Divisi" />
@@ -2897,12 +3099,12 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
             </Select>
             <Button 
               onClick={() => {
-                if (hasPendingTrashOrWaiting) {
-                  return alert("Jadwal belum sepenuhnya difinalisasi. Pastikan Kotak Tunggu dan Tempat Sampah kosong sebelum mendownload!");
+                if (!isFinished) {
+                  return alert("Jadwal belum selesai disusun! Klik tombol 'SELESAI' terlebih dahulu untuk mengaktifkan fitur download.");
                 }
-                handleExportExcel();
+                setShowExcelHeaderDialog(true);
               }}
-              disabled={!activePeriod}
+              disabled={!activePeriod || !isFinished}
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold h-10 px-4 rounded-xl flex items-center gap-2 w-full md:w-auto shadow-lg shadow-emerald-900/20 transition-all"
               id="download-jadwal-btn"
             >
@@ -3054,6 +3256,33 @@ function AdminJadwalLibur({ employees, sections, divisions }: { employees: Emplo
           </div>
         </CardContent>
       </Card>
+
+      {/* Excel Header Input Dialog */}
+      <Dialog open={showExcelHeaderDialog} onOpenChange={setShowExcelHeaderDialog}>
+        <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Judul Laporan Excel</DialogTitle>
+            <DialogDescription className="text-white/60">
+              Masukkan judul yang akan muncul di baris pertama file Excel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label className="text-white/70 text-xs mb-2 block uppercase tracking-wider font-bold">Judul Header</Label>
+            <Input 
+              value={excelHeader} 
+              onChange={(e) => setExcelHeader(e.target.value)} 
+              placeholder={`JADWAL LIBUR ${selectedDivision} - ${activePeriod?.label}`}
+              className="field-input h-12"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExcelHeaderDialog(false)} className="text-white border-white/20">Batal</Button>
+            <Button onClick={handleExportExcel} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold">
+              DOWNLOAD SEKARANG
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -4755,6 +4984,7 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
       division: employee.division || 'Depan',
       period: selectedPeriod,
       status: 'approved', // Auto approved
+      originalDates: [...selectedDates], // Store original request for reset feature
       createdAt: serverTimestamp()
     };
     
