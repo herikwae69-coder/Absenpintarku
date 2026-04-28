@@ -2033,13 +2033,13 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
   };
 
   const addEntry = () => {
-    const emp = employees.find(e => e.pin === entryPin);
+    const emp = employees.find(e => e.pin === entryPin || e.name === entryPin);
     if (!emp || !entryTypeId || !entryAmount) {
         toast.error("Data tidak lengkap atau karyawan tidak ditemukan!");
         return;
     }
     const amount = Number(entryAmount.replace(/\D/g, ''));
-    setEntries(prev => [...prev, { id: 'entry_' + Date.now(), pin: entryPin, bonusTypeId: entryTypeId, amount }]);
+    setEntries(prev => [...prev, { id: 'entry_' + Date.now(), pin: emp.pin, bonusTypeId: entryTypeId, amount }]);
     setEntryPin('');
     setEntryAmount('');
   };
@@ -2107,70 +2107,93 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
       )}
 
       {currentPeriod && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="glass-panel border-none bg-black/40">
-            <CardContent className="p-6">
-              <h3 className="text-sm font-bold text-white mb-4">Tambah Entri Bonus</h3>
-              <div className="grid grid-cols-2 gap-2 mb-2 relative">
-                  <Input 
-                      placeholder="No Absen / Nama" 
-                      value={entryPin} 
-                      onChange={e => { setEntryPin(e.target.value); setShowEmployeeCandidates(true); }} 
-                      className="bg-white/5 border-white/10 text-white" 
-                  />
-                  {showEmployeeCandidates && filteredEmployees.length > 0 && (
-                      <div className="absolute top-12 left-0 right-1/2 z-10 bg-black border border-white/10 rounded shadow-lg max-h-40 overflow-y-auto">
-                          {filteredEmployees.map(e => (
-                              <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.name || ''); setShowEmployeeCandidates(false); }}>
-                                  {e.name} ({e.pin})
-                              </div>
-                          ))}
-                      </div>
-                  )}
-                  <Select value={entryTypeId} onValueChange={setEntryTypeId}>
-                      <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Jenis Bonus" /></SelectTrigger>
-                      <SelectContent className="bg-black/80 text-white">
-                          {Object.entries(bonusTypes).map(([id, name]) => (
-                               <SelectItem key={id} value={id}>{name}</SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-              </div>
-              <Input placeholder="Nominal" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} className="bg-white/5 border-white/10 text-white mb-2" />
-              <Button onClick={addEntry} className="w-full bg-primary">Tambah</Button>
-            </CardContent>
-          </Card>
-
-          <Card className="glass-panel border-none bg-black/40">
-            <CardContent className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-bold text-white uppercase tracking-tight">Daftar Bonus & Akumulasi</h3>
-                <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
-                  <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Grand Total:</span>
-                  <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card className="glass-panel border-none bg-black/40">
+              <CardContent className="p-6">
+                <h3 className="text-sm font-bold text-white mb-4">Tambah Entri Bonus</h3>
+                <div className="grid grid-cols-2 gap-2 mb-2 relative">
+                    <Input 
+                        placeholder="No Absen / Nama" 
+                        value={entryPin} 
+                        onChange={e => { setEntryPin(e.target.value); setShowEmployeeCandidates(true); }} 
+                        className="bg-white/5 border-white/10 text-white" 
+                    />
+                    {showEmployeeCandidates && filteredEmployees.length > 0 && (
+                        <div className="absolute top-12 left-0 right-1/2 z-10 bg-black border border-white/10 rounded shadow-lg max-h-40 overflow-y-auto">
+                            {filteredEmployees.map(e => (
+                                <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.name || ''); setShowEmployeeCandidates(false); }}>
+                                    {e.name} ({e.pin})
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <Select value={entryTypeId} onValueChange={setEntryTypeId}>
+                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectValue placeholder="Jenis Bonus">
+                            {entryTypeId ? bonusTypes[entryTypeId] : "Jenis Bonus"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="bg-black/80 text-white">
+                            {Object.entries(bonusTypes).map(([id, name]) => (
+                                 <SelectItem key={id} value={id}>{name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
-              </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-white/5 bg-white/5">
-                      <TableHead className="text-white/40">Karyawan</TableHead>
-                      <TableHead className="text-white/40">Jenis</TableHead>
-                      <TableHead className="text-white/40">Nominal</TableHead>
-                      <TableHead className="text-white/40"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {entries.map(entry => (
-                      <TableRow key={entry.id} className="border-white/5">
-                        <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || entry.pin}</TableCell>
-                        <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId] || entry.bonusTypeId}</TableCell>
-                        <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(entry.amount)}</TableCell>
-                        <TableCell><Button variant="ghost" size="sm" onClick={() => removeEntry(entry.id)}><Trash2 className="w-4 h-4 text-rose-500" /></Button></TableCell>
+                <Input placeholder="Nominal" value={entryAmount} onChange={e => setEntryAmount(e.target.value)} className="bg-white/5 border-white/10 text-white mb-2" />
+                <Button onClick={addEntry} className="w-full bg-primary">Tambah</Button>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-panel border-none bg-black/40">
+              <CardContent className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Daftar Bonus</h3>
+                  <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+                    <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Grand Total:</span>
+                    <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-white/5 bg-white/5">
+                        <TableHead className="text-white/40">Karyawan</TableHead>
+                        <TableHead className="text-white/40">Jenis</TableHead>
+                        <TableHead className="text-white/40">Nominal</TableHead>
+                        <TableHead className="text-white/40"></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {entries.map(entry => (
+                        <TableRow key={entry.id} className="border-white/5">
+                          <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || entry.pin}</TableCell>
+                          <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId] || entry.bonusTypeId}</TableCell>
+                          <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(entry.amount)}</TableCell>
+                          <TableCell><Button variant="ghost" size="sm" onClick={() => removeEntry(entry.id)}><Trash2 className="w-4 h-4 text-rose-500" /></Button></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          <Card className="glass-panel border-none bg-black/40">
+            <CardContent className="p-6">
+              <h3 className="text-sm font-bold text-white uppercase tracking-tight mb-4">Akumulasi Total Per Karyawan</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                 {employees.filter(emp => (employeeTotals[emp.id] || 0) > 0).map(emp => {
+                   const total = employeeTotals[emp.id] || 0;
+                   return (
+                     <div key={emp.id} className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col justify-between">
+                       <span className="text-xs text-white/60 mb-1 line-clamp-1" title={emp.name}>{emp.name}</span>
+                       <span className="text-sm font-black text-emerald-400">Rp {new Intl.NumberFormat('id-ID').format(total)}</span>
+                     </div>
+                   );
+                 })}
               </div>
             </CardContent>
           </Card>
