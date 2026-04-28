@@ -5748,46 +5748,54 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                       const maxLimit = periodControl?.maxRequestsPerDay || 7;
                       const isFull = count >= maxLimit;
                       const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr;
+                      const colIndex = i % 7;
+
+                      const tooltipPositionClass = 
+                        colIndex < 2 ? 'left-0 -translate-x-2' : 
+                        colIndex > 4 ? 'right-0 translate-x-2 left-auto' : 
+                        'left-1/2 -translate-x-1/2';
+
+                      const arrowPositionClass = 
+                        colIndex < 2 ? 'left-6' : 
+                        colIndex > 4 ? 'right-6 left-auto' : 
+                        'left-1/2 -translate-x-1/2';
                       
                       return (
                         <div 
                           key={dateStr}
-                          onPointerDown={(e) => {
-                            // Prevent context menu on mobile
-                            if (isFull || count > 0) setActiveHoldDate(dateStr);
-                          }}
-                          onPointerUp={() => setActiveHoldDate(null)}
-                          onPointerLeave={() => setActiveHoldDate(null)}
-                          onContextMenu={(e) => {
-                            if (activeHoldDate) e.preventDefault();
+                          onClick={() => {
+                            if (isFull || count > 0) {
+                              setActiveHoldDate(prev => prev === dateStr ? null : dateStr);
+                            }
                           }}
                           className={`
-                            aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-help
+                            aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-pointer
                             ${isFull ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)] scale-105 z-10' : 'bg-white/5 border border-white/5 hover:bg-white/10'}
                             ${isToday ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}
+                            ${activeHoldDate === dateStr ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background z-20' : ''}
                           `}
                         >
                           {activeHoldDate === dateStr && usersPerDate[dateStr] && (
                             <motion.div 
                               initial={{ opacity: 0, y: 10, scale: 0.9 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
-                              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-[100] bg-slate-950/95 backdrop-blur-2xl border border-white/20 p-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] min-w-[180px] pointer-events-none"
+                              className={`absolute bottom-full mb-3 z-[100] bg-slate-950/95 backdrop-blur-2xl border border-blue-500/30 p-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] min-w-[200px] pointer-events-none ${tooltipPositionClass}`}
                             >
-                               <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-950 border-r border-b border-white/20 rotate-45" />
-                               <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-3 border-b border-white/10 pb-2 flex items-center gap-2">
-                                 <Users className="w-3 h-3" /> Request {format(date, 'd MMM')}
+                               <div className={`absolute bottom-[-6px] w-3 h-3 bg-slate-950 border-r border-b border-blue-500/30 rotate-45 ${arrowPositionClass}`} />
+                               <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3 border-b border-white/10 pb-2 flex items-center gap-2">
+                                 <Users className="w-3 h-3" /> List Request {format(date, 'd MMM')}
                                </p>
-                               <div className="space-y-2">
+                               <div className="space-y-2.5 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
                                  {usersPerDate[dateStr].map(name => (
                                    <div key={name} className="flex items-center gap-2.5 group/item">
-                                     <div className="w-1.5 h-1.5 rounded-full bg-primary/60 group-hover/item:bg-primary transition-colors" />
-                                     <span className="text-white/90 text-xs font-bold leading-none">{name}</span>
+                                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500/60 group-hover/item:bg-blue-400 transition-colors" />
+                                     <span className="text-blue-400 text-xs font-black tracking-tight leading-none">{name}</span>
                                    </div>
                                  ))}
                                </div>
                                <div className="mt-4 pt-2 border-t border-white/5 flex justify-between items-center">
-                                 <span className="text-[8px] font-black text-white/20 uppercase">Total</span>
-                                 <span className="text-[10px] font-black text-primary">{usersPerDate[dateStr].length} Orang</span>
+                                 <span className="text-[8px] font-black text-white/20 uppercase tracking-tighter">Total Terisi</span>
+                                 <span className="text-[10px] font-black text-blue-400">{usersPerDate[dateStr].length} Orang</span>
                                </div>
                             </motion.div>
                           )}
