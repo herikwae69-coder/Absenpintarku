@@ -1366,8 +1366,8 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
           </h2>
           <p className="text-white/40 text-xs">Pilih karyawan yang mendapatkan bonus estafet harian.</p>
         </div>
-        <div className="flex gap-3">
-          <Button onClick={downloadAccumulation} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
+        <div className="flex items-center gap-3">
+          <Button onClick={downloadAccumulation} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2 h-12 px-6">
             <Download className="w-4 h-4" /> Download
           </Button>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -1380,13 +1380,15 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          {currentPeriod && (
-            <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
-              {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
-            </Button>
-          )}
         </div>
       </div>
+      {currentPeriod && (
+        <div className="flex justify-end pt-2">
+          <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
+            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+          </Button>
+        </div>
+      )}
 
       <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
         <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
@@ -1519,6 +1521,9 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
   const [newPeriodName, setNewPeriodName] = useState('');
   const [newPeriodStart, setNewPeriodStart] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [newPeriodEnd, setNewPeriodEnd] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [isLocked, setIsLocked] = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [password, setPassword] = useState('');
 
   const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
   
@@ -1543,9 +1548,12 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
     const unsub = onSnapshot(doc(db, 'bonusMasterConfig', selectedPeriod), (snap) => {
       if (componentMounted) {
         if (snap.exists()) {
-          setDailyData(snap.data().dailyHighestReceipt || {});
+          const data = snap.data();
+          setDailyData(data.dailyHighestReceipt || {});
+          setIsLocked(data.isLocked || false);
         } else {
           setDailyData({});
+          setIsLocked(false);
         }
         setLoading(false);
       }
@@ -1563,13 +1571,17 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
   }, [selectedPeriod]);
 
   const handleSave = async () => {
+    if(isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
     setSaving(true);
     try {
       await setDoc(doc(db, 'bonusMasterConfig', selectedPeriod), {
         periodId: selectedPeriod,
         dailyHighestReceipt: dailyData,
         updatedAt: serverTimestamp(),
-      });
+      }, { merge: true });
       toast.success("Data nota tertinggi berhasil disimpan");
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `bonusMasterConfig/${selectedPeriod}`);
@@ -1577,6 +1589,34 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
     } finally {
       setSaving(false);
     }
+  };
+
+  const toggleLock = async () => {
+      if (isLocked) {
+          setShowUnlockDialog(true);
+      } else {
+          try {
+              await setDoc(doc(db, 'bonusMasterConfig', selectedPeriod), { isLocked: true }, { merge: true });
+              toast.success("Periode dikunci");
+          } catch (e) {
+              handleFirestoreError(e, OperationType.WRITE, `bonusMasterConfig/${selectedPeriod}`);
+          }
+      }
+  };
+
+  const confirmUnlock = async () => {
+      if (password === 'admin123') {
+      try {
+          await setDoc(doc(db, 'bonusMasterConfig', selectedPeriod), { isLocked: false }, { merge: true });
+          setShowUnlockDialog(false);
+          setPassword('');
+          toast.success("Kunci dibuka");
+      } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `bonusMasterConfig/${selectedPeriod}`);
+      }
+      } else {
+      toast.error("Password salah");
+      }
   };
 
   const handleCreatePeriod = async () => {
@@ -1676,13 +1716,35 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
           </Dialog>
           <Button 
             onClick={handleSave} 
-            disabled={saving || loading}
+            disabled={saving || loading || isLocked}
             className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 h-12 rounded-xl"
           >
             {saving ? 'Saving...' : 'Simpan Data'}
           </Button>
+          <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-12 px-6 flex items-center gap-2`}>
+            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+          </Button>
         </div>
       </div>
+
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogHeader>
+            <DialogTitle className="uppercase font-black tracking-widest">Buka Kunci Periode</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+             <p className="text-sm text-white/60">Masukkan password admin untuk membuka kunci periode ini.</p>
+             <Input 
+               type="password" 
+               placeholder="Password Admin" 
+               value={password} 
+               onChange={e => setPassword(e.target.value)} 
+               className="bg-white/5 border-white/10 text-white"
+             />
+             <Button onClick={confirmUnlock} className="w-full bg-emerald-600 hover:bg-emerald-500">KONFIRMASI BUKA KUNCI</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Card className="glass-panel border-none shadow-2xl bg-black/40 overflow-hidden">
         <CardContent className="p-0">
@@ -1914,8 +1976,8 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
           </h2>
           <p className="text-white/40 text-xs">Pilih karyawan yang mendapatkan bonus jaga depan harian.</p>
         </div>
-        <div className="flex gap-3">
-          <Button onClick={downloadAccumulation} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
+        <div className="flex items-center gap-3">
+          <Button onClick={downloadAccumulation} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2 h-12 px-6">
             <Download className="w-4 h-4" /> Download
           </Button>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -1928,13 +1990,15 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          {currentPeriod && (
-            <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
-              {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
-            </Button>
-          )}
         </div>
       </div>
+      {currentPeriod && (
+        <div className="flex justify-end pt-2">
+          <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
+            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+          </Button>
+        </div>
+      )}
 
       <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
         <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
@@ -2129,13 +2193,13 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
   }, [selectedPeriod]);
 
   const downloadExcel = () => {
-    if (!currentPeriod || employees.length === 0) return;
+    if (!employees || employees.length === 0) return;
     const data = employees
       .filter(emp => (employeeTotals[emp.id] || 0) > 0)
       .map(emp => ({
         "No. Absen": emp.pin || "-",
         "Nama": emp.name,
-        "Total Nominal": employeeTotals[emp.id]
+        "Total Bonus Lain Lain": employeeTotals[emp.id]
       }));
 
     if (data.length === 0) {
@@ -2146,7 +2210,7 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Bonus Campuran");
-    XLSX.writeFile(wb, `Bonus_Campuran_${currentPeriod.label}.xlsx`);
+    XLSX.writeFile(wb, `Bonus_Campuran_${currentPeriod?.label || 'All'}.xlsx`);
   };
 
   const toggleLock = async () => {
@@ -2247,9 +2311,9 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
           </h2>
           <p className="text-white/40 text-xs">Kelola bonus campuran selain dari sistem utama.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           {currentPeriod && (
-            <Button onClick={downloadExcel} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2">
+            <Button onClick={downloadExcel} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2 h-12 px-6">
               <Download className="w-4 h-4" /> Download
             </Button>
           )}
@@ -2263,13 +2327,15 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          {currentPeriod && (
-            <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
-              {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
-            </Button>
-          )}
         </div>
       </div>
+      {currentPeriod && (
+        <div className="flex justify-end pt-2">
+          <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
+            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+          </Button>
+        </div>
+      )}
       
       <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
         <DialogContent className="glass-panel border-white/20 bg-black/90">
