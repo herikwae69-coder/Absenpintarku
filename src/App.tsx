@@ -5107,6 +5107,7 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
     reason: '',
     sectionId: ''
   });
+  const [activeHoldDate, setActiveHoldDate] = useState<string | null>(null);
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const isPostPopupRef = React.useRef(false);
 
@@ -5370,17 +5371,26 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
   };
 
   const usageMap: Record<string, number> = {};
+  const usersPerDate: Record<string, string[]> = {};
   // For popular dates, we should only count each user once per date in a period
   // to avoid skewing numbers if there are duplicate records for the same employee
   const userDateSeen = new Set<string>();
   currentAllRequests.forEach(r => {
     const dArr = r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6];
+    const emp = employees.find(e => e.id === r.employeeId);
+    const name = emp?.nickname || emp?.name || r.employeeName;
+    
     dArr.forEach(d => {
       if (d) {
         const key = `${r.employeeId}_${d}`;
         if (!userDateSeen.has(key)) {
           usageMap[d] = (usageMap[d] || 0) + 1;
           userDateSeen.add(key);
+        }
+        
+        if (!usersPerDate[d]) usersPerDate[d] = [];
+        if (!usersPerDate[d].includes(name)) {
+          usersPerDate[d].push(name);
         }
       }
     });
@@ -5742,12 +5752,46 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                       return (
                         <div 
                           key={dateStr}
+                          onPointerDown={(e) => {
+                            // Prevent context menu on mobile
+                            if (isFull || count > 0) setActiveHoldDate(dateStr);
+                          }}
+                          onPointerUp={() => setActiveHoldDate(null)}
+                          onPointerLeave={() => setActiveHoldDate(null)}
+                          onContextMenu={(e) => {
+                            if (activeHoldDate) e.preventDefault();
+                          }}
                           className={`
-                            aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-300
+                            aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-help
                             ${isFull ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)] scale-105 z-10' : 'bg-white/5 border border-white/5 hover:bg-white/10'}
                             ${isToday ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}
                           `}
                         >
+                          {activeHoldDate === dateStr && usersPerDate[dateStr] && (
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-[100] bg-slate-950/95 backdrop-blur-2xl border border-white/20 p-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] min-w-[180px] pointer-events-none"
+                            >
+                               <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-950 border-r border-b border-white/20 rotate-45" />
+                               <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-3 border-b border-white/10 pb-2 flex items-center gap-2">
+                                 <Users className="w-3 h-3" /> Request {format(date, 'd MMM')}
+                               </p>
+                               <div className="space-y-2">
+                                 {usersPerDate[dateStr].map(name => (
+                                   <div key={name} className="flex items-center gap-2.5 group/item">
+                                     <div className="w-1.5 h-1.5 rounded-full bg-primary/60 group-hover/item:bg-primary transition-colors" />
+                                     <span className="text-white/90 text-xs font-bold leading-none">{name}</span>
+                                   </div>
+                                 ))}
+                               </div>
+                               <div className="mt-4 pt-2 border-t border-white/5 flex justify-between items-center">
+                                 <span className="text-[8px] font-black text-white/20 uppercase">Total</span>
+                                 <span className="text-[10px] font-black text-primary">{usersPerDate[dateStr].length} Orang</span>
+                               </div>
+                            </motion.div>
+                          )}
+
                           <span className={`text-sm font-black ${isFull ? 'text-white' : 'text-white/80'}`}>
                             {format(date, 'd')}
                           </span>
