@@ -1965,7 +1965,6 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
     const unsub = onSnapshot(doc(db, 'bonusLainLain', selectedPeriod), (snap) => {
       if (componentMounted) {
         const data = snap.exists() ? snap.data() : {};
-        setBonusTypes(data.bonusTypes || {});
         setEntries(data.entries || []);
         setLoading(false);
       }
@@ -2008,7 +2007,6 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
     try {
       await setDoc(doc(db, 'bonusLainLain', selectedPeriod), {
         periodId: selectedPeriod,
-        bonusTypes,
         entries,
         updatedAt: serverTimestamp(),
       });
@@ -2123,8 +2121,8 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
                   {showEmployeeCandidates && filteredEmployees.length > 0 && (
                       <div className="absolute top-12 left-0 right-1/2 z-10 bg-black border border-white/10 rounded shadow-lg max-h-40 overflow-y-auto">
                           {filteredEmployees.map(e => (
-                              <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.pin || ''); setShowEmployeeCandidates(false); }}>
-                                  {e.pin} - {e.name}
+                              <div key={e.id} className="p-2 hover:bg-white/10 cursor-pointer text-white text-xs" onClick={() => { setEntryPin(e.name || ''); setShowEmployeeCandidates(false); }}>
+                                  {e.name} ({e.pin})
                               </div>
                           ))}
                       </div>
@@ -2132,7 +2130,9 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
                   <Select value={entryTypeId} onValueChange={setEntryTypeId}>
                       <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Jenis Bonus" /></SelectTrigger>
                       <SelectContent className="bg-black/80 text-white">
-                          {Object.entries(bonusTypes).map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                          {Object.entries(bonusTypes).map(([id, name]) => (
+                               <SelectItem key={id} value={id}>{name}</SelectItem>
+                          ))}
                       </SelectContent>
                   </Select>
               </div>
@@ -2164,7 +2164,7 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
                     {entries.map(entry => (
                       <TableRow key={entry.id} className="border-white/5">
                         <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || entry.pin}</TableCell>
-                        <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId]}</TableCell>
+                        <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId] || entry.bonusTypeId}</TableCell>
                         <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(entry.amount)}</TableCell>
                         <TableCell><Button variant="ghost" size="sm" onClick={() => removeEntry(entry.id)}><Trash2 className="w-4 h-4 text-rose-500" /></Button></TableCell>
                       </TableRow>
