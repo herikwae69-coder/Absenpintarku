@@ -371,6 +371,7 @@ export default function App() {
   const [view, setView] = useState<'login' | 'employee' | 'admin'>('login');
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [activePeriodId, setActivePeriodId] = useState<string>('');
 
 // Initialize Listeners
   useEffect(() => {
@@ -614,6 +615,8 @@ export default function App() {
             confirm={customConfirm}
             prompt={customPrompt}
             alert={customAlert}
+            activePeriodId={activePeriodId}
+            setActivePeriodId={setActivePeriodId}
           />
         )}
       </div>
@@ -1161,7 +1164,7 @@ function EmployeeSelector({
 }
 
 // --- ADMIN BONUS ESTAFET ---
-function AdminBonusEstafet({ employees }: { employees: Employee[] }) {
+function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
   const [controls, setControls] = useState<Record<string, any>>({});
   
   useEffect(() => {
@@ -1174,13 +1177,8 @@ function AdminBonusEstafet({ employees }: { employees: Employee[] }) {
   }, []);
 
   const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
-  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[0]?.value || '');
-  
-  useEffect(() => {
-      if (periodOptions.length > 0 && !selectedPeriod) {
-          setSelectedPeriod(periodOptions[0].value);
-      }
-  }, [periodOptions, selectedPeriod]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
 
   const [bonusMaster, setBonusMaster] = useState<Record<string, number>>({});
   const [dailyAssignments, setDailyAssignments] = useState<Record<string, { bonusAmount: number, employeeIds: string[] }>>({});
@@ -1413,12 +1411,28 @@ function AdminBonusEstafet({ employees }: { employees: Employee[] }) {
 }
 
 // --- ADMIN BONUS MASTER ---
-function AdminBonusMaster() {
-  const periodOptions = getPeriodOptions(12, 1).reverse();
-  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions.find(p => format(new Date(), 'MMM yyyy').includes(p.label))?.value || periodOptions[0].value);
+function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodId: string, setActivePeriodId: (id: string) => void }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+      const data: Record<string, any> = {};
+      snap.docs.forEach(d => { data[d.id] = d.data(); });
+      setControls(data);
+    });
+    return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId;
   const [dailyData, setDailyData] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newPeriodName, setNewPeriodName] = useState('');
+  const [newPeriodStart, setNewPeriodStart] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [newPeriodEnd, setNewPeriodEnd] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
   
@@ -1479,6 +1493,30 @@ function AdminBonusMaster() {
     }
   };
 
+  const handleCreatePeriod = async () => {
+    if (!newPeriodName || !newPeriodStart || !newPeriodEnd) {
+      toast.error("Lengkapi data periode!");
+      return;
+    }
+    try {
+      const periodId = newPeriodName.replace(/\s+/g, '_').toLowerCase() + '_' + Date.now();
+      await setDoc(doc(db, 'periodControls', periodId), {
+        name: newPeriodName,
+        startDate: newPeriodStart,
+        endDate: newPeriodEnd,
+        status: 'open',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setSelectedPeriod(periodId);
+      setIsDialogOpen(false);
+      setNewPeriodName('');
+      toast.success("Periode berhasil dibuat!");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'periodControls');
+    }
+  };
+
   const handleInputChange = (dateStr: string, val: string) => {
     const num = parseInt(val.replace(/\D/g, '')) || 0;
     setDailyData(prev => ({ ...prev, [dateStr]: num }));
@@ -1496,16 +1534,59 @@ function AdminBonusMaster() {
           <p className="text-white/40 text-xs">Tentukan nilai nota tertinggi harian sebagai acuan bonus.</p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-full md:w-[250px] glass-panel border-white/10 text-white h-12 rounded-xl">
-              <SelectValue placeholder="Pilih Periode" />
-            </SelectTrigger>
-            <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
-              {periodOptions.map(p => (
-                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="glass-panel border-white/10 text-white h-12 rounded-xl flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-primary" />
+                {currentPeriod?.label || "Pilih/Buat Periode"}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="glass-panel border-white/10 text-white">
+              <DialogHeader>
+                <DialogTitle>Manajemen Periode</DialogTitle>
+                <DialogDescription>Pilih periode aktif atau buat periode baru.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <Label>Pilih Periode Eksis</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                    {periodOptions.map(p => (
+                      <Button 
+                        key={p.value} 
+                        variant={selectedPeriod === p.value ? "default" : "outline"}
+                        className={`text-xs h-10 justify-start px-3 truncate ${selectedPeriod === p.value ? 'bg-primary text-white' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                        onClick={() => { setSelectedPeriod(p.value); setIsDialogOpen(false); }}
+                      >
+                        {p.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t border-white/10 pt-4 space-y-3">
+                  <Label className="text-primary font-bold">Buat Periode Baru</Label>
+                  <Input 
+                    placeholder="Nama Periode (Contoh: April 2026)" 
+                    value={newPeriodName}
+                    onChange={e => setNewPeriodName(e.target.value)}
+                    className="bg-white/5 border-white/10"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase opacity-50">Tgl Mulai</Label>
+                      <Input type="date" value={newPeriodStart} onChange={e => setNewPeriodStart(e.target.value)} className="bg-white/5 border-white/10 text-xs" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase opacity-50">Tgl Selesai</Label>
+                      <Input type="date" value={newPeriodEnd} onChange={e => setNewPeriodEnd(e.target.value)} className="bg-white/5 border-white/10 text-xs" />
+                    </div>
+                  </div>
+                  <Button onClick={handleCreatePeriod} className="w-full bg-primary hover:bg-primary/90 font-bold">
+                    Buat & Aktifkan
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Button 
             onClick={handleSave} 
             disabled={saving || loading}
@@ -2334,7 +2415,9 @@ function AdminDashboard({
   toggleTheme,
   confirm,
   prompt,
-  alert
+  alert,
+  activePeriodId,
+  setActivePeriodId
 }: { 
   employees: Employee[], 
   shifts: Shift[],
@@ -2346,7 +2429,9 @@ function AdminDashboard({
   toggleTheme: () => void,
   confirm: (msg: string, title?: string) => Promise<boolean>,
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
-  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void,
+  activePeriodId: string,
+  setActivePeriodId: (id: string) => void
 }) {
   const isSuper = currentUser?.role === 'superadmin';
 
@@ -2544,10 +2629,10 @@ function AdminDashboard({
                 <AdminManualAttendance employees={employees} divisions={divisions} />
               </TabsContent>
               <TabsContent value="bonus-master" className="mt-0 outline-none">
-                <AdminBonusMaster />
+                <AdminBonusMaster activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
               <TabsContent value="bonus-estafet" className="mt-0 outline-none">
-                <AdminBonusEstafet employees={employees} />
+                <AdminBonusEstafet employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />
