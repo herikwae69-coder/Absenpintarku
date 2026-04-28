@@ -1,5 +1,5 @@
 import 'leaflet/dist/leaflet.css';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -93,6 +93,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { toast, Toaster } from 'sonner';
 import { 
   Dialog, 
   DialogContent, 
@@ -332,6 +333,19 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 
+// --- CONTEXT ---
+const DialogContext = React.createContext<{
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  confirm: (msg: string, title?: string) => Promise<boolean>;
+  prompt: (msg: string, defaultVal?: string, title?: string) => Promise<string | null>;
+} | null>(null);
+
+export function useDialog() {
+  const context = React.useContext(DialogContext);
+  if (!context) throw new Error("useDialog must be used within DialogProvider");
+  return context;
+}
+
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('theme') as 'light' | 'dark') || 'dark';
@@ -452,7 +466,83 @@ export default function App() {
     localStorage.removeItem('jg1_isAdmin');
   };
 
-  useAutoLogout(currentUser, handleLogout);
+  const today = format(new Date(), 'yyyy-MM-dd');
+
+  // Custom Dialog State
+  const [dialogConfig, setDialogConfig] = useState<{
+    isOpen: boolean;
+    type: 'confirm' | 'prompt';
+    title: string;
+    message: string;
+    defaultValue?: string;
+    resolve: (value: any) => void;
+  } | null>(null);
+
+  const customAlert = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const isSuccess = type === 'success';
+    toast[type](message, {
+      style: { 
+        fontSize: '20px', 
+        fontWeight: 'bold', 
+        padding: '24px',
+        backgroundColor: 'rgba(20, 20, 25, 0.95)',
+        color: '#fff',
+        border: `1px solid ${isSuccess ? '#10b981' : type === 'error' ? '#f43f5e' : '#3b82f6'}`
+      },
+      duration: 5000
+    });
+  }, []);
+
+  const customConfirm = useCallback((message: string, title: string = "Konfirmasi"): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setDialogConfig({
+        isOpen: true,
+        type: 'confirm',
+        title,
+        message,
+        resolve
+      });
+    });
+  }, []);
+
+  const customPrompt = useCallback((message: string, defaultValue: string = "", title: string = "Input"): Promise<string | null> => {
+    return new Promise((resolve) => {
+      setDialogConfig({
+        isOpen: true,
+        type: 'prompt',
+        title,
+        message,
+        defaultValue,
+        resolve
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    window.alert = (msg) => customAlert(msg);
+  }, [customAlert]);
+
+  const [promptInput, setPromptInput] = useState("");
+
+  const handleDialogConfirm = () => {
+    if (dialogConfig) {
+      if (dialogConfig.type === 'prompt') {
+        dialogConfig.resolve(promptInput);
+      } else {
+        dialogConfig.resolve(true);
+      }
+      setDialogConfig(null);
+      setPromptInput("");
+    }
+  };
+
+  const handleDialogCancel = () => {
+    if (dialogConfig) {
+      dialogConfig.resolve(dialogConfig.type === 'prompt' ? null : false);
+      setDialogConfig(null);
+      setPromptInput("");
+    }
+  };
 
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50">
@@ -472,6 +562,7 @@ export default function App() {
   );
 
   return (
+    <DialogContext.Provider value={{ alert: customAlert, confirm: customConfirm, prompt: customPrompt }}>
     <div className="min-h-screen relative font-sans selection:bg-primary/20">
       <div className="mesh-bg" />
       <div className="relative z-10 min-h-screen">
@@ -494,6 +585,9 @@ export default function App() {
             onLogout={handleLogout} 
             theme={theme}
             toggleTheme={toggleTheme}
+            confirm={customConfirm}
+            prompt={customPrompt}
+            alert={customAlert}
           />
         )}
         {view === 'admin' && isAdmin && (
@@ -506,16 +600,66 @@ export default function App() {
             currentUser={currentUser}
             theme={theme}
             toggleTheme={toggleTheme}
+            confirm={customConfirm}
+            prompt={customPrompt}
+            alert={customAlert}
           />
         )}
       </div>
       
+      {/* Custom Global Dialog */}
+      <Dialog open={dialogConfig?.isOpen || false} onOpenChange={(open) => !open && handleDialogCancel()}>
+        <DialogContent className="glass-panel border-white/10 text-white min-w-[320px] max-w-[500px] p-8">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black mb-4 flex items-center gap-3">
+              <AlertCircle className="w-8 h-8 text-primary" />
+              {dialogConfig?.title}
+            </DialogTitle>
+            <DialogDescription className="text-xl text-white/80 leading-relaxed font-medium">
+              {dialogConfig?.message}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {dialogConfig?.type === 'prompt' && (
+            <div className="py-6">
+              <Input
+                autoFocus
+                className="h-16 text-2xl font-bold tracking-wider text-center bg-white/5 border-white/10"
+                value={promptInput}
+                onChange={(e) => setPromptInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleDialogConfirm()}
+                placeholder={dialogConfig.defaultValue}
+              />
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-3 sm:gap-0 mt-8">
+            <Button 
+              variant="outline" 
+              onClick={handleDialogCancel}
+              className="h-14 text-lg font-bold flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white"
+            >
+              BATAL
+            </Button>
+            <Button 
+              onClick={handleDialogConfirm}
+              className="h-14 text-lg font-bold flex-1"
+            >
+              OKE
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Toaster position="top-center" expand={true} richColors />
+
       {/* Watermark */}
       <div className="fixed bottom-4 right-8 z-50 text-[10px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2">
         <div className="w-8 h-[1px] bg-white/10" />
         App by Heri.k | versi 1.2.1 | 2026
       </div>
     </div>
+    </DialogContext.Provider>
   );
 }
 
@@ -939,7 +1083,19 @@ function BreakSlider({
 }
 
 // --- EMPLOYEE VIEW ---
-function EmployeeView({ employee, employees, shifts, sections, divisions, onLogout, theme, toggleTheme }: { 
+function EmployeeView({ 
+  employee, 
+  employees, 
+  shifts, 
+  sections, 
+  divisions, 
+  onLogout, 
+  theme, 
+  toggleTheme,
+  confirm,
+  prompt,
+  alert
+}: { 
   employee: Employee, 
   employees: Employee[],
   shifts: Shift[],
@@ -947,7 +1103,10 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
   divisions: Division[],
   onLogout: () => void,
   theme: 'light' | 'dark',
-  toggleTheme: () => void
+  toggleTheme: () => void,
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const [attendance, setAttendance] = useState<Attendance | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -972,7 +1131,6 @@ function EmployeeView({ employee, employees, shifts, sections, divisions, onLogo
      return unsub;
   }, [employee.id]);
 
-  const [activeTab, setActiveTab] = useState('absen');
   const [showChangePass, setShowChangePass] = useState(false);
   const [newPass, setNewPass] = useState("");
   const today = format(new Date(), 'yyyy-MM-dd');
@@ -1650,7 +1808,10 @@ function AdminDashboard({
   onLogout,
   currentUser,
   theme,
-  toggleTheme
+  toggleTheme,
+  confirm,
+  prompt,
+  alert
 }: { 
   employees: Employee[], 
   shifts: Shift[],
@@ -1659,7 +1820,10 @@ function AdminDashboard({
   onLogout: () => void,
   currentUser: Employee | null,
   theme: 'light' | 'dark',
-  toggleTheme: () => void
+  toggleTheme: () => void,
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
 }) {
   const isSuper = currentUser?.role === 'superadmin';
 
@@ -2034,7 +2198,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   };
 
   const addSuperAdmin = async () => {
-    const adminName = prompt("Masukkan Nama Super Admin:", "Super Admin") || "Super Admin";
+    const adminName = (await prompt("Masukkan Nama Super Admin:", "Super Admin")) || "Super Admin";
     await addDoc(collection(db, 'employees'), {
       name: adminName,
       pin: "1",
@@ -2047,7 +2211,7 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
       updatedAt: serverTimestamp(),
       isActive: true
     });
-    alert(`Super Admin ${adminName} Berhasil Dibuat`);
+    alert(`Super Admin ${adminName} Berhasil Dibuat`, "success");
   };
 
   const handleEdit = async () => {
@@ -2061,36 +2225,42 @@ function AdminEmployees({ employees, shifts, sections, divisions, currentUser }:
   };
 
   const handleResetPassword = async () => {
-    if (!isEditing || !confirm("Yakin ingin mereset password karyawan ini ke default (123456)?")) return;
+    if (!isEditing) return;
+    const isConfirmed = await confirm("Yakin ingin mereset password karyawan ini ke default (123456)?");
+    if (!isConfirmed) return;
     await updateDoc(doc(db, 'employees', isEditing.id), {
       password: "123456",
       updatedAt: serverTimestamp()
     });
-    alert("Password telah direset ke 123456.");
+    alert("Password telah direset ke 123456.", "success");
   };
 
   const handleEmployeeDelete = async (emp: any) => {
     if (emp.role === 'superadmin' && currentUser?.role !== 'superadmin') {
-      alert("Anda tidak memiliki akses untuk menghapus Super Admin!");
+      alert("Anda tidak memiliki akses untuk menghapus Super Admin!", "error");
       return;
     }
-    const action = prompt("Pilih aksi: 'hapus' atau 'nonaktif'?");
+    const action = await prompt("Pilih aksi: 'hapus' atau 'nonaktif'?");
     if (action !== 'hapus' && action !== 'nonaktif') {
-      alert("Aksi tidak valid!");
+      alert("Aksi tidak valid!", "error");
       return;
     }
-    const pwd = prompt("Masukkan Password Admin:");
+    const pwd = await prompt("Masukkan Password Admin:");
     if (pwd !== 'admin123') {
-      alert("Password salah!");
+      alert("Password salah!", "error");
       return;
     }
     if (action === 'hapus') {
-      if (confirm("Yakin hapus karyawan ini? Data akan hilang permanen.")) {
+      const isConfirmed = await confirm("Yakin hapus karyawan ini? Data akan hilang permanen.");
+      if (isConfirmed) {
         await deleteDoc(doc(db, 'employees', emp.id));
+        alert("Karyawan dihapus permanen.", "success");
       }
     } else {
-      if (confirm("Yakin nonaktifkan karyawan ini? Data akan tersimpan.")) {
+      const isConfirmed = await confirm("Yakin nonaktifkan karyawan ini? Data akan tersimpan.");
+      if (isConfirmed) {
         await updateDoc(doc(db, 'employees', emp.id), { isActive: false, pin: emp.pin + '(nonaktif)' });
+        alert("Karyawan dinonaktifkan.", "success");
       }
     }
   };
