@@ -1,6 +1,6 @@
 {
   "name": "Absensi Pintar",
-  "description": "Aplikasi absensi karyawan lengkap dengan fitur admin untuk manajemen karyawan, shift, dan rekap laporan.",
+  "description": "Aplikasi absensi karyawan lengkap dengan fitur admin untuk manajemen karyawan, shift, rekap laporan, dan pengelolaan bonus.",
   "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": []
 }

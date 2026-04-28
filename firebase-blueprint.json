@@ -174,9 +174,43 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["periodId", "entries"]
+    },
+    "BonusNota": {
+      "title": "Bonus Nota",
+      "description": "Accumulated nota bonuses for employees in a specific period",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string", "description": "The ID of the employee" },
+        "employeeName": { "type": "string", "description": "Cache of employee name" },
+        "employeePin": { "type": "string", "description": "No Absen / PIN" },
+        "amount": { "type": "number", "description": "Total bonus amount" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "amount"]
+    },
+    "BonusBerat": {
+      "title": "Bonus Berat",
+      "description": "Accumulated berat bonuses for employees in a specific period",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string", "description": "The ID of the employee" },
+        "employeeName": { "type": "string", "description": "Cache of employee name" },
+        "employeePin": { "type": "string", "description": "No Absen / PIN" },
+        "amount": { "type": "number", "description": "Total bonus amount" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "amount"]
     }
   },
   "firestore": {
+    "/bonusBerat/{id}": {
+      "schema": "BonusBerat",
+      "description": "Collection of accumulated berat bonuses"
+    },
+    "/bonusNota/{id}": {
+      "schema": "BonusNota",
+      "description": "Collection of accumulated nota bonuses"
+    },
     "/employees/{employeeId}": {
       "schema": "Employee",
       "description": "Employee records."

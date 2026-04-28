@@ -3733,6 +3733,732 @@ function EmployeeView({
   );
 }
 
+// --- ADMIN BONUS NOTA ---
+function AdminBonusNota({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+
+  const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
+  const [isLocked, setIsLocked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [password, setPassword] = useState('');
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [inputAmount, setInputAmount] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(doc(db, 'bonusNota', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        if (snap.exists()) {
+          const data = snap.data();
+          setEntries(data.entries || {});
+          setIsLocked(data.isLocked || false);
+        } else {
+          setEntries({});
+          setIsLocked(false);
+        }
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `bonusNota/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsub();
+    };
+  }, [selectedPeriod]);
+
+  const saveEntries = async (updated: Record<string, number>) => {
+    try {
+      await setDoc(doc(db, 'bonusNota', selectedPeriod), {
+        periodId: selectedPeriod,
+        entries: updated,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `bonusNota/${selectedPeriod}`);
+    }
+  };
+
+  const handleAddOrUpdate = () => {
+    if (!selectedEmpId || !inputAmount) {
+      toast.error("Data tidak lengkap");
+      return;
+    }
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const amount = parseInt(inputAmount.replace(/\D/g, '')) || 0;
+    const updated = { ...entries, [selectedEmpId]: amount };
+    setEntries(updated);
+    saveEntries(updated);
+    
+    setSelectedEmpId('');
+    setInputAmount('');
+    setEditId(null);
+    toast.success(editId ? "Data diperbarui" : "Data ditambahkan");
+  };
+
+  const handleEdit = (empId: string) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    setSelectedEmpId(empId);
+    setInputAmount(entries[empId]?.toString() || '');
+    setEditId(empId);
+  };
+
+  const handleRemove = (empId: string) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const updated = { ...entries };
+    delete updated[empId];
+    setEntries(updated);
+    saveEntries(updated);
+    toast.success("Data dihapus");
+  };
+
+  const handleClearAll = async () => {
+    if (password === 'admin123') {
+      await saveEntries({});
+      setShowClearDialog(false);
+      setPassword('');
+      toast.success("Semua data dihapus");
+    } else {
+      toast.error("Password salah");
+    }
+  };
+
+  const toggleLock = async () => {
+    if (isLocked) {
+        setShowUnlockDialog(true);
+    } else {
+        try {
+            await setDoc(doc(db, 'bonusNota', selectedPeriod), { isLocked: true }, { merge: true });
+            toast.success("Periode dikunci");
+        } catch (e) {
+            handleFirestoreError(e, OperationType.WRITE, `bonusNota/${selectedPeriod}`);
+        }
+    }
+  };
+
+  const confirmUnlock = async () => {
+    if (password === 'admin123') {
+      try {
+        await setDoc(doc(db, 'bonusNota', selectedPeriod), { isLocked: false }, { merge: true });
+        setShowUnlockDialog(false);
+        setPassword('');
+        toast.success("Kunci dibuka");
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusNota/${selectedPeriod}`);
+      }
+    } else {
+      toast.error("Password salah");
+    }
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isLocked) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data = XLSX.utils.sheet_to_json(ws);
+          
+          const updated = { ...entries };
+          data.forEach((row: any) => {
+              const pin = row['No. Absen']?.toString() || row['PIN']?.toString() || row['pin']?.toString();
+              const amount = parseInt(row['Bonus Nota'] || row['Bonus'] || row['Nominal'] || row['amount'] || 0);
+              const emp = employees.find(e => e.pin === pin);
+              if (emp && !isNaN(amount)) {
+                  updated[emp.id] = amount;
+              }
+          });
+          setEntries(updated);
+          saveEntries(updated);
+          toast.success("Impor berhasil");
+      } catch (err) {
+          toast.error("Gagal impor file");
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = ''; // Reset input
+  };
+
+  const handleDownload = () => {
+    const data = Object.entries(entries).map(([id, amount]) => {
+      const emp = employees.find(e => e.id === id);
+      return {
+        'No. Absen': emp?.pin || '',
+        'Nama': emp?.name || '',
+        'Bonus Nota': amount
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bonus Nota");
+    XLSX.writeFile(wb, `Bonus_Nota_${currentPeriod?.label || selectedPeriod}.xlsx`);
+  };
+
+  const grandTotal = (Object.values(entries) as number[]).reduce((a: number, b: number) => a + b, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Zap className="w-5 h-5 text-amber-400" /> Bonus Nota
+          </h2>
+          <p className="text-white/40 text-xs font-medium lowercase">periode: {currentPeriod?.label || selectedPeriod}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[180px] glass-panel border-white/10 text-white h-11 px-6 rounded-xl">
+              <SelectValue placeholder="Pilih Periode">
+                 {currentPeriod?.label || selectedPeriod}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white">
+              {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleDownload} variant="outline" className="h-11 rounded-xl text-white bg-blue-600 hover:bg-blue-500 border-none px-6">
+            <Download className="w-4 h-4 mr-2" /> Download
+          </Button>
+          <label className="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl px-6 h-11 flex items-center gap-2 text-sm font-medium transition-colors">
+            <Upload className="w-4 h-4" /> Import Excel
+            <input type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleImport} disabled={isLocked} />
+          </label>
+          <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-11 px-6 flex items-center gap-2`}>
+            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+          </Button>
+          <Button onClick={() => setShowClearDialog(true)} variant="ghost" className="h-11 px-6 text-rose-400 hover:bg-rose-500/10 rounded-xl">
+            <Trash2 className="w-4 h-4 mr-2" /> Kosongkan
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="glass-panel border-none bg-black/40">
+           <CardContent className="p-6">
+              <h3 className="text-sm font-bold text-white uppercase tracking-tight mb-4">{editId ? 'Edit Entri' : 'Tambah Entri'}</h3>
+              <div className="space-y-4">
+                 <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Karyawan</Label>
+                    <EmployeeSelector 
+                      employees={employees} 
+                      selectedId={selectedEmpId} 
+                      onSelect={(id) => setSelectedEmpId(id)}
+                      placeholder="Pilih Karyawan..."
+                      disabled={isLocked || !!editId}
+                    />
+                 </div>
+                 <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Nominal Bonus</Label>
+                    <Input 
+                      placeholder="Masukkan Nominal" 
+                      value={inputAmount} 
+                      onChange={e => setInputAmount(e.target.value)} 
+                      className="bg-white/5 border-white/10 text-white h-10" 
+                      disabled={isLocked}
+                    />
+                 </div>
+                 <div className="flex gap-2">
+                    <Button onClick={handleAddOrUpdate} className="flex-1 bg-primary h-11" disabled={isLocked}>{editId ? 'Perbarui' : 'Simpan'}</Button>
+                    {editId && <Button onClick={() => { setEditId(null); setSelectedEmpId(''); setInputAmount(''); }} variant="ghost" className="text-white h-11 border border-white/10">Batal</Button>}
+                 </div>
+              </div>
+           </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-none bg-black/40 md:col-span-2">
+           <CardContent className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-sm font-bold text-white uppercase tracking-tight">Akumulasi Bonus Nota ({currentPeriod?.label || selectedPeriod})</h3>
+                 <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+                    <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Grand Total:</span>
+                    <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+                 </div>
+              </div>
+              <div className="overflow-x-auto max-h-[500px] no-scrollbar">
+                <Table>
+                   <TableHeader>
+                      <TableRow className="border-white/5 bg-white/5">
+                         <TableHead className="text-white/40 text-xs font-black uppercase">PIN</TableHead>
+                         <TableHead className="text-white/40 text-xs font-black uppercase">Nama</TableHead>
+                         <TableHead className="text-white/40 text-xs font-black uppercase text-right">Bonus Nota</TableHead>
+                         <TableHead className="text-white/40 text-xs font-black uppercase text-right"></TableHead>
+                      </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                      {Object.entries(entries).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-12 text-white/20 italic text-xs uppercase tracking-widest">Tidak ada data bonus</TableCell>
+                        </TableRow>
+                      ) : (
+                        Object.entries(entries).map(([empId, amount]) => {
+                          const emp = employees.find(e => e.id === empId);
+                          return (
+                            <TableRow key={empId} className="border-white/5 hover:bg-white/5 transition-colors">
+                               <TableCell className="text-white/60 font-mono text-xs">{emp?.pin || '-'}</TableCell>
+                               <TableCell className="text-white font-bold">{emp?.name || 'Unknown'}</TableCell>
+                               <TableCell className="text-emerald-400 font-black text-right">Rp {new Intl.NumberFormat('id-ID').format(amount as number)}</TableCell>
+                               <TableCell className="text-right flex justify-end gap-1">
+                                  <Button variant="ghost" size="icon" onClick={() => handleEdit(empId)} disabled={isLocked} className="h-8 w-8 hover:bg-white/10 text-white/40">
+                                     <Edit className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => handleRemove(empId)} disabled={isLocked} className="h-8 w-8 hover:bg-rose-500/10 text-rose-400">
+                                     <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                               </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
+                   </TableBody>
+                </Table>
+              </div>
+           </CardContent>
+        </Card>
+      </div>
+
+      {/* Dialog Clear All */}
+      <Dialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-rose-400 uppercase font-black tracking-widest">Hapus Semua Data?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+             <p className="text-sm text-white/60">Tindakan ini tidak dapat dibatalkan. Masukkan password admin untuk mengonfirmasi.</p>
+             <Input 
+               type="password" 
+               placeholder="Password Admin" 
+               value={password} 
+               onChange={e => setPassword(e.target.value)} 
+               className="bg-white/5 border-white/10 text-white"
+             />
+             <Button onClick={handleClearAll} variant="destructive" className="w-full">YA, HAPUS SEMUA</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Buka Kunci */}
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogHeader>
+            <DialogTitle className="uppercase font-black tracking-widest">Buka Kunci Periode</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+             <p className="text-sm text-white/60">Masukkan password admin untuk membuka kunci periode ini.</p>
+             <Input 
+               type="password" 
+               placeholder="Password Admin" 
+               value={password} 
+               onChange={e => setPassword(e.target.value)} 
+               className="bg-white/5 border-white/10 text-white"
+             />
+             <Button onClick={confirmUnlock} className="w-full bg-emerald-600 hover:bg-emerald-500">KONFIRMASI BUKA KUNCI</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// --- ADMIN BONUS BERAT ---
+function AdminBonusBerat({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+
+  const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
+  const [isLocked, setIsLocked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [password, setPassword] = useState('');
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [inputAmount, setInputAmount] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(doc(db, 'bonusBerat', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        if (snap.exists()) {
+          const data = snap.data();
+          setEntries(data.entries || {});
+          setIsLocked(data.isLocked || false);
+        } else {
+          setEntries({});
+          setIsLocked(false);
+        }
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `bonusBerat/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsub();
+    };
+  }, [selectedPeriod]);
+
+  const saveEntries = async (updated: Record<string, number>) => {
+    try {
+      await setDoc(doc(db, 'bonusBerat', selectedPeriod), {
+        periodId: selectedPeriod,
+        entries: updated,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `bonusBerat/${selectedPeriod}`);
+    }
+  };
+
+  const handleAddOrUpdate = () => {
+    if (!selectedEmpId || !inputAmount) {
+      toast.error("Data tidak lengkap");
+      return;
+    }
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const amount = parseInt(inputAmount.replace(/\D/g, '')) || 0;
+    const updated = { ...entries, [selectedEmpId]: amount };
+    setEntries(updated);
+    saveEntries(updated);
+    
+    setSelectedEmpId('');
+    setInputAmount('');
+    setEditId(null);
+    toast.success(editId ? "Data diperbarui" : "Data ditambahkan");
+  };
+
+  const handleEdit = (empId: string) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    setSelectedEmpId(empId);
+    setInputAmount(entries[empId]?.toString() || '');
+    setEditId(empId);
+  };
+
+  const handleRemove = (empId: string) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const updated = { ...entries };
+    delete updated[empId];
+    setEntries(updated);
+    saveEntries(updated);
+    toast.success("Data dihapus");
+  };
+
+  const handleClearAll = async () => {
+    if (password === 'admin123') {
+      await saveEntries({});
+      setShowClearDialog(false);
+      setPassword('');
+      toast.success("Semua data dihapus");
+    } else {
+      toast.error("Password salah");
+    }
+  };
+
+  const toggleLock = async () => {
+    if (isLocked) {
+        setShowUnlockDialog(true);
+    } else {
+        try {
+            await setDoc(doc(db, 'bonusBerat', selectedPeriod), { isLocked: true }, { merge: true });
+            toast.success("Periode dikunci");
+        } catch (e) {
+            handleFirestoreError(e, OperationType.WRITE, `bonusBerat/${selectedPeriod}`);
+        }
+    }
+  };
+
+  const confirmUnlock = async () => {
+    if (password === 'admin123') {
+      try {
+        await setDoc(doc(db, 'bonusBerat', selectedPeriod), { isLocked: false }, { merge: true });
+        setShowUnlockDialog(false);
+        setPassword('');
+        toast.success("Kunci dibuka");
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `bonusBerat/${selectedPeriod}`);
+      }
+    } else {
+      toast.error("Password salah");
+    }
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || isLocked) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data = XLSX.utils.sheet_to_json(ws);
+          
+          const updated = { ...entries };
+          data.forEach((row: any) => {
+              const pin = row['No. Absen']?.toString() || row['PIN']?.toString() || row['pin']?.toString();
+              const amount = parseInt(row['Bonus Berat'] || row['Bonus'] || row['Nominal'] || row['amount'] || 0);
+              const emp = employees.find(e => e.pin === pin);
+              if (emp && !isNaN(amount)) {
+                  updated[emp.id] = amount;
+              }
+          });
+          setEntries(updated);
+          saveEntries(updated);
+          toast.success("Impor berhasil");
+      } catch (err) {
+          toast.error("Gagal impor file");
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = ''; // Reset input
+  };
+
+  const handleDownload = () => {
+    const data = Object.entries(entries).map(([id, amount]) => {
+      const emp = employees.find(e => e.id === id);
+      return {
+        'No. Absen': emp?.pin || '',
+        'Nama': emp?.name || '',
+        'Bonus Berat': amount
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bonus Berat");
+    XLSX.writeFile(wb, `Bonus_Berat_${currentPeriod?.label || selectedPeriod}.xlsx`);
+  };
+
+  const grandTotal = (Object.values(entries) as number[]).reduce((a: number, b: number) => a + b, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Layers className="w-5 h-5 text-teal-400" /> Bonus Berat
+          </h2>
+          <p className="text-white/40 text-xs font-medium lowercase">periode: {currentPeriod?.label || selectedPeriod}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[180px] glass-panel border-white/10 text-white h-11 px-6 rounded-xl">
+              <SelectValue placeholder="Pilih Periode">
+                 {currentPeriod?.label || selectedPeriod}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white">
+              {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleDownload} variant="outline" className="h-11 rounded-xl text-white bg-blue-600 hover:bg-blue-500 border-none px-6">
+            <Download className="w-4 h-4 mr-2" /> Download
+          </Button>
+          <label className="cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl px-6 h-11 flex items-center gap-2 text-sm font-medium transition-colors">
+            <Upload className="w-4 h-4" /> Import Excel
+            <input type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleImport} disabled={isLocked} />
+          </label>
+          <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-11 px-6 flex items-center gap-2`}>
+            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+          </Button>
+          <Button onClick={() => setShowClearDialog(true)} variant="ghost" className="h-11 px-6 text-rose-400 hover:bg-rose-500/10 rounded-xl">
+            <Trash2 className="w-4 h-4 mr-2" /> Kosongkan
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="glass-panel border-none bg-black/40">
+           <CardContent className="p-6">
+              <h3 className="text-sm font-bold text-white uppercase tracking-tight mb-4">{editId ? 'Edit Entri' : 'Tambah Entri'}</h3>
+              <div className="space-y-4">
+                 <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Karyawan</Label>
+                    <EmployeeSelector 
+                      employees={employees} 
+                      selectedId={selectedEmpId} 
+                      onSelect={(id) => setSelectedEmpId(id)}
+                      placeholder="Pilih Karyawan..."
+                      disabled={isLocked || !!editId}
+                    />
+                 </div>
+                 <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Nominal Bonus</Label>
+                    <Input 
+                      placeholder="Masukkan Nominal" 
+                      value={inputAmount} 
+                      onChange={e => setInputAmount(e.target.value)} 
+                      className="bg-white/5 border-white/10 text-white h-10" 
+                      disabled={isLocked}
+                    />
+                 </div>
+                 <div className="flex gap-2">
+                    <Button onClick={handleAddOrUpdate} className="flex-1 bg-primary h-11" disabled={isLocked}>{editId ? 'Perbarui' : 'Simpan'}</Button>
+                    {editId && <Button onClick={() => { setEditId(null); setSelectedEmpId(''); setInputAmount(''); }} variant="ghost" className="text-white h-11 border border-white/10">Batal</Button>}
+                 </div>
+              </div>
+           </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-none bg-black/40 md:col-span-2">
+           <CardContent className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-sm font-bold text-white uppercase tracking-tight">Akumulasi Bonus Berat ({currentPeriod?.label || selectedPeriod})</h3>
+                 <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+                    <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">Grand Total:</span>
+                    <span className="text-emerald-400 font-black text-sm">Rp {new Intl.NumberFormat('id-ID').format(grandTotal)}</span>
+                 </div>
+              </div>
+              <div className="overflow-x-auto max-h-[500px] no-scrollbar">
+                <Table>
+                   <TableHeader>
+                      <TableRow className="border-white/5 bg-white/5">
+                         <TableHead className="text-white/40 text-xs font-black uppercase">PIN</TableHead>
+                         <TableHead className="text-white/40 text-xs font-black uppercase">Nama</TableHead>
+                         <TableHead className="text-white/40 text-xs font-black uppercase text-right">Bonus Berat</TableHead>
+                         <TableHead className="text-white/40 text-xs font-black uppercase text-right"></TableHead>
+                      </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                      {Object.entries(entries).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-12 text-white/20 italic text-xs uppercase tracking-widest">Tidak ada data bonus</TableCell>
+                        </TableRow>
+                      ) : (
+                        Object.entries(entries).map(([empId, amount]) => {
+                          const emp = employees.find(e => e.id === empId);
+                          return (
+                            <TableRow key={empId} className="border-white/5 hover:bg-white/5 transition-colors">
+                               <TableCell className="text-white/60 font-mono text-xs">{emp?.pin || '-'}</TableCell>
+                               <TableCell className="text-white font-bold">{emp?.name || 'Unknown'}</TableCell>
+                               <TableCell className="text-emerald-400 font-black text-right">Rp {new Intl.NumberFormat('id-ID').format(amount as number)}</TableCell>
+                               <TableCell className="text-right flex justify-end gap-1">
+                                  <Button variant="ghost" size="icon" onClick={() => handleEdit(empId)} disabled={isLocked} className="h-8 w-8 hover:bg-white/10 text-white/40">
+                                     <Edit className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" onClick={() => handleRemove(empId)} disabled={isLocked} className="h-8 w-8 hover:bg-rose-500/10 text-rose-400">
+                                     <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                               </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
+                   </TableBody>
+                </Table>
+              </div>
+           </CardContent>
+        </Card>
+      </div>
+
+      {/* Dialog Clear All */}
+      <Dialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-rose-400 uppercase font-black tracking-widest">Hapus Semua Data?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+             <p className="text-sm text-white/60">Tindakan ini tidak dapat dibatalkan. Masukkan password admin untuk mengonfirmasi.</p>
+             <Input 
+               type="password" 
+               placeholder="Password Admin" 
+               value={password} 
+               onChange={e => setPassword(e.target.value)} 
+               className="bg-white/5 border-white/10 text-white"
+             />
+             <Button onClick={handleClearAll} variant="destructive" className="w-full">YA, HAPUS SEMUA</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Buka Kunci */}
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+          <DialogHeader>
+            <DialogTitle className="uppercase font-black tracking-widest">Buka Kunci Periode</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+             <p className="text-sm text-white/60">Masukkan password admin untuk membuka kunci periode ini.</p>
+             <Input 
+               type="password" 
+               placeholder="Password Admin" 
+               value={password} 
+               onChange={e => setPassword(e.target.value)} 
+               className="bg-white/5 border-white/10 text-white"
+             />
+             <Button onClick={confirmUnlock} className="w-full bg-emerald-600 hover:bg-emerald-500">KONFIRMASI BUKA KUNCI</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 // --- ADMIN DASHBOARD ---
 function AdminOfficeConfig() {
   const [config, setConfig] = useState<any>(null);
@@ -3893,6 +4619,8 @@ function AdminDashboard({
         { value: 'bonus-lain-lain', label: 'Bonus Campuran', icon: <Zap className="w-4 h-4" /> },
         { value: 'bonus-lain-lain-combined', label: 'Bonus Lain-Lain', icon: <Calculator className="w-4 h-4" /> },
         { value: 'bonus-operator', label: 'Bonus Operator', icon: <Calculator className="w-4 h-4 text-emerald-400" /> },
+        { value: 'bonus-nota', label: 'Bonus Nota', icon: <Zap className="w-4 h-4 text-amber-400" /> },
+        { value: 'bonus-berat', label: 'Bonus Berat', icon: <Layers className="w-4 h-4 text-teal-400" /> },
       ]
     },
     {
@@ -4036,6 +4764,12 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="bonus-operator" className="mt-0 outline-none">
                 <AdminBonusOperator employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="bonus-nota" className="mt-0 outline-none">
+                <AdminBonusNota employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="bonus-berat" className="mt-0 outline-none">
+                <AdminBonusBerat employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />
