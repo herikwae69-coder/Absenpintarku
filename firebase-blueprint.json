@@ -200,12 +200,28 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["employeeId", "amount"]
+    },
+    "BonusKoreksiGaji": {
+      "title": "Bonus Koreksi Gaji",
+      "description": "Koreksi Gaji (Penambahan) per period",
+      "type": "object",
+      "properties": {
+        "periodId": { "type": "string" },
+        "entries": { "type": "object", "description": "Mapping employeeId -> amount" },
+        "isLocked": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["periodId", "entries"]
     }
   },
   "firestore": {
     "/bonusBerat/{id}": {
       "schema": "BonusBerat",
       "description": "Collection of accumulated berat bonuses"
+    },
+    "/koreksiGaji/{periodId}": {
+      "schema": "BonusKoreksiGaji",
+      "description": "Koreksi gaji (penambahan) data per period."
     },
     "/bonusNota/{id}": {
       "schema": "BonusNota",
