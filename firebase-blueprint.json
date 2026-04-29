@@ -212,6 +212,20 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["periodId", "entries"]
+    },
+    "PotonganKehilangan": {
+      "title": "Potongan Kehilangan",
+      "description": "Individual debt records (potongan kehilangan) for an employee.",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "description": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "installment": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "description", "totalAmount", "installment", "remainingAmount", "createdAt"]
     }
   },
   "firestore": {
@@ -222,6 +236,10 @@
     "/koreksiGaji/{periodId}": {
       "schema": "BonusKoreksiGaji",
       "description": "Koreksi gaji (penambahan) data per period."
+    },
+    "/potonganKehilangan/{employeeId}/debts/{debtId}": {
+      "schema": "PotonganKehilangan",
+      "description": "Individual debt records for employees."
     },
     "/bonusNota/{id}": {
       "schema": "BonusNota",

@@ -2,11 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Pillar 3: Path Variable Hardening (isValidId)
     function isValidId(id) { 
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$'); 
@@ -39,5 +34,14 @@ service cloud.firestore {
     match /bonusNota/{id} { allow read: if true; allow write: if isValidId(id); }
     match /bonusBerat/{id} { allow read: if true; allow write: if isValidId(id); }
     match /koreksiGaji/{id} { allow read: if true; allow write: if isValidId(id); }
+    match /potonganKehilangan/{employeeId}/debts/{debtId} {
+        allow read: if true;
+        allow write: if isValidId(employeeId) && isValidId(debtId);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }

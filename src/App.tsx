@@ -88,7 +88,8 @@ import {
   Calculator,
   Moon,
   Sun,
-  ShieldAlert
+  ShieldAlert,
+  DollarSign
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -98,6 +99,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast, Toaster } from 'sonner';
+import { PotonganKehilanganManager } from './components/PotonganKehilanganManager';
 import { 
   Dialog, 
   DialogContent, 
@@ -3780,18 +3782,7 @@ function EmployeeView({
         </TabsContent>
 
         <TabsContent value="ristan" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-          <Card className="glass-panel border-none py-20 bg-orange-500/5 border-dashed border-orange-500/20">
-            <CardContent className="flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 rounded-full bg-orange-500/20 flex items-center justify-center mb-6 border border-orange-500/30 animate-pulse">
-                <ClipboardList className="w-10 h-10 text-orange-400" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-2">Menu Ristan</h3>
-              <p className="text-white/40 max-w-sm">
-                Dalam proses tunggu update selanjutnya. Fitur ini akan tersedia pada versi aplikasi mendatang.
-              </p>
-              <Badge className="mt-6 bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 border-none px-4 py-1">SOON</Badge>
-            </CardContent>
-          </Card>
+          <PotonganKehilanganManager employees={employees} />
         </TabsContent>
       </Tabs>
     </div>
@@ -4935,6 +4926,12 @@ function AdminDashboard({
       ]
     },
     {
+      label: 'Ristan & Potongan',
+      items: [
+        { value: 'potongan', label: 'Potongan Kehilangan (Restan 100%)', icon: <DollarSign className="w-4 h-4" /> },
+      ]
+    },
+    {
       label: 'Libur',
       items: [
         { value: 'leaves', label: 'Request Libur', icon: <CalendarIcon className="w-4 h-4" /> },
@@ -5084,6 +5081,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="bonus-berat" className="mt-0 outline-none">
                 <AdminBonusBerat employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="potongan" className="mt-0 outline-none">
+                <PotonganKehilanganManager employees={employees} activePeriodId={activePeriodId} />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />
