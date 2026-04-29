@@ -2309,18 +2309,16 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
           <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
             <Zap className="w-5 h-5 text-amber-400" /> Bonus Campuran
           </h2>
-          <p className="text-white/40 text-xs">Kelola bonus campuran selain dari sistem utama.</p>
+          <p className="text-white/40 text-xs font-medium lowercase">periode: {currentPeriod?.label || selectedPeriod}</p>
         </div>
         <div className="flex items-center gap-3">
-          {currentPeriod && (
-            <Button onClick={downloadExcel} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2 h-12 px-6">
-              <Download className="w-4 h-4" /> Download
-            </Button>
-          )}
+          <Button onClick={downloadExcel} className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2 h-12 px-6">
+            <Download className="w-4 h-4" /> Download
+          </Button>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-[200px] glass-panel border-white/10 text-white h-12 rounded-xl">
               <SelectValue placeholder="Pilih Periode">
-                 {periodOptions.find(p => p.value === selectedPeriod)?.label || "Pilih Periode"}
+                 {currentPeriod?.label || selectedPeriod || "Pilih Periode"}
               </SelectValue>
             </SelectTrigger>
             <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
@@ -2432,7 +2430,8 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
                   <Table>
                     <TableHeader>
                       <TableRow className="border-white/5 bg-white/5">
-                        <TableHead className="text-white/40">Karyawan</TableHead>
+                        <TableHead className="text-white/40">No. Absen</TableHead>
+                        <TableHead className="text-white/40">Nama</TableHead>
                         <TableHead className="text-white/40">Jenis</TableHead>
                         <TableHead className="text-white/40">Nominal</TableHead>
                         <TableHead className="text-white/40"></TableHead>
@@ -2441,7 +2440,8 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
                     <TableBody>
                       {entries.map(entry => (
                         <TableRow key={entry.id} className="border-white/5">
-                          <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || entry.pin}</TableCell>
+                          <TableCell className="text-white/60 font-mono text-xs">{entry.pin}</TableCell>
+                          <TableCell className="text-white font-bold">{employees.find(e => e.pin === entry.pin)?.name || "-"}</TableCell>
                           <TableCell className="text-white/80">{bonusTypes[entry.bonusTypeId] || entry.bonusTypeId}</TableCell>
                           <TableCell className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(entry.amount)}</TableCell>
                           <TableCell>
@@ -2581,18 +2581,18 @@ function AdminBonusLainLainCombined({ employees, activePeriodId, setActivePeriod
   const grandTotal = Object.values(combinedTotals).reduce((sum, item: any) => sum + item.total, 0);
 
   const downloadExcel = () => {
-    if (!currentPeriod || Object.keys(combinedTotals).length === 0) return;
+    if (Object.keys(combinedTotals).length === 0) return;
 
     const data = Object.values(combinedTotals).map((item: any) => ({
       'No. Absen': item.pin,
       'Nama': item.name,
-      'Total Bonus Lain-Lain': item.total
+      'Total Bonus Lain Lain': item.total
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Bonus Lain-Lain");
-    XLSX.writeFile(wb, `Bonus_Lain_Lain_Combined_${currentPeriod.label}.xlsx`);
+    XLSX.writeFile(wb, `Bonus_Lain_Lain_Combined_${currentPeriod?.label || selectedPeriod || 'All'}.xlsx`);
   };
 
   return (
@@ -2602,23 +2602,23 @@ function AdminBonusLainLainCombined({ employees, activePeriodId, setActivePeriod
           <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
             <Calculator className="w-5 h-5 text-emerald-400" /> Bonus Lain-Lain
           </h2>
-          <p className="text-white/40 text-xs text-uppercase">GABUNGAN JAGA DEPAN + BONUS CAMPURAN</p>
+          <p className="text-white/40 text-xs font-medium lowercase">periode: {currentPeriod?.label || selectedPeriod}</p>
         </div>
         <div className="flex gap-3">
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-[200px] glass-panel border-white/20 text-white h-12 rounded-xl">
               <CalendarIcon className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Pilih Periode" />
+              <SelectValue placeholder="Pilih Periode">
+                {currentPeriod?.label || selectedPeriod || "Pilih Periode"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="glass-panel border-white/20 text-white max-h-[300px]">
               {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          {Object.keys(combinedTotals).length > 0 && (
-            <Button onClick={downloadExcel} className="bg-emerald-600 hover:bg-emerald-500 text-white h-12 rounded-xl">
-              <Download className="w-4 h-4 mr-2" /> Excel
-            </Button>
-          )}
+          <Button onClick={downloadExcel} className="bg-emerald-600 hover:bg-emerald-500 text-white h-12 rounded-xl">
+            <Download className="w-4 h-4 mr-2" /> Excel
+          </Button>
         </div>
       </div>
 
@@ -2638,11 +2638,11 @@ function AdminBonusLainLainCombined({ employees, activePeriodId, setActivePeriod
             <Table>
               <TableHeader>
                 <TableRow className="border-white/5 bg-white/5 h-12">
-                  <TableHead className="text-white/40 text-xs uppercase font-black">PIN</TableHead>
-                  <TableHead className="text-white/40 text-xs uppercase font-black">Nama Karyawan</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase font-black">No. Absen</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase font-black">Nama</TableHead>
                   <TableHead className="text-white/40 text-xs uppercase font-black text-right">Jaga Depan</TableHead>
                   <TableHead className="text-white/40 text-xs uppercase font-black text-right">Campuran</TableHead>
-                  <TableHead className="text-white/40 text-xs uppercase font-black text-right">Total Lain-Lain</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase font-black text-right">Total Bonus Lain Lain</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
