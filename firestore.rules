@@ -40,6 +40,7 @@ service cloud.firestore {
     }
     match /potonganKehilangan/{employeeId}/debts/{debtId}/payments/{paymentId} {
         allow read, get, list: if true;
+        allow write: if isValidId(employeeId) && isValidId(debtId) && isValidId(paymentId);
     }
 
     match /{path=**}/debts {

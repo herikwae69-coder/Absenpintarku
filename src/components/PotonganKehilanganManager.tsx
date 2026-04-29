@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Lock, Plus, Search, Trash2, Edit3, Download, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { Employee, PeriodControl } from '../types';
@@ -148,6 +149,8 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(true);
   const [historyDebt, setHistoryDebt] = useState<Debt | null>(null);
+  const [installmentDebt, setInstallmentDebt] = useState<Debt | null>(null);
+  const [installmentAmount, setInstallmentAmount] = useState('');
   const [payments, setPayments] = useState<any[]>([]);
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = useMemo(() => getCombinedPeriods(controls), [controls]);
@@ -247,31 +250,36 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
       }
   };
 
-  const handleInstallment = async (debt: Debt) => {
+  const handleInstallmentClick = (debt: Debt) => {
       if (!isUnlocked) { toast.error("Password diperlukan"); return; }
       if (!selectedPeriodId) { toast.error("Pilih periode terlebih dahulu"); return; }
       if (debt.remainingAmount <= 0) { toast.error("Hutang sudah lunas"); return; }
+      
+      setInstallmentDebt(debt);
+      setInstallmentAmount('');
+  };
 
-      const input = prompt(`Masukkan jumlah potongan untuk periode ${selectedPeriodId}. Sisa hutang: ${new Intl.NumberFormat('id-ID').format(debt.remainingAmount)}`,"0");
-      if (input === null) return;
-      const amount = parseInt(input.replace(/\D/g, '')) || 0;
-      if (amount <= 0 || amount > debt.remainingAmount) {
+  const submitInstallment = async () => {
+      if (!installmentDebt) return;
+      const amount = parseInt(installmentAmount.replace(/\D/g, '')) || 0;
+      if (amount <= 0 || amount > installmentDebt.remainingAmount) {
           toast.error("Nominal tidak valid");
           return;
       }
       
       try {
           const paymentId = `${selectedPeriodId}_${Date.now()}`;
-          await setDoc(doc(db, 'potonganKehilangan', debt.empId, 'debts', debt.id, 'payments', paymentId), {
+          await setDoc(doc(db, 'potonganKehilangan', installmentDebt.empId, 'debts', installmentDebt.id, 'payments', paymentId), {
               periodId: selectedPeriodId,
               amount: amount,
               createdAt: serverTimestamp()
           });
-          await setDoc(doc(db, 'potonganKehilangan', debt.empId, 'debts', debt.id), {
-              remainingAmount: debt.remainingAmount - amount
+          await setDoc(doc(db, 'potonganKehilangan', installmentDebt.empId, 'debts', installmentDebt.id), {
+              remainingAmount: installmentDebt.remainingAmount - amount
           }, { merge: true });
           
           toast.success("Potongan berhasil ditambahkan");
+          setInstallmentDebt(null);
       } catch (e) {
           handleFirestoreError(e, OperationType.CREATE, 'potonganKehilangan');
       }
@@ -322,17 +330,17 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   
   return (
     <div className="space-y-6">
-      <Card className="glass-panel border-none bg-black/40 p-6">
-        <div className="flex justify-between items-center mb-4">
+      <Card className="glass-panel border-none bg-black/40 p-4 md:p-6">
+        <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 mb-4">
             <h3 className="text-sm font-bold text-white uppercase tracking-tight flex items-center gap-2">
                 Filter Periode & Export
-                <Button onClick={toggleLock} variant={isUnlocked ? 'ghost' : 'default'} size="sm">
+                <Button onClick={toggleLock} variant={isUnlocked ? 'ghost' : 'default'} size="sm" className="h-8 w-8 p-0">
                     {isUnlocked ? <Lock className="w-4 h-4 text-emerald-500"/> : <Lock className="w-4 h-4 text-rose-500"/>}
                 </Button>
             </h3>
-            <div className="flex gap-2">
-                <Button onClick={handleExportCurrentPeriod} variant="outline" size="sm" className="gap-2"><Download className="w-4 h-4"/> Export Periode</Button>
-                <Button onClick={handleExportAllPeriods} variant="outline" size="sm" className="gap-2"><Download className="w-4 h-4"/> Export Semua</Button>
+            <div className="flex flex-col xs:flex-row gap-2 w-full md:w-auto">
+                <Button onClick={handleExportCurrentPeriod} variant="outline" size="sm" className="gap-2 shrink-0"><Download className="w-4 h-4"/> Export Periode</Button>
+                <Button onClick={handleExportAllPeriods} variant="outline" size="sm" className="gap-2 shrink-0"><Download className="w-4 h-4"/> Export Semua</Button>
             </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
@@ -404,11 +412,11 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                                     {debt.remainingAmount === 0 ? "LUNAS" : "BELUM LUNAS"}
                                 </TableCell>
                                <TableCell>
-                                   <div className="flex gap-2">
-                                        <Button size="sm" variant="ghost" className="text-emerald-400" onClick={() => handleInstallment(debt)} disabled={!isUnlocked || debt.remainingAmount === 0}>Cicil</Button>
-                                        <Button size="sm" variant="ghost" className="text-amber-400" onClick={() => handleViewHistory(debt)}>Riwayat</Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={!isUnlocked}><Edit3 className="w-4 h-4" /></Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400" disabled={!isUnlocked}><Trash2 className="w-4 h-4" /></Button>
+                                   <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                                        <Button size="sm" variant="ghost" className="text-emerald-400 shrink-0" onClick={() => handleInstallmentClick(debt)} disabled={!isUnlocked || debt.remainingAmount === 0}>Cicil</Button>
+                                        <Button size="sm" variant="ghost" className="text-amber-400 shrink-0" onClick={() => handleViewHistory(debt)}>Riwayat</Button>
+                                        <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={!isUnlocked} className="shrink-0"><Edit3 className="w-4 h-4" /></Button>
+                                        <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400 shrink-0" disabled={!isUnlocked}><Trash2 className="w-4 h-4" /></Button>
                                    </div>
                                 </TableCell>
                             </TableRow>
@@ -417,6 +425,32 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                 </Table>
                 </CardContent>
             </Card>
+
+            <Dialog open={!!installmentDebt} onOpenChange={(val) => !val && setInstallmentDebt(null)}>
+              <DialogContent className="glass-panel text-white border-white/20 sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-white">Masukkan Nominal Cicilan</DialogTitle>
+                  <DialogDescription className="text-white/60">
+                    Sisa hutang: {installmentDebt ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(installmentDebt.remainingAmount) : 0}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <Input 
+                    type="number" 
+                    placeholder="Contoh: 100000" 
+                    value={installmentAmount} 
+                    onChange={e => setInstallmentAmount(e.target.value)} 
+                    className="glass-panel border-white/10 text-white"
+                    autoFocus
+                  />
+                  <p className="text-xs text-white/40 mt-2">Nominal akan dipotong pada periode terpilih: {periodOptions.find(p => p.value === selectedPeriodId)?.label || selectedPeriodId}</p>
+                </div>
+                <DialogFooter className="flex sm:justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setInstallmentDebt(null)}>Batal</Button>
+                  <Button onClick={submitInstallment} className="bg-primary hover:bg-primary/90 text-white font-bold">Simpan Cicilan</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {historyDebt && (
                 <Card className="fixed inset-0 m-auto w-1/2 h-2/3 glass-panel border bg-black/90 z-50 p-6 overflow-y-auto">
