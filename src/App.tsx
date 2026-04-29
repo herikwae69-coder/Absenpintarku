@@ -4367,7 +4367,7 @@ function AdminKoreksiGaji({ employees, activePeriodId, setActivePeriodId }: { em
                         return (
                             <TableRow key={id} className="border-white/5">
                                 <TableCell className="text-white font-bold">{emp?.name || id}</TableCell>
-                                <TableCell className="text-emerald-400">{new Intl.NumberFormat('id-ID').format(amount)}</TableCell>
+                                <TableCell className="text-emerald-400">{new Intl.NumberFormat('id-ID').format(Number(amount) || 0)}</TableCell>
                                 <TableCell>
                                     <Button variant="ghost" onClick={() => handleRemove(id)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" disabled={isLocked}>
                                         <Trash2 className="w-4 h-4" />

@@ -35,8 +35,18 @@ service cloud.firestore {
     match /bonusBerat/{id} { allow read: if true; allow write: if isValidId(id); }
     match /koreksiGaji/{id} { allow read: if true; allow write: if isValidId(id); }
     match /potonganKehilangan/{employeeId}/debts/{debtId} {
-        allow read: if true;
+        allow read, get: if true;
         allow write: if isValidId(employeeId) && isValidId(debtId);
+    }
+    match /potonganKehilangan/{employeeId}/debts/{debtId}/payments/{paymentId} {
+        allow read, get, list: if true;
+    }
+
+    match /{path=**}/debts {
+        allow list: if true;
+    }
+    match /{path=**}/debts/{debtId} {
+        allow read, get: if true;
     }
 
     // Default deny
