@@ -3812,6 +3812,8 @@ function AdminBonusNota({ employees, activePeriodId, setActivePeriodId }: { empl
      return unsub;
   }, []);
 
+
+
   const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
   const setSelectedPeriod = setActivePeriodId || (() => {});
@@ -4163,6 +4165,248 @@ function AdminBonusNota({ employees, activePeriodId, setActivePeriodId }: { empl
 }
 
 // --- ADMIN BONUS BERAT ---
+function AdminKoreksiGaji({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+
+  const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
+  const [isLocked, setIsLocked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [password, setPassword] = useState('');
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [inputAmount, setInputAmount] = useState('');
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(doc(db, 'koreksiGaji', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        if (snap.exists()) {
+          const data = snap.data();
+          setEntries(data.entries || {});
+          setIsLocked(data.isLocked || false);
+        } else {
+          setEntries({});
+          setIsLocked(false);
+        }
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `koreksiGaji/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsub();
+    };
+  }, [selectedPeriod]);
+
+  const saveEntries = async (updated: Record<string, number>) => {
+    try {
+      await setDoc(doc(db, 'koreksiGaji', selectedPeriod), {
+        periodId: selectedPeriod,
+        entries: updated,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `koreksiGaji/${selectedPeriod}`);
+    }
+  };
+
+  const handleAdd = () => {
+    if (!selectedEmpId || !inputAmount) {
+      toast.error("Data tidak lengkap");
+      return;
+    }
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const amount = parseInt(inputAmount.replace(/\D/g, '')) || 0;
+    const updated = { ...entries, [selectedEmpId]: amount };
+    setEntries(updated);
+    saveEntries(updated);
+    
+    setSelectedEmpId('');
+    setInputAmount('');
+    toast.success("Data ditambahkan");
+  };
+
+  const handleRemove = (empId: string) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const updated = { ...entries };
+    delete updated[empId];
+    setEntries(updated);
+    saveEntries(updated);
+    toast.success("Data dihapus");
+  };
+  
+  const handleDownload = () => {
+    const data = Object.entries(entries).map(([id, amount]) => {
+      const emp = employees.find(e => e.id === id);
+      return {
+        'No. Absen': emp?.pin || '',
+        'Nama': emp?.name || '',
+        'Nominal': amount
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Koreksi Gaji");
+    XLSX.writeFile(wb, `Koreksi_Gaji_${currentPeriod?.label || selectedPeriod}.xlsx`);
+  };
+
+  const toggleLock = async () => {
+      if (isLocked) {
+          setShowUnlockDialog(true);
+      } else {
+           await setDoc(doc(db, 'koreksiGaji', selectedPeriod), { isLocked: true }, { merge: true });
+           toast.success("Periode dikunci");
+      }
+  }
+
+  const handleUnlock = async () => {
+    if (password === 'admin123') { 
+       await setDoc(doc(db, 'koreksiGaji', selectedPeriod), { isLocked: false }, { merge: true });
+       setShowUnlockDialog(false);
+       setPassword('');
+       toast.success("Periode dibuka");
+    } else {
+       toast.error("Password salah");
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Zap className="w-5 h-5 text-amber-400" /> Koreksi Gaji (Penambahan)
+          </h2>
+          <p className="text-white/40 text-xs font-medium lowercase">periode: {currentPeriod?.label || selectedPeriod}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[180px] glass-panel border-white/10 text-white h-11 px-6 rounded-xl">
+              <SelectValue placeholder="Pilih Periode">
+                 {currentPeriod?.label || selectedPeriod}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/20 text-white">
+              {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleDownload} variant="outline" className="h-11 rounded-xl text-white bg-blue-600 hover:bg-blue-500 border-none px-6">
+            <Download className="w-4 h-4 mr-2" /> Download
+          </Button>
+          <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-11 px-6 flex items-center gap-2`}>
+            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="glass-panel border-none bg-black/40">
+           <CardContent className="p-6">
+              <h3 className="text-sm font-bold text-white uppercase tracking-tight mb-4">Tambah Entri</h3>
+              <div className="space-y-4">
+                 <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Karyawan</Label>
+                    <EmployeeSelector 
+                      employees={employees} 
+                      selectedId={selectedEmpId} 
+                      onSelect={(id) => setSelectedEmpId(id)}
+                      placeholder="Pilih Karyawan..."
+                      disabled={isLocked}
+                    />
+                 </div>
+                 <div className="space-y-1">
+                    <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">Nominal</Label>
+                    <Input 
+                      type="number"
+                      value={inputAmount}
+                      onChange={(e) => setInputAmount(e.target.value)}
+                      placeholder="0"
+                      disabled={isLocked}
+                      className="glass-panel border-white/10 text-white h-11 rounded-xl"
+                    />
+                 </div>
+                 <Button onClick={handleAdd} className="w-full h-11 rounded-xl bg-primary text-white font-bold" disabled={isLocked}>
+                    Tambah
+                 </Button>
+              </div>
+           </CardContent>
+        </Card>
+
+        <Card className="glass-panel border-none bg-black/40 md:col-span-2">
+           <CardContent className="p-6">
+              <Table>
+                <TableHeader>
+                    <TableRow className="border-white/5">
+                        <TableHead className="text-white/40">Karyawan</TableHead>
+                        <TableHead className="text-white/40">Nominal</TableHead>
+                        <TableHead className="text-white/40"></TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {Object.entries(entries).map(([id, amount]) => {
+                        const emp = employees.find(e => e.id === id);
+                        return (
+                            <TableRow key={id} className="border-white/5">
+                                <TableCell className="text-white font-bold">{emp?.name || id}</TableCell>
+                                <TableCell className="text-emerald-400">{new Intl.NumberFormat('id-ID').format(amount)}</TableCell>
+                                <TableCell>
+                                    <Button variant="ghost" onClick={() => handleRemove(id)} className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" disabled={isLocked}>
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })}
+                </TableBody>
+              </Table>
+           </CardContent>
+        </Card>
+      </div>
+
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-white/10 text-white">
+            <DialogHeader>
+                <DialogTitle>Buka Kunci Periode</DialogTitle>
+                <DialogDescription>Masukkan password untuk membuka kunci.</DialogDescription>
+            </DialogHeader>
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="glass-panel" />
+            <DialogFooter>
+                <Button onClick={handleUnlock}>Buka</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function AdminBonusBerat({ employees, activePeriodId, setActivePeriodId }: { employees: Employee[], activePeriodId: string, setActivePeriodId?: (id: string) => void }) {
   const [controls, setControls] = useState<Record<string, any>>({});
   
@@ -4686,6 +4930,7 @@ function AdminDashboard({
         { value: 'bonus-lain-lain-combined', label: 'Bonus Lain-Lain', icon: <Calculator className="w-4 h-4" /> },
         { value: 'bonus-operator', label: 'Bonus Operator', icon: <Calculator className="w-4 h-4 text-emerald-400" /> },
         { value: 'bonus-nota', label: 'Bonus Nota', icon: <Zap className="w-4 h-4 text-amber-400" /> },
+        { value: 'bonus-koreksi-gaji', label: 'Koreksi Gaji (Penambahan)', icon: <Zap className="w-4 h-4 text-emerald-400" /> },
         { value: 'bonus-berat', label: 'Bonus Berat', icon: <Layers className="w-4 h-4 text-teal-400" /> },
       ]
     },
@@ -4833,6 +5078,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="bonus-nota" className="mt-0 outline-none">
                 <AdminBonusNota employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="bonus-koreksi-gaji" className="mt-0 outline-none">
+                <AdminKoreksiGaji employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
               <TabsContent value="bonus-berat" className="mt-0 outline-none">
                 <AdminBonusBerat employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
