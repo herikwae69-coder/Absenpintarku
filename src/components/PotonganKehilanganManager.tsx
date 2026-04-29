@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { addMonths, subMonths, format } from 'date-fns';
 import { db } from '../lib/firebase';
 import { collection, collectionGroup, onSnapshot, doc, setDoc, serverTimestamp, addDoc, query, orderBy, deleteDoc, getDoc, getDocs } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
@@ -72,6 +73,68 @@ interface Debt {
   createdAt: any;
 }
 
+const getPeriodDates = (date: Date) => {
+  const day = date.getDate();
+  let start: Date, end: Date;
+
+  if (day >= 24) {
+    start = new Date(date.getFullYear(), date.getMonth(), 24);
+    const nextMonth = addMonths(date, 1);
+    end = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 23);
+  } else {
+    const lastMonth = subMonths(date, 1);
+    start = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 24);
+    end = new Date(date.getFullYear(), date.getMonth(), 23);
+  }
+  return { start, end };
+};
+
+const formatPeriod = (start: Date, end: Date) => {
+  return `${format(start, 'dd MMM yyyy')} - ${format(end, 'dd MMM yyyy')}`;
+};
+
+const getPeriodOptions = (monthsBefore: number = 24, monthsAfter: number = 12) => {
+  const options = [];
+  const now = new Date();
+  for (let i = -monthsBefore; i <= monthsAfter; i++) {
+    const d = addMonths(now, i);
+    const { start, end } = getPeriodDates(d);
+    options.push({
+      label: formatPeriod(start, end),
+      value: `${format(start, 'yyyy-MM-dd')}_${format(end, 'yyyy-MM-dd')}`,
+      start,
+      end
+    });
+  }
+  return options;
+};
+
+const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
+  const auto = getPeriodOptions();
+  const custom = Object.entries(firestoreControls)
+    .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate && id.startsWith('custom_'))
+    .map(([id, data]) => ({
+      label: data.name,
+      value: id,
+      start: new Date(data.startDate),
+      end: new Date(data.endDate)
+    }));
+  
+  const merged = auto
+    .filter(p => !firestoreControls[p.value]?.hidden)
+    .map(p => {
+      const fire = firestoreControls[p.value];
+      if (fire && fire.name) return { ...p, label: fire.name };
+      return p;
+    });
+
+  custom.forEach(cp => {
+    if (!merged.find(m => m.value === cp.value)) merged.push(cp);
+  });
+
+  return merged.sort((a,b) => b.start.getTime() - a.start.getTime());
+};
+
 export function PotonganKehilanganManager({ employees, activePeriodId }: { employees: Employee[], activePeriodId?: string }) {
   const employeesRef = useRef(employees);
   useEffect(() => { employeesRef.current = employees; }, [employees]);
@@ -79,7 +142,6 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   const [searchTerm, setSearchTerm] = useState('');
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
   const [selectedPeriodId, setSelectedPeriodId] = useState(activePeriodId);
-  const [periods, setPeriods] = useState<PeriodControl[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [newDebtDesc, setNewDebtDesc] = useState('');
   const [newDebtAmount, setNewDebtAmount] = useState('');
@@ -87,6 +149,16 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   const [isUnlocked, setIsUnlocked] = useState(true);
   const [historyDebt, setHistoryDebt] = useState<Debt | null>(null);
   const [payments, setPayments] = useState<any[]>([]);
+  const [controls, setControls] = useState<Record<string, any>>({});
+  const periodOptions = useMemo(() => getCombinedPeriods(controls), [controls]);
+
+  useEffect(() => {
+     if (periodOptions.length > 0) {
+        if (!selectedPeriodId || !periodOptions.find(p => p.value === selectedPeriodId)) {
+            setSelectedPeriodId(periodOptions[0].value);
+        }
+     }
+  }, [periodOptions, selectedPeriodId]);
 
   const toggleLock = () => {
     if (isUnlocked) {
@@ -109,19 +181,14 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   }
 
   useEffect(() => {
-      console.log("DEBUG: Employees prop received in manager:", employees);
-      const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
-          const loadedPeriods = snap.docs.map(d => ({id: d.id, ...d.data()}) as PeriodControl)
-                                       .sort((a, b) => b.id.localeCompare(a.id));
-          console.log("DEBUG: Periods loaded from Firestore:", loadedPeriods);
-          setPeriods(loadedPeriods);
-          if (loadedPeriods.length > 0 && !selectedPeriodId) {
-             setSelectedPeriodId(loadedPeriods[0].id);
-          }
-      }, (error) => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     }, (error) => {
           handleFirestoreError(error, OperationType.LIST, 'periodControls');
-      });
-      return unsub;
+     });
+     return unsub;
   }, []);
 
   useEffect(() => {
@@ -181,7 +248,7 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   };
 
   const handleInstallment = async (debt: Debt) => {
-      if (!isUnlocked || isPeriodLocked) { toast.error("Periode dikunci atau password diperlukan"); return; }
+      if (!isUnlocked) { toast.error("Password diperlukan"); return; }
       if (!selectedPeriodId) { toast.error("Pilih periode terlebih dahulu"); return; }
       if (debt.remainingAmount <= 0) { toast.error("Hutang sudah lunas"); return; }
 
@@ -252,15 +319,13 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
       const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       saveAs(dataBlob, 'Riwayat_Potongan_Semua_Periode.xlsx');
   };
-
-  const isPeriodLocked = periods.find(p => p.id === selectedPeriodId)?.status === 'closed';
   
   return (
     <div className="space-y-6">
       <Card className="glass-panel border-none bg-black/40 p-6">
         <div className="flex justify-between items-center mb-4">
             <h3 className="text-sm font-bold text-white uppercase tracking-tight flex items-center gap-2">
-                Cari Karyawan
+                Filter Periode & Export
                 <Button onClick={toggleLock} variant={isUnlocked ? 'ghost' : 'default'} size="sm">
                     {isUnlocked ? <Lock className="w-4 h-4 text-emerald-500"/> : <Lock className="w-4 h-4 text-rose-500"/>}
                 </Button>
@@ -270,25 +335,15 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                 <Button onClick={handleExportAllPeriods} variant="outline" size="sm" className="gap-2"><Download className="w-4 h-4"/> Export Semua</Button>
             </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-                <Search className="absolute left-3 top-3 w-5 h-5 text-white/30" />
-                <Input placeholder="Cari Absen/Nama..." value={searchTerm} onChange={e => {
-                    const val = e.target.value;
-                    setSearchTerm(val);
-                    const found = employees.find(emp => emp.name.toLowerCase().includes(val.toLowerCase()) || emp.pin.includes(val));
-                    if (found) setSelectedEmpId(found.id);
-                    else setSelectedEmpId('');
-                }} className="pl-10 glass-panel border-white/10 text-white" />
-            </div>
+        <div className="grid grid-cols-1 gap-4">
             <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
                 <SelectTrigger className="glass-panel border-white/10 text-white">
                     <SelectValue placeholder="Pilih Periode..." />
                 </SelectTrigger>
                 <SelectContent>
-                    {periods.map(p => 
-                        <SelectItem key={p.id} value={p.id}>
-                            {p.id} {p.name ? `- ${p.name}` : ''}
+                    {periodOptions.map(p => 
+                        <SelectItem key={p.value} value={p.value}>
+                            {p.label}
                         </SelectItem>
                     )}
                 </SelectContent>
@@ -301,13 +356,25 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
             <Card className="glass-panel border-none bg-black/40">
                 <CardContent className="p-6 space-y-4">
                     <h3 className="text-sm font-bold text-white uppercase tracking-tight">Tambah Hutang Baru</h3>
-                    {selectedEmpId && <p className="text-emerald-400 text-sm font-bold">Karyawan: {employees.find(e => e.id === selectedEmpId)?.name}</p>}
-                    {(!isUnlocked || isPeriodLocked) && <p className="text-rose-400 text-sm">Hutang dikunci! {isPeriodLocked ? 'Periode ditutup.' : 'Password diperlukan.'}</p>}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input placeholder="Keterangan" value={newDebtDesc} onChange={e => setNewDebtDesc(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isPeriodLocked || !isUnlocked} />
-                        <Input type="number" placeholder="Total Nominal" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isPeriodLocked || !isUnlocked} />
+                    
+                    <div className="relative">
+                        <Search className="absolute left-3 top-3 w-5 h-5 text-white/30" />
+                        <Input placeholder="Cari Absen atau Nama Karyawan..." value={searchTerm} onChange={e => {
+                            const val = e.target.value;
+                            setSearchTerm(val);
+                            const found = employees.find(emp => emp.name.toLowerCase().includes(val.toLowerCase()) || emp.pin.includes(val));
+                            if (found) setSelectedEmpId(found.id);
+                            else setSelectedEmpId('');
+                        }} className="pl-10 glass-panel border-white/10 text-white" disabled={!isUnlocked} />
                     </div>
-                     <Button onClick={handleAddDebt} disabled={isPeriodLocked || !isUnlocked} className="w-full bg-primary text-white font-bold"><Plus className="w-4 h-4 mr-2" /> Tambah Hutang</Button>
+
+                    {selectedEmpId && <p className="text-emerald-400 text-sm font-bold">Karyawan Terpilih: {employees.find(e => e.id === selectedEmpId)?.name}</p>}
+                    {!isUnlocked && <p className="text-rose-400 text-sm">Hutang dikunci! Password diperlukan.</p>}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Input placeholder="Keterangan" value={newDebtDesc} onChange={e => setNewDebtDesc(e.target.value)} className="glass-panel border-white/10 text-white" disabled={!isUnlocked} />
+                        <Input type="number" placeholder="Total Nominal" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="glass-panel border-white/10 text-white" disabled={!isUnlocked} />
+                    </div>
+                     <Button onClick={handleAddDebt} disabled={!isUnlocked} className="w-full bg-primary text-white font-bold"><Plus className="w-4 h-4 mr-2" /> Tambah Hutang</Button>
                 </CardContent>
             </Card>
 
@@ -338,10 +405,10 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                                 </TableCell>
                                <TableCell>
                                    <div className="flex gap-2">
-                                        <Button size="sm" variant="ghost" className="text-emerald-400" onClick={() => handleInstallment(debt)} disabled={isPeriodLocked || !isUnlocked || debt.remainingAmount === 0}>Cicil</Button>
+                                        <Button size="sm" variant="ghost" className="text-emerald-400" onClick={() => handleInstallment(debt)} disabled={!isUnlocked || debt.remainingAmount === 0}>Cicil</Button>
                                         <Button size="sm" variant="ghost" className="text-amber-400" onClick={() => handleViewHistory(debt)}>Riwayat</Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={isPeriodLocked || !isUnlocked}><Edit3 className="w-4 h-4" /></Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400" disabled={isPeriodLocked || !isUnlocked}><Trash2 className="w-4 h-4" /></Button>
+                                        <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={!isUnlocked}><Edit3 className="w-4 h-4" /></Button>
+                                        <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400" disabled={!isUnlocked}><Trash2 className="w-4 h-4" /></Button>
                                    </div>
                                 </TableCell>
                             </TableRow>
