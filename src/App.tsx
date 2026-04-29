@@ -305,29 +305,15 @@ const getPeriodOptions = (monthsBefore: number = 24, monthsAfter: number = 12) =
 };
 
 const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
-  const auto = getPeriodOptions();
-  const custom = Object.entries(firestoreControls)
-    .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate && id.startsWith('custom_'))
+  return Object.entries(firestoreControls)
+    .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate)
     .map(([id, data]) => ({
       label: data.name,
       value: id,
       start: new Date(data.startDate),
       end: new Date(data.endDate)
-    }));
-  
-  const merged = auto
-    .filter(p => !firestoreControls[p.value]?.hidden)
-    .map(p => {
-      const fire = firestoreControls[p.value];
-      if (fire && fire.name) return { ...p, label: fire.name };
-      return p;
-    });
-
-  custom.forEach(cp => {
-    if (!merged.find(m => m.value === cp.value)) merged.push(cp);
-  });
-
-  return merged.sort((a,b) => b.start.getTime() - a.start.getTime()); // Newest first
+    }))
+    .sort((a,b) => b.start.getTime() - a.start.getTime()); // Newest first
 };
 
 // Admin Authentication is now handle via Employee roles

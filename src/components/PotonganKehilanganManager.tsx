@@ -72,6 +72,7 @@ interface Debt {
   totalAmount: number;
   remainingAmount: number;
   createdAt: any;
+  paidOffPeriodId?: string;
 }
 
 const getPeriodDates = (date: Date) => {
@@ -111,29 +112,15 @@ const getPeriodOptions = (monthsBefore: number = 24, monthsAfter: number = 12) =
 };
 
 const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
-  const auto = getPeriodOptions();
-  const custom = Object.entries(firestoreControls)
-    .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate && id.startsWith('custom_'))
+  return Object.entries(firestoreControls)
+    .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate)
     .map(([id, data]) => ({
       label: data.name,
       value: id,
       start: new Date(data.startDate),
       end: new Date(data.endDate)
-    }));
-  
-  const merged = auto
-    .filter(p => !firestoreControls[p.value]?.hidden)
-    .map(p => {
-      const fire = firestoreControls[p.value];
-      if (fire && fire.name) return { ...p, label: fire.name };
-      return p;
-    });
-
-  custom.forEach(cp => {
-    if (!merged.find(m => m.value === cp.value)) merged.push(cp);
-  });
-
-  return merged.sort((a,b) => b.start.getTime() - a.start.getTime());
+    }))
+    .sort((a,b) => b.start.getTime() - a.start.getTime());
 };
 
 export function PotonganKehilanganManager({ employees, activePeriodId }: { employees: Employee[], activePeriodId?: string }) {
@@ -212,11 +199,23 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   }, []);
 
   const filteredDebts = useMemo(() => {
-      return debts.filter(d => 
-          d.empName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-          d.empPin.includes(searchTerm)
-      );
-  }, [debts, searchTerm]);
+      const selectedIndex = periodOptions.findIndex(p => p.value === selectedPeriodId);
+      return debts.filter(d => {
+          const matchesSearch = d.empName.toLowerCase().includes(searchTerm.toLowerCase()) || d.empPin.includes(searchTerm);
+          if (!matchesSearch) return false;
+          
+          if (d.remainingAmount === 0) {
+              if (d.paidOffPeriodId) {
+                  const paidIndex = periodOptions.findIndex(p => p.value === d.paidOffPeriodId);
+                  if (paidIndex !== -1 && selectedIndex !== -1) {
+                      return selectedIndex >= paidIndex;
+                  }
+              }
+              return false; // Hide legacy LUNAS or if not matching period logic
+          }
+          return true;
+      });
+  }, [debts, searchTerm, periodOptions, selectedPeriodId]);
 
   const handleAddDebt = async () => {
     if (!selectedEmpId || !newDebtDesc || !newDebtAmount) {
@@ -274,9 +273,14 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
               amount: amount,
               createdAt: serverTimestamp()
           });
-          await setDoc(doc(db, 'potonganKehilangan', installmentDebt.empId, 'debts', installmentDebt.id), {
-              remainingAmount: installmentDebt.remainingAmount - amount
-          }, { merge: true });
+          
+          const newRemaining = installmentDebt.remainingAmount - amount;
+          const updateData: any = { remainingAmount: newRemaining };
+          if (newRemaining === 0) {
+              updateData.paidOffPeriodId = selectedPeriodId;
+          }
+          
+          await setDoc(doc(db, 'potonganKehilangan', installmentDebt.empId, 'debts', installmentDebt.id), updateData, { merge: true });
           
           toast.success("Potongan berhasil ditambahkan");
           setInstallmentDebt(null);
@@ -299,17 +303,38 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   };
 
   const handleExportCurrentPeriod = async () => {
-      const data = filteredDebts.map(d => ({
-          'No Absen': d.empPin,
-          'Nama': d.empName,
-          'Keterangan': d.description,
-          'Potongan Periode': d.totalAmount - d.remainingAmount // Simpel: sisa cicilan
-      }));
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = { Sheets: { 'data': worksheet }, SheetNames: ['data'] };
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(dataBlob, `Potongan_${selectedPeriodId}.xlsx`);
+      try {
+          const q = query(collectionGroup(db, 'payments'));
+          const snapshot = await getDocs(q);
+          const paymentsInPeriod = snapshot.docs
+              .map(d => ({ ...d.data(), parentDebtId: d.ref.parent.parent?.id }))
+              .filter(p => p.periodId === selectedPeriodId && p.amount > 0);
+          
+          const exportData: any[] = [];
+          for (const payment of paymentsInPeriod) {
+              const debt = debts.find(d => d.id === payment.parentDebtId);
+              if (debt) {
+                  exportData.push({
+                      'No Absen': debt.empPin,
+                      'Nama': debt.empName,
+                      'Potongan Periode': payment.amount
+                  });
+              }
+          }
+          if (exportData.length === 0) {
+              toast.error("Tidak ada cicilan pada periode ini");
+              return;
+          }
+
+          const worksheet = XLSX.utils.json_to_sheet(exportData);
+          const workbook = { Sheets: { 'data': worksheet }, SheetNames: ['data'] };
+          const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+          const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+          saveAs(dataBlob, `Potongan_${periodOptions.find(p => p.value === selectedPeriodId)?.label || selectedPeriodId}.xlsx`);
+      } catch (error) {
+          console.error(error);
+          toast.error("Gagal export data");
+      }
   };
 
   const handleExportAllPeriods = async () => {
@@ -338,15 +363,17 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                     {isUnlocked ? <Lock className="w-4 h-4 text-emerald-500"/> : <Lock className="w-4 h-4 text-rose-500"/>}
                 </Button>
             </h3>
-            <div className="flex flex-col xs:flex-row gap-2 w-full md:w-auto">
-                <Button onClick={handleExportCurrentPeriod} variant="outline" size="sm" className="gap-2 shrink-0"><Download className="w-4 h-4"/> Export Periode</Button>
-                <Button onClick={handleExportAllPeriods} variant="outline" size="sm" className="gap-2 shrink-0"><Download className="w-4 h-4"/> Export Semua</Button>
+            <div className="flex flex-col gap-2 w-full md:w-auto">
+                <Button onClick={handleExportCurrentPeriod} variant="outline" size="sm" className="gap-2 w-full"><Download className="w-4 h-4"/> Export Periode</Button>
+                <Button onClick={handleExportAllPeriods} variant="outline" size="sm" className="gap-2 w-full"><Download className="w-4 h-4"/> Export Semua</Button>
             </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
             <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
                 <SelectTrigger className="glass-panel border-white/10 text-white">
-                    <SelectValue placeholder="Pilih Periode..." />
+                    <SelectValue placeholder="Pilih Periode...">
+                        {periodOptions.find(p => p.value === selectedPeriodId)?.label || 'Pilih Periode...'}
+                    </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                     {periodOptions.map(p => 
@@ -365,18 +392,42 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                 <CardContent className="p-6 space-y-4">
                     <h3 className="text-sm font-bold text-white uppercase tracking-tight">Tambah Hutang Baru</h3>
                     
-                    <div className="relative">
+                    <div className="relative z-10 mb-2">
                         <Search className="absolute left-3 top-3 w-5 h-5 text-white/30" />
-                        <Input placeholder="Cari Absen atau Nama Karyawan..." value={searchTerm} onChange={e => {
-                            const val = e.target.value;
-                            setSearchTerm(val);
-                            const found = employees.find(emp => emp.name.toLowerCase().includes(val.toLowerCase()) || emp.pin.includes(val));
-                            if (found) setSelectedEmpId(found.id);
-                            else setSelectedEmpId('');
-                        }} className="pl-10 glass-panel border-white/10 text-white" disabled={!isUnlocked} />
+                        <Input 
+                            placeholder="Cari Absen atau Nama Karyawan..." 
+                            value={searchTerm} 
+                            onChange={e => {
+                                const val = e.target.value;
+                                setSearchTerm(val);
+                                const found = employees.find(emp => emp.name.toLowerCase().includes(val.toLowerCase()) || emp.pin.includes(val));
+                                if (found && val) setSelectedEmpId(found.id);
+                                else setSelectedEmpId('');
+                            }} 
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && selectedEmpId) {
+                                    const found = employees.find(emp => emp.id === selectedEmpId);
+                                    if (found) {
+                                        setSearchTerm(found.name);
+                                    }
+                                }
+                            }}
+                            className="pl-10 glass-panel border-white/10 text-white" 
+                            disabled={!isUnlocked} 
+                        />
+                        {searchTerm && selectedEmpId && (searchTerm.toLowerCase() !== employees.find(e => e.id === selectedEmpId)?.name.toLowerCase()) && (
+                            <div 
+                                className="absolute w-full mt-1 glass-panel border border-white/10 bg-black/90 p-3 cursor-pointer hover:bg-white/10 rounded-md shadow-xl backdrop-blur-md"
+                                onClick={() => {
+                                    const found = employees.find(emp => emp.id === selectedEmpId);
+                                    if (found) setSearchTerm(found.name);
+                                }}
+                            >
+                                <span className="text-emerald-400 font-bold">{employees.find(e => e.id === selectedEmpId)?.name}</span>
+                                <span className="text-white/40 text-sm ml-2">- PIN: {employees.find(e => e.id === selectedEmpId)?.pin}</span>
+                            </div>
+                        )}
                     </div>
-
-                    {selectedEmpId && <p className="text-emerald-400 text-sm font-bold">Karyawan Terpilih: {employees.find(e => e.id === selectedEmpId)?.name}</p>}
                     {!isUnlocked && <p className="text-rose-400 text-sm">Hutang dikunci! Password diperlukan.</p>}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Input placeholder="Keterangan" value={newDebtDesc} onChange={e => setNewDebtDesc(e.target.value)} className="glass-panel border-white/10 text-white" disabled={!isUnlocked} />

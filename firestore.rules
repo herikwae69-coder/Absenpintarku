@@ -49,6 +49,9 @@ service cloud.firestore {
     match /{path=**}/debts/{debtId} {
         allow read, get: if true;
     }
+    match /{path=**}/payments {
+        allow list: if true;
+    }
 
     // Default deny
     match /{document=**} {
