@@ -135,7 +135,7 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
   const [newDebtDesc, setNewDebtDesc] = useState('');
   const [newDebtAmount, setNewDebtAmount] = useState('');
   const [selectedEmpId, setSelectedEmpId] = React.useState('');
-  const [isUnlocked, setIsUnlocked] = React.useState(true);
+  const [isLocked, setIsLocked] = React.useState(false);
   const [showAllDebts, setShowAllDebts] = React.useState(false);
   const [historyDebt, setHistoryDebt] = React.useState<Debt | null>(null);
   const [installmentDebt, setInstallmentDebt] = useState<Debt | null>(null);
@@ -154,15 +154,37 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
      }
   }, [periodOptions, selectedPeriodId]);
 
-  const toggleLock = () => {
-    if (isUnlocked) {
-        setIsUnlocked(false);
-    } else {
+  useEffect(() => {
+    if (!selectedPeriodId) return;
+    const unsub = onSnapshot(doc(db, 'potonganKehilanganBersamaConfig', selectedPeriodId), (snap) => {
+        if (snap.exists()) {
+            setIsLocked(snap.data().isLocked || false);
+        } else {
+            setIsLocked(false);
+        }
+    }, (err) => handleFirestoreError(err, OperationType.GET, `potonganKehilanganBersamaConfig/${selectedPeriodId}`));
+    return unsub;
+  }, [selectedPeriodId]);
+
+  const toggleLock = async () => {
+    if (isLocked) {
         const pass = prompt("Masukkan password untuk buka kunci:");
         if (pass === 'admin123') {
-            setIsUnlocked(true);
+            try {
+                await setDoc(doc(db, 'potonganKehilanganBersamaConfig', selectedPeriodId), { isLocked: false }, { merge: true });
+                toast.success("Kunci dibuka");
+            } catch (e) {
+                handleFirestoreError(e, OperationType.WRITE, `potonganKehilanganBersamaConfig/${selectedPeriodId}`);
+            }
         } else {
             toast.error("Password salah");
+        }
+    } else {
+        try {
+            await setDoc(doc(db, 'potonganKehilanganBersamaConfig', selectedPeriodId), { isLocked: true }, { merge: true });
+            toast.success("Periode dikunci");
+        } catch (e) {
+            handleFirestoreError(e, OperationType.WRITE, `potonganKehilanganBersamaConfig/${selectedPeriodId}`);
         }
     }
   };
@@ -260,7 +282,7 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
   };
 
   const handleInstallmentClick = (debt: Debt) => {
-      if (!isUnlocked) { toast.error("Password diperlukan"); return; }
+      if (isLocked) { toast.error("Periode dikunci"); return; }
       if (!selectedPeriodId) { toast.error("Pilih periode terlebih dahulu"); return; }
       if (debt.remainingAmount <= 0) { toast.error("Hutang sudah lunas"); return; }
       
@@ -480,8 +502,9 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
         <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 mb-4">
             <h3 className="text-sm font-bold text-white uppercase tracking-tight flex items-center gap-2">
                 Filter Periode & Export
-                <Button onClick={toggleLock} variant={isUnlocked ? 'ghost' : 'default'} size="sm" className="h-8 w-8 p-0">
-                    {isUnlocked ? <Lock className="w-4 h-4 text-emerald-500"/> : <Lock className="w-4 h-4 text-rose-500"/>}
+                <Button onClick={toggleLock} variant={isLocked ? 'default' : 'ghost'} size="sm" className="h-10 px-4 gap-2 border-white/10">
+                    {isLocked ? <Lock className="w-4 h-4 text-rose-500"/> : <Lock className="w-4 h-4 text-emerald-500"/>}
+                    <span className="text-[10px] font-bold">{isLocked ? 'TERKUNCI' : 'BUKA'}</span>
                 </Button>
             </h3>
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
@@ -542,7 +565,7 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                                 }
                             }}
                             className="pl-10 glass-panel border-white/10 text-white" 
-                            disabled={!isUnlocked} 
+                            disabled={isLocked} 
                         />
                         {searchTerm && selectedEmpId && (searchTerm.toLowerCase() !== employees.find(e => e.id === selectedEmpId)?.name.toLowerCase()) && (
                             <div 
@@ -557,12 +580,12 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                             </div>
                         )}
                     </div>
-                    {!isUnlocked && <p className="text-rose-400 text-sm">Hutang dikunci! Password diperlukan.</p>}
+                    {isLocked && <p className="text-rose-400 text-sm">Hutang dikunci! Password diperlukan.</p>}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input placeholder="Keterangan" value={newDebtDesc} onChange={e => setNewDebtDesc(e.target.value)} className="glass-panel border-white/10 text-white" disabled={!isUnlocked} />
-                        <Input type="number" placeholder="Total Nominal" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="glass-panel border-white/10 text-white" disabled={!isUnlocked} />
+                        <Input placeholder="Keterangan" value={newDebtDesc} onChange={e => setNewDebtDesc(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isLocked} />
+                        <Input type="number" placeholder="Total Nominal" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isLocked} />
                     </div>
-                     <Button onClick={handleAddDebt} disabled={!isUnlocked} className="w-full bg-primary text-white font-bold"><Plus className="w-4 h-4 mr-2" /> Tambah Hutang</Button>
+                     <Button onClick={handleAddDebt} disabled={isLocked} className="w-full bg-primary text-white font-bold"><Plus className="w-4 h-4 mr-2" /> Tambah Hutang</Button>
                 </CardContent>
             </Card>
 
@@ -591,12 +614,12 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                                 <TableCell className={debt.remainingAmount === 0 ? "text-emerald-400" : "text-amber-400"}>
                                     {debt.remainingAmount === 0 ? "LUNAS" : "BELUM LUNAS"}
                                 </TableCell>
-                               <TableCell>
+                                <TableCell>
                                    <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                                        <Button size="sm" variant="ghost" className="text-emerald-400 shrink-0" onClick={() => handleInstallmentClick(debt)} disabled={!isUnlocked || debt.remainingAmount === 0}>Cicil</Button>
+                                        <Button size="sm" variant="ghost" className="text-emerald-400 shrink-0" onClick={() => handleInstallmentClick(debt)} disabled={isLocked || debt.remainingAmount === 0}>Cicil</Button>
                                         <Button size="sm" variant="ghost" className="text-amber-400 shrink-0" onClick={() => handleViewHistory(debt)}>Riwayat</Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={!isUnlocked} className="shrink-0"><Edit3 className="w-4 h-4" /></Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400 shrink-0" disabled={!isUnlocked}><Trash2 className="w-4 h-4" /></Button>
+                                        <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={isLocked} className="shrink-0"><Edit3 className="w-4 h-4" /></Button>
+                                        <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400 shrink-0" disabled={isLocked}><Trash2 className="w-4 h-4" /></Button>
                                    </div>
                                 </TableCell>
                             </TableRow>

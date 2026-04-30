@@ -241,6 +241,14 @@
       "schema": "PotonganKehilangan",
       "description": "Individual debt records for employees."
     },
+    "/potonganKehilanganConfig/{periodId}": {
+      "schema": "ConfigLock",
+      "description": "Lock configuration for Potongan Kehilangan."
+    },
+    "/potonganKehilanganBersamaConfig/{periodId}": {
+      "schema": "ConfigLock",
+      "description": "Lock configuration for Potongan Kehilangan Bersama."
+    },
     "/bonusNota/{id}": {
       "schema": "BonusNota",
       "description": "Collection of accumulated nota bonuses"

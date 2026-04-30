@@ -65,8 +65,8 @@ import {
   Trash2,
   Edit,
   Eye,
-  Lock,
-  Unlock,
+  Lock as LockIcon,
+  Unlock as UnlockIcon,
   Upload,
   ChevronRight,
   ClipboardList,
@@ -1328,11 +1328,21 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
 
   const autoSaveAssignments = async (assignments: Record<string, any>) => {
     try {
-      await setDoc(doc(db, 'bonusEstafet', selectedPeriod), {
-        periodId: selectedPeriod,
-        dailyAssignments: assignments,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'bonusEstafet', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          dailyAssignments: assignments,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          dailyAssignments: assignments,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `bonusEstafet/${selectedPeriod}`);
     }
@@ -1378,7 +1388,7 @@ function AdminBonusEstafet({ employees, activePeriodId, setActivePeriodId }: { e
       {currentPeriod && (
         <div className="flex justify-end pt-2">
           <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
         </div>
       )}
@@ -1570,11 +1580,21 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
     }
     setSaving(true);
     try {
-      await setDoc(doc(db, 'bonusMasterConfig', selectedPeriod), {
-        periodId: selectedPeriod,
-        dailyHighestReceipt: dailyData,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'bonusMasterConfig', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          dailyHighestReceipt: dailyData,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          dailyHighestReceipt: dailyData,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
       toast.success("Data nota tertinggi berhasil disimpan");
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `bonusMasterConfig/${selectedPeriod}`);
@@ -1715,7 +1735,7 @@ function AdminBonusMaster({ activePeriodId, setActivePeriodId }: { activePeriodI
             {saving ? 'Saving...' : 'Simpan Data'}
           </Button>
           <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-12 px-6 flex items-center gap-2`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
         </div>
       </div>
@@ -1988,7 +2008,7 @@ function AdminBonusJagaDepan({ employees, activePeriodId, setActivePeriodId }: {
       {currentPeriod && (
         <div className="flex justify-end pt-2">
           <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
         </div>
       )}
@@ -2264,11 +2284,21 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
     setEntryAmount('');
     
     try {
-      await setDoc(doc(db, 'bonusLainLain', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: newEntries,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'bonusLainLain', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: newEntries,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: newEntries,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
       toast.success("Entri otomatis disimpan");
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `bonusLainLain/${selectedPeriod}`);
@@ -2283,11 +2313,21 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
     }
     const newEntries = entries.filter(e => e.id !== id);
     try {
-      await setDoc(doc(db, 'bonusLainLain', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: newEntries,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'bonusLainLain', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: newEntries,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: newEntries,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
       toast.success("Entri otomatis dihapus");
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `bonusLainLain/${selectedPeriod}`);
@@ -2323,7 +2363,7 @@ function AdminBonusLainLain({ employees, activePeriodId, setActivePeriodId }: { 
       {currentPeriod && (
         <div className="flex justify-end pt-2">
           <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-12 px-6`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
         </div>
       )}
@@ -2748,11 +2788,21 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
 
   const autoSaveEntries = async (updatedEntries: Record<string, any>) => {
     try {
-      await setDoc(doc(db, 'bonusOperator', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: updatedEntries,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'bonusOperator', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: updatedEntries,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: updatedEntries,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `bonusOperator/${selectedPeriod}`);
     }
@@ -2882,7 +2932,7 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
           </Select>
           {currentPeriod && (
             <Button onClick={toggleLock} disabled={loading} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl gap-2 h-11 px-6`}>
-              {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+              {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
             </Button>
           )}
           <Button 
@@ -2939,7 +2989,7 @@ function AdminBonusOperator({ employees, activePeriodId, setActivePeriodId }: { 
                     onClick={() => isEditingRates ? setIsEditingRates(false) : setShowRateUnlockDialog(true)}
                     className="text-white/60 hover:text-white flex items-center gap-2"
                 >
-                    {isEditingRates ? 'Selesai Edit' : <><Lock className="w-3 h-3" /> Ubah Tarif</>}
+                    {isEditingRates ? 'Selesai Edit' : <><LockIcon className="w-3 h-3" /> Ubah Tarif</>}
                 </Button>
             )}
           </div>
@@ -3432,7 +3482,7 @@ function EmployeeView({
             onClick={() => setShowChangePass(true)} 
             className="glass-panel text-white/60 hover:text-white hover:bg-white/10 rounded-xl flex gap-2 border-white/10 h-10 px-4 flex-1 md:flex-none justify-center"
           >
-            <Lock className="w-4 h-4 shrink-0" /> Password
+            <LockIcon className="w-4 h-4 shrink-0" /> Password
           </Button>
           <Button variant="outline" size="sm" onClick={onLogout} className="glass-panel text-white hover:bg-white/10 rounded-xl flex gap-2 border-white/10 h-10 px-4 flex-1 md:flex-none justify-center">
             <LogOut className="w-4 h-4 shrink-0" /> Keluar
@@ -3849,11 +3899,21 @@ function AdminBonusNota({ employees, activePeriodId, setActivePeriodId }: { empl
 
   const saveEntries = async (updated: Record<string, number>) => {
     try {
-      await setDoc(doc(db, 'bonusNota', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: updated,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'bonusNota', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: updated,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: updated,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `bonusNota/${selectedPeriod}`);
     }
@@ -4017,7 +4077,7 @@ function AdminBonusNota({ employees, activePeriodId, setActivePeriodId }: { empl
             <input type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleImport} disabled={isLocked} />
           </label>
           <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-11 px-6 flex items-center gap-2`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
           <Button onClick={() => setShowClearDialog(true)} variant="ghost" className="h-11 px-6 text-rose-400 hover:bg-rose-500/10 rounded-xl">
             <Trash2 className="w-4 h-4 mr-2" /> Kosongkan
@@ -4210,11 +4270,21 @@ function AdminKoreksiGaji({ employees, activePeriodId, setActivePeriodId }: { em
 
   const saveEntries = async (updated: Record<string, number>) => {
     try {
-      await setDoc(doc(db, 'koreksiGaji', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: updated,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'koreksiGaji', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: updated,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: updated,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `koreksiGaji/${selectedPeriod}`);
     }
@@ -4310,7 +4380,7 @@ function AdminKoreksiGaji({ employees, activePeriodId, setActivePeriodId }: { em
             <Download className="w-4 h-4 mr-2" /> Download
           </Button>
           <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-11 px-6 flex items-center gap-2`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
         </div>
       </div>
@@ -4453,11 +4523,21 @@ function AdminKoreksiGajiMinus({ employees, activePeriodId, setActivePeriodId }:
 
   const saveEntries = async (updated: Record<string, number>) => {
     try {
-      await setDoc(doc(db, 'koreksiGajiMinus', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: updated,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'koreksiGajiMinus', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: updated,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: updated,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `koreksiGajiMinus/${selectedPeriod}`);
     }
@@ -4553,7 +4633,7 @@ function AdminKoreksiGajiMinus({ employees, activePeriodId, setActivePeriodId }:
             <Download className="w-4 h-4 mr-2" /> Download
           </Button>
           <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-11 px-6 flex items-center gap-2`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
         </div>
       </div>
@@ -4697,11 +4777,21 @@ function AdminBonusBerat({ employees, activePeriodId, setActivePeriodId }: { emp
 
   const saveEntries = async (updated: Record<string, number>) => {
     try {
-      await setDoc(doc(db, 'bonusBerat', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: updated,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'bonusBerat', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: updated,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: updated,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `bonusBerat/${selectedPeriod}`);
     }
@@ -4865,7 +4955,7 @@ function AdminBonusBerat({ employees, activePeriodId, setActivePeriodId }: { emp
             <input type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleImport} disabled={isLocked} />
           </label>
           <Button onClick={toggleLock} className={`${isLocked ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white rounded-xl h-11 px-6 flex items-center gap-2`}>
-            {isLocked ? <><Lock className="w-4 h-4" /> Buka Kunci</> : <><Unlock className="w-4 h-4" /> Kunci Periode</>}
+            {isLocked ? <><LockIcon className="w-4 h-4" /> Buka Kunci</> : <><UnlockIcon className="w-4 h-4" /> Kunci Periode</>}
           </Button>
           <Button onClick={() => setShowClearDialog(true)} variant="ghost" className="h-11 px-6 text-rose-400 hover:bg-rose-500/10 rounded-xl">
             <Trash2 className="w-4 h-4 mr-2" /> Kosongkan
@@ -5131,6 +5221,11 @@ function AdminDashboard({
 
   const [activeTab, setActiveTab] = useState(currentUser?.role === 'spv' ? 'live' : 'employees');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ 'Kelola Karyawan': true });
+
+  const toggleGroup = (label: string) => {
+    setExpandedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
 
   const rawMenuGroups = [
     {
@@ -5149,12 +5244,6 @@ function AdminDashboard({
         { value: 'live', label: 'Live Absensi', icon: <ClipboardList className="w-4 h-4" /> },
         { value: 'reports', label: 'Laporan', icon: <Eye className="w-4 h-4" /> },
         { value: 'backup', label: 'Backup Data', icon: <Download className="w-4 h-4" /> },
-      ]
-    },
-    {
-      label: 'Audit & Export',
-      items: [
-        { value: 'audit', label: 'Audit & Export Data', icon: <FileDown className="w-4 h-4 text-emerald-400" /> },
       ]
     },
     {
@@ -5178,6 +5267,12 @@ function AdminDashboard({
         { value: 'potongan-bersama', label: 'Potongan Kehilangan (Restan Bersama)', icon: <DollarSign className="w-4 h-4" /> },
         { value: 'potongan-seragam', label: 'Potongan Seragam', icon: <Shirt className="w-4 h-4" /> },
         { value: 'potongan-koreksi-gaji-minus', label: 'Koreksi Gaji (Pengurangan)', icon: <Zap className="w-4 h-4 text-rose-400" /> },
+      ]
+    },
+    {
+      label: 'Audit & Export',
+      items: [
+        { value: 'audit', label: 'Audit & Export Data', icon: <FileDown className="w-4 h-4 text-emerald-400" /> },
       ]
     },
     {
@@ -5232,27 +5327,41 @@ function AdminDashboard({
               <span className="font-bold text-lg text-foreground">Menu Admin</span>
             </div>
             <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar">
-              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-6 items-stretch p-0">
-                {menuGroups.filter(g => !g.superAdminOnly || currentUser?.role === 'superadmin').map((group) => (
-                  <div key={group.label} className="space-y-2">
-                    <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] px-4 mb-2">{group.label}</h3>
-                    <div className="space-y-1">
-                      {group.items.map((item) => (
-                        <TabsTrigger 
-                          key={item.value}
-                          value={item.value} 
-                          onClick={() => setIsMobileOpen(false)}
-                          className="w-full justify-start gap-4 h-11 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-semibold text-muted-foreground hover:text-foreground hover:bg-accent"
-                        >
-                          <div className={`p-1.5 rounded-lg ${activeTab === item.value ? 'bg-primary/20 text-primary' : 'bg-white/5'}`}>
-                            {item.icon}
-                          </div>
-                          <span className="text-sm">{item.label}</span>
-                        </TabsTrigger>
-                      ))}
+              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 items-stretch p-0">
+                {menuGroups.filter(g => !g.superAdminOnly || currentUser?.role === 'superadmin').map((group) => {
+                  const isExpanded = expandedGroups[group.label];
+                  return (
+                    <div key={group.label} className="space-y-1">
+                      <button 
+                        onClick={() => toggleGroup(group.label)}
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-white/5 transition-colors group"
+                      >
+                        <h3 className="text-[10px] font-black text-white/40 group-hover:text-white/60 uppercase tracking-[0.3em]">{group.label}</h3>
+                        <div className="text-white/20 group-hover:text-white/40 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                          <ChevronRight className="w-3 h-3" />
+                        </div>
+                      </button>
+                      
+                      {isExpanded && (
+                        <div className="space-y-1 ml-2 border-l border-white/5 pl-2 animate-in slide-in-from-top-2 duration-200">
+                          {group.items.map((item) => (
+                            <TabsTrigger 
+                              key={item.value}
+                              value={item.value} 
+                              onClick={() => setIsMobileOpen(false)}
+                              className="w-full justify-start gap-4 h-10 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-semibold text-muted-foreground hover:text-foreground hover:bg-accent"
+                            >
+                              <div className={`p-1.5 rounded-lg ${activeTab === item.value ? 'bg-primary/20 text-primary' : 'bg-white/5'}`}>
+                                {item.icon}
+                              </div>
+                              <span className="text-xs">{item.label}</span>
+                            </TabsTrigger>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </TabsList>
             </nav>
             <div className="mt-auto pt-6 border-t border-white/10">
@@ -5362,7 +5471,11 @@ function AdminDashboard({
                 <AdminBackup employees={employees} />
               </TabsContent>
               <TabsContent value="audit" className="mt-0 outline-none">
-                <AdminAuditDanExport employees={employees} />
+                <AdminAuditDanExport 
+                  employees={employees} 
+                  setActiveTab={setActiveTab} 
+                  setActivePeriodId={setActivePeriodId}
+                />
               </TabsContent>
               <TabsContent value="kata" className="mt-0 outline-none">
                  <AdminKata />
@@ -5446,9 +5559,7 @@ function AdminEmployees({
     name: '', 
     nickname: '',
     pin: '', 
-    shiftId: '', 
     role: 'employee' as const, 
-    leaveQuota: 0,
     division: divisions?.[0]?.name || 'Depan',
     organization: 'Non-Executive' as 'Baru' | 'Non-Executive' | 'Executive',
     password: ''
@@ -5466,9 +5577,7 @@ function AdminEmployees({
     name: '', 
     nickname: '',
     pin: '', 
-    shiftId: '', 
     role: 'employee', 
-    leaveQuota: 4,
     division: divisions?.[0]?.name || 'Depan',
     organization: 'Non-Executive' as 'Baru' | 'Non-Executive' | 'Executive',
     password: ''
@@ -5509,17 +5618,15 @@ function AdminEmployees({
         const data = XLSX.utils.sheet_to_json(ws) as any[];
 
         for (const row of data) {
-          const shift = shifts.find(s => s.name === row["Nama Shift"]) || shifts[0];
           if (!row["Nama Lengkap"] || !row["No Absen"]) continue;
 
           await addDoc(collection(db, 'employees'), {
             name: row["Nama Lengkap"].toString(),
             nickname: (row["Nama Panggilan"] || "").toString(),
             pin: row["No Absen"].toString(),
-            shiftId: shift?.id || "",
             division: row["Divisi"] || 'Depan',
+            organization: row["Organisasi"] || 'Non-Executive',
             role: (currentUser?.role === 'superadmin' && row["Hak Akses"] === 'admin' ? 'admin' : (row["Hak Akses"] === 'spv' || row["Hak Akses"] === 'SPV') ? 'spv' : 'employee'),
-            leaveQuota: parseInt(row["Kuota Libur"]) || 4,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });
@@ -5541,7 +5648,6 @@ function AdminEmployees({
     if (employees.some(e => e.pin === formData.pin)) return alert("No. Absen sudah terdaftar!");
     await addDoc(collection(db, 'employees'), {
       ...formData,
-      shiftId: formData.shiftId || (shifts[0]?.id || ""),
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -5558,8 +5664,7 @@ function AdminEmployees({
       role: "superadmin",
       password: "adnan2301",
       division: "Depan",
-      shiftId: shifts[0]?.id || "",
-      leaveQuota: 12,
+      organization: "Executive",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       isActive: true
@@ -5624,9 +5729,7 @@ function AdminEmployees({
       name: e.name, 
       nickname: e.nickname || '',
       pin: e.pin, 
-      shiftId: e.shiftId, 
       role: e.role, 
-      leaveQuota: e.leaveQuota || 0,
       division: e.division || 'Depan',
       organization: e.organization || ('Non-Executive' as 'Baru' | 'Non-Executive' | 'Executive'),
       password: e.password || ''
@@ -5689,10 +5792,6 @@ function AdminEmployees({
               <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">No. Absen</Label>
                 <Input value={formData.pin} onChange={(e) => setFormData({...formData, pin: e.target.value})} placeholder="Contoh: 1234" className="field-input" />
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-white/70 text-xs">Kuota Libur</Label>
-                <Input type="number" value={formData.leaveQuota} onChange={(e) => setFormData({...formData, leaveQuota: parseInt(e.target.value) || 0})} className="field-input" />
               </div>
               
               <div className="grid gap-2">
@@ -5780,9 +5879,8 @@ function AdminEmployees({
               <TableRow className="border-white/10 hover:bg-transparent">
                 <TableHead className="text-white/40 whitespace-nowrap">Nama</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">Divisi</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Organisasi</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">No. Absen</TableHead>
-                <TableHead className="text-white/40 whitespace-nowrap">Shift</TableHead>
-                <TableHead className="text-white/40 whitespace-nowrap">Kuota</TableHead>
                 <TableHead className="text-right text-white/40 whitespace-nowrap">Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -5794,9 +5892,8 @@ function AdminEmployees({
                     {e.nickname && <div className="text-[10px] text-white/40 font-normal leading-tight">({e.nickname})</div>}
                   </TableCell>
                   <TableCell className="text-white/60 whitespace-nowrap">{e.division || '-'}</TableCell>
+                  <TableCell className="text-white/60 whitespace-nowrap italic text-xs">{e.organization || 'Non-Executive'}</TableCell>
                   <TableCell className="text-muted-foreground font-mono whitespace-nowrap">{e.pin}</TableCell>
-                  <TableCell className="text-white/70 whitespace-nowrap">{shifts.find(s => s.id === e.shiftId)?.name || "N/A"}</TableCell>
-                  <TableCell className="text-white/70 font-mono whitespace-nowrap">{e.leaveQuota || 0} Hari</TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
                     <Button variant="ghost" size="icon" onClick={() => triggerEdit(e)} className="hover:bg-white/10">
                       <Edit className="w-4 h-4 text-primary" />
@@ -6623,7 +6720,7 @@ function AdminJadwalLibur({
                    isEditingSchedule ? 'bg-primary text-white shadow-lg' : 'bg-transparent text-white/40 hover:text-white'
                 }`}
               >
-                {isEditingSchedule ? <Edit className="w-3 h-3 mr-2" /> : <Lock className="w-3 h-3 mr-2" />}
+                {isEditingSchedule ? <Edit className="w-3 h-3 mr-2" /> : <LockIcon className="w-3 h-3 mr-2" />}
                 {isEditingSchedule ? 'SEDANG EDIT' : isFinished ? 'EDIT ULANG' : 'MULAIL EDIT'}
               </Button>
 
@@ -7337,7 +7434,7 @@ function AdminPeriods({
                     'bg-amber-500/20 text-amber-400 border-amber-500/30'
                   }`}>
                     {ctrl.status === 'open' ? <BadgeCheck className="w-5 h-5" /> : 
-                     ctrl.status === 'closed' ? <Lock className="w-5 h-5" /> : 
+                     ctrl.status === 'closed' ? <LockIcon className="w-5 h-5" /> : 
                      <Clock className="w-5 h-5" />}
                   </div>
                   <div>
@@ -7542,7 +7639,7 @@ function AdminPeriods({
                     className={`font-semibold ${ctrl.isPermanentlyClosed ? 'bg-rose-900 hover:bg-rose-800 text-white shadow-[0_0_10px_rgba(225,29,72,0.5)]' : 'bg-rose-950/40 text-rose-300 hover:bg-rose-900/60 border border-rose-900/50'}`}
                     onClick={() => togglePermanentClose(p.value, !!ctrl.isPermanentlyClosed)}
                   >
-                    <Lock className="w-3 h-3 mr-1" />
+                    <LockIcon className="w-3 h-3 mr-1" />
                     {ctrl.isPermanentlyClosed ? 'Buka Permanen' : 'Tutup Permanen'}
                   </Button>
 

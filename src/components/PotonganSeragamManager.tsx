@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -96,11 +96,21 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
 
   const saveEntries = async (updated: Record<string, { amount: number, description: string }>) => {
     try {
-      await setDoc(doc(db, 'potonganSeragam', selectedPeriod), {
-        periodId: selectedPeriod,
-        entries: updated,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const docRef = doc(db, 'potonganSeragam', selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          entries: updated,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          periodId: selectedPeriod,
+          entries: updated,
+          isLocked: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `potonganSeragam/${selectedPeriod}`);
     }

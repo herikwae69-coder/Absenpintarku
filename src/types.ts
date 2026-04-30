@@ -17,9 +17,7 @@ export interface Employee {
   password?: string;
   role: 'admin' | 'employee' | 'superadmin' | 'spv';
   isActive?: boolean;
-  shiftId: string;
   division: string;
-  leaveQuota: number;
   organization?: 'Baru' | 'Non-Executive' | 'Executive';
   createdAt: any;
   updatedAt: any;
