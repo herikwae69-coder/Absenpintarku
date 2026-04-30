@@ -83,9 +83,14 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
       });
       return unsub;
     }
+  }, [isEmployee, currentEmployeeId]);
+
   useEffect(() => {
     let componentMounted = true;
-    if (isEmployee) return; // Don't run admin query if in employee mode
+    if (isEmployee) {
+      setLoading(false);
+      return;
+    }
     if (!selectedPeriod) {
         setLoading(false);
         return;

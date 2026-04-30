@@ -3502,13 +3502,7 @@ function EmployeeView({
             <Zap className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Bonus</span>
           </TabsTrigger>
           <TabsTrigger value="ristan" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
-            <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan 100%</span>
-          </TabsTrigger>
-          <TabsTrigger value="ristan-bersama" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-rose-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
-            <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan Bersama</span>
-          </TabsTrigger>
-          <TabsTrigger value="seragam" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-fuchsia-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
-            <Shirt className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Seragam</span>
+            <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan</span>
           </TabsTrigger>
           <TabsTrigger value="riwayat" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <History className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Riwayat</span>
@@ -3829,13 +3823,22 @@ function EmployeeView({
         </TabsContent>
 
         <TabsContent value="ristan" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-          <PotonganKehilanganManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
-        </TabsContent>
-        <TabsContent value="ristan-bersama" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-          <PotonganKehilanganBersamaManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
-        </TabsContent>
-        <TabsContent value="seragam" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-          <PotonganSeragamManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
+          <Tabs defaultValue="ristan-100" className="w-full">
+            <TabsList className="grid grid-cols-3 w-full glass-panel p-1 bg-white/5 border-white/5 mb-6 rounded-xl">
+              <TabsTrigger value="ristan-100" className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-xs font-bold py-2">Ristan 100%</TabsTrigger>
+              <TabsTrigger value="ristan-bersama" className="rounded-lg data-[state=active]:bg-rose-500 data-[state=active]:text-white text-xs font-bold py-2">Bersama</TabsTrigger>
+              <TabsTrigger value="seragam" className="rounded-lg data-[state=active]:bg-fuchsia-600 data-[state=active]:text-white text-xs font-bold py-2">Seragam</TabsTrigger>
+            </TabsList>
+            <TabsContent value="ristan-100">
+              <PotonganKehilanganManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
+            </TabsContent>
+            <TabsContent value="ristan-bersama">
+              <PotonganKehilanganBersamaManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
+            </TabsContent>
+            <TabsContent value="seragam">
+              <PotonganSeragamManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
     </div>
