@@ -335,6 +335,62 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
       }
   };
 
+  const handleEditPayment = async (payment: any) => {
+      const pass = prompt("Masukkan password untuk edit cicilan:");
+      if (pass !== 'admin123') { toast.error("Password salah"); return; }
+      
+      const newAmountStr = prompt(`Besaran cicilan lama: ${payment.amount}\nMasukkan besaran cicilan baru:`, payment.amount.toString());
+      if (newAmountStr === null) return;
+      const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
+      
+      if (newAmount < 0) {
+          toast.error("Nominal tidak valid");
+          return;
+      }
+  
+      if (!historyDebt) return;
+  
+      let newRemissionAmount = payment.remissionAmount || 0;
+      if (payment.remissionAmount > 0) {
+           const newRemStr = prompt(`Besaran remisi lama: ${payment.remissionAmount}\nMasukkan besaran remisi baru:`, payment.remissionAmount.toString());
+           if (newRemStr !== null) {
+                const parsedRem = parseInt(newRemStr.replace(/\D/g, '')) || 0;
+                if (parsedRem >= 0) {
+                     newRemissionAmount = parsedRem;
+                }
+           }
+      }
+  
+      const differenceAmount = newAmount - payment.amount;
+      const differenceRemission = newRemissionAmount - (payment.remissionAmount || 0);
+      const totalDifference = differenceAmount + differenceRemission;
+      
+      const newRemaining = historyDebt.remainingAmount - totalDifference;
+  
+      if (newRemaining < 0) {
+          toast.error("Total potongan melebihi sisa hutang");
+          return;
+      }
+  
+      try {
+          await setDoc(doc(db, 'potonganKehilanganBersama', historyDebt.empId, 'debtsBersama', historyDebt.id, 'paymentsBersama', payment.id), { amount: newAmount, remissionAmount: newRemissionAmount }, { merge: true });
+          
+          const updateData: any = { remainingAmount: newRemaining };
+          if (newRemaining === 0) {
+              updateData.paidOffPeriodId = payment.periodId; 
+          } else if (historyDebt.remainingAmount === 0 && newRemaining > 0) {
+               updateData.paidOffPeriodId = null; 
+          }
+          await setDoc(doc(db, 'potonganKehilanganBersama', historyDebt.empId, 'debtsBersama', historyDebt.id), updateData, { merge: true });
+          
+          setHistoryDebt({...historyDebt, remainingAmount: newRemaining});
+          setPayments(payments.map(p => p.id === payment.id ? {...p, amount: newAmount, remissionAmount: newRemissionAmount} : p));
+          toast.success("Cicilan berhasil diubah");
+      } catch (e) {
+          handleFirestoreError(e, OperationType.UPDATE, 'potonganKehilanganBersama/' + historyDebt.empId + '/debtsBersama/' + historyDebt.id + '/paymentsBersama');
+      }
+  };
+
   const handleExportCurrentPeriod = async () => {
       try {
           const q = query(collectionGroup(db, 'paymentsBersama'));
@@ -637,7 +693,7 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                                     <TableHead className="text-white/40">Periode</TableHead>
                                     <TableHead className="text-white/40">Cicilan</TableHead>
                                     <TableHead className="text-white/40">Remisi</TableHead>
-                                    <TableHead className="text-white/40 italic">ID Periode</TableHead>
+                                    <TableHead className="text-white/40">Aksi</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -654,8 +710,8 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                                                 {p.remissionAmount > 0 ? new Intl.NumberFormat('id-ID').format(p.remissionAmount) : '-'}
                                                 {p.remissionPercentage > 0 && <span className="ml-1 text-xs text-white/30">({p.remissionPercentage}%)</span>}
                                             </TableCell>
-                                            <TableCell className="text-white/20 text-xs">
-                                                {p.periodId}
+                                            <TableCell>
+                                                <Button size="sm" variant="ghost" onClick={() => handleEditPayment(p)} className="text-amber-400 shrink-0"><Edit3 className="w-4 h-4" /> Ubah</Button>
                                             </TableCell>
                                         </TableRow>
                                     ))

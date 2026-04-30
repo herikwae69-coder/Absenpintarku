@@ -309,6 +309,48 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
       }
   };
 
+  const handleEditPayment = async (payment: any) => {
+      const pass = prompt("Masukkan password untuk edit cicilan:");
+      if (pass !== 'admin123') { toast.error("Password salah"); return; }
+      
+      const newAmountStr = prompt("Masukkan besaran cicilan baru:", payment.amount.toString());
+      if (newAmountStr === null) return;
+      const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
+      
+      if (newAmount < 0) {
+          toast.error("Nominal tidak valid");
+          return;
+      }
+  
+      if (!historyDebt) return;
+  
+      const difference = newAmount - payment.amount;
+      const newRemaining = historyDebt.remainingAmount - difference;
+  
+      if (newRemaining < 0) {
+          toast.error("Total cicilan melebihi pokok hutang");
+          return;
+      }
+  
+      try {
+          await setDoc(doc(db, 'potonganKehilangan', historyDebt.empId, 'debts', historyDebt.id, 'payments', payment.id), { amount: newAmount }, { merge: true });
+          
+          const updateData: any = { remainingAmount: newRemaining };
+          if (newRemaining === 0) {
+              updateData.paidOffPeriodId = payment.periodId;
+          } else if (historyDebt.remainingAmount === 0 && newRemaining > 0) {
+               updateData.paidOffPeriodId = null; 
+          }
+          await setDoc(doc(db, 'potonganKehilangan', historyDebt.empId, 'debts', historyDebt.id), updateData, { merge: true });
+          
+          setHistoryDebt({...historyDebt, remainingAmount: newRemaining});
+          setPayments(payments.map(p => p.id === payment.id ? {...p, amount: newAmount} : p));
+          toast.success("Cicilan berhasil diubah");
+      } catch (e) {
+          handleFirestoreError(e, OperationType.UPDATE, 'potonganKehilangan/' + historyDebt.empId + '/debts/' + historyDebt.id + '/payments');
+      }
+  };
+
   const handleExportCurrentPeriod = async () => {
       try {
           const q = query(collectionGroup(db, 'payments'));
@@ -581,7 +623,7 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                                 <TableRow className="border-white/10 hover:bg-transparent">
                                     <TableHead className="text-white/40">Periode</TableHead>
                                     <TableHead className="text-white/40">Jumlah</TableHead>
-                                    <TableHead className="text-white/40 italic">ID Periode</TableHead>
+                                    <TableHead className="text-white/40">Aksi</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -594,8 +636,8 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                                             <TableCell className="text-emerald-400 font-bold">
                                                 {new Intl.NumberFormat('id-ID').format(p.amount)}
                                             </TableCell>
-                                            <TableCell className="text-white/20 text-xs">
-                                                {p.periodId}
+                                            <TableCell>
+                                                <Button size="sm" variant="ghost" onClick={() => handleEditPayment(p)} className="text-amber-400 shrink-0"><Edit3 className="w-4 h-4" /> Ubah</Button>
                                             </TableCell>
                                         </TableRow>
                                     ))
