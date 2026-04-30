@@ -10,6 +10,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Lock, Plus, Search, Trash2, Edit3, Download, Check, Shirt } from 'lucide-react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Employee } from '../types';
 import * as XLSX from 'xlsx';
 
@@ -17,10 +18,13 @@ interface Props {
   employees: Employee[];
   activePeriodId?: string;
   setActivePeriodId?: (id: string) => void;
+  isEmployee?: boolean;
+  currentEmployeeId?: string;
 }
 
-export function PotonganSeragamManager({ employees, activePeriodId, setActivePeriodId }: Props) {
+export function PotonganSeragamManager({ employees, activePeriodId, setActivePeriodId, isEmployee = false, currentEmployeeId }: Props) {
   const [controls, setControls] = useState<Record<string, any>>({});
+  const [allPeriodData, setAllPeriodData] = useState<any[]>([]);
   
   useEffect(() => {
      const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
@@ -62,7 +66,26 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
   const [password, setPassword] = useState('');
 
   useEffect(() => {
+    if (isEmployee && currentEmployeeId) {
+      const unsub = onSnapshot(collection(db, 'potonganSeragam'), (snap) => {
+        const history: any[] = [];
+        snap.docs.forEach(d => {
+          const data = d.data();
+          if (data.entries && data.entries[currentEmployeeId]) {
+            history.push({
+              periodId: d.id,
+              ...data.entries[currentEmployeeId]
+            });
+          }
+        });
+        setAllPeriodData(history);
+        setLoading(false);
+      });
+      return unsub;
+    }
+  useEffect(() => {
     let componentMounted = true;
+    if (isEmployee) return; // Don't run admin query if in employee mode
     if (!selectedPeriod) {
         setLoading(false);
         return;
@@ -236,6 +259,54 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
 
   return (
     <div className="space-y-6">
+      {isEmployee ? (
+        <div className="space-y-4">
+           <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
+                <div>
+                    <h3 className="text-white font-bold">Total Potongan Seragam</h3>
+                    <p className="text-white/40 text-xs">Total biaya seragam yang pernah diambil</p>
+                </div>
+                <div className="text-right">
+                    <p className="text-2xl font-black text-fuchsia-400">
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(allPeriodData.reduce((sum, d) => sum + d.amount, 0))}
+                    </p>
+                </div>
+            </div>
+
+            <Card className="glass-panel border-none bg-black/40 overflow-hidden">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="border-white/5 bg-white/5">
+                            <TableHead className="text-white/40">Periode</TableHead>
+                            <TableHead className="text-white/40">Item</TableHead>
+                            <TableHead className="text-white/40 text-right">Potongan</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {allPeriodData.map((item, idx) => (
+                            <TableRow key={idx} className="border-white/5">
+                                <TableCell className="text-white/60">
+                                    {periodOptions.find(p => p.value === item.periodId)?.label || item.periodId}
+                                </TableCell>
+                                <TableCell className="text-white font-medium">{item.description}</TableCell>
+                                <TableCell className="text-right text-fuchsia-400 font-bold">
+                                    {new Intl.NumberFormat('id-ID').format(item.amount)}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {allPeriodData.length === 0 && (
+                            <TableRow>
+                                <TableCell colSpan={3} className="text-center py-20 text-white/20 italic">
+                                    Belum ada data potongan seragam.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </Card>
+        </div>
+      ) : (
+      <>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
@@ -430,6 +501,8 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }

@@ -3507,6 +3507,9 @@ function EmployeeView({
           <TabsTrigger value="ristan-bersama" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-rose-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan Bersama</span>
           </TabsTrigger>
+          <TabsTrigger value="seragam" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-fuchsia-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
+            <Shirt className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Seragam</span>
+          </TabsTrigger>
           <TabsTrigger value="riwayat" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <History className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Riwayat</span>
           </TabsTrigger>
@@ -3826,10 +3829,13 @@ function EmployeeView({
         </TabsContent>
 
         <TabsContent value="ristan" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-          <PotonganKehilanganManager employees={employees} />
+          <PotonganKehilanganManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
         </TabsContent>
         <TabsContent value="ristan-bersama" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
-          <PotonganKehilanganBersamaManager employees={employees} />
+          <PotonganKehilanganBersamaManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
+        </TabsContent>
+        <TabsContent value="seragam" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+          <PotonganSeragamManager employees={employees} isEmployee={true} currentEmployeeId={employee.id} />
         </TabsContent>
       </Tabs>
     </div>

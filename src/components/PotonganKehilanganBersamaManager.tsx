@@ -13,8 +13,15 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Lock, Plus, Search, Trash2, Edit3, Download, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Employee, PeriodControl } from '../types';
 import { auth } from '../lib/firebase';
+
+const toDateSafe = (val: any) => {
+    if (!val) return new Date();
+    if (val.toDate) return val.toDate();
+    return new Date(val);
+};
 
 enum OperationType {
   CREATE = 'create',
@@ -124,7 +131,7 @@ const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
     .sort((a,b) => b.start.getTime() - a.start.getTime());
 };
 
-export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: { employees: Employee[], activePeriodId?: string }) {
+export function PotonganKehilanganBersamaManager({ employees, activePeriodId, isEmployee = false, currentEmployeeId }: { employees: Employee[], activePeriodId?: string, isEmployee?: boolean, currentEmployeeId?: string }) {
   const employeesRef = useRef(employees);
   useEffect(() => { employeesRef.current = employees; }, [employees]);
   const [password, setPassword] = useState('');
@@ -136,7 +143,7 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
   const [newDebtAmount, setNewDebtAmount] = useState('');
   const [selectedEmpId, setSelectedEmpId] = React.useState('');
   const [isLocked, setIsLocked] = React.useState(false);
-  const [showAllDebts, setShowAllDebts] = React.useState(false);
+  const [showAllDebts, setShowAllDebts] = React.useState(isEmployee);
   const [historyDebt, setHistoryDebt] = React.useState<Debt | null>(null);
   const [installmentDebt, setInstallmentDebt] = useState<Debt | null>(null);
   const [isRemission, setIsRemission] = useState(false);
@@ -208,11 +215,16 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
   }, []);
 
   useEffect(() => {
-    const q = query(collectionGroup(db, 'debtsBersama'), orderBy('createdAt', 'desc'));
+    let q;
+    if (isEmployee && currentEmployeeId) {
+       q = query(collection(db, 'potonganKehilanganBersama', currentEmployeeId, 'debtsBersama'), orderBy('createdAt', 'desc'));
+    } else {
+       q = query(collectionGroup(db, 'debtsBersama'), orderBy('createdAt', 'desc'));
+    }
     const unsub = onSnapshot(q, (snapshot) => {
       const debtData: Debt[] = snapshot.docs.map(doc => ({
         id: doc.id,
-        empId: doc.ref.parent.parent?.id || '',
+        empId: isEmployee ? (currentEmployeeId || '') : (doc.ref.parent.parent?.id || ''),
         ...doc.data()
       } as Debt));
       const debtsWithInfo = debtData.map(d => {
@@ -222,7 +234,7 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
       setDebts(debtsWithInfo);
     });
     return unsub;
-  }, []);
+  }, [isEmployee, currentEmployeeId]);
 
   const filteredDebts = useMemo(() => {
       const selectedIndex = periodOptions.findIndex(p => p.value === selectedPeriodId);
@@ -498,6 +510,64 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
   
   return (
     <div className="space-y-6">
+      {isEmployee ? (
+          <div className="space-y-4">
+              <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
+                  <div>
+                      <h3 className="text-white font-bold">Total Ristan Bersama Anda</h3>
+                      <p className="text-white/40 text-xs">Akumulasi sisa hutang bersama</p>
+                  </div>
+                  <div className="text-right">
+                      <p className="text-2xl font-black text-rose-400">
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(debts.reduce((sum, d) => sum + d.remainingAmount, 0))}
+                      </p>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                  {debts.map(debt => (
+                      <Card key={debt.id} className="glass-panel border-none bg-black/40 overflow-hidden">
+                          <CardContent className="p-0">
+                              <div className="p-4 flex justify-between items-start border-b border-white/5">
+                                  <div>
+                                      <p className="text-white font-bold">{debt.description}</p>
+                                      <p className="text-white/40 text-[10px]">Tgl: {debt.createdAt ? format(toDateSafe(debt.createdAt), 'dd MMM yyyy') : '-'}</p>
+                                  </div>
+                                  <Badge className={debt.remainingAmount === 0 ? "bg-emerald-500/20 text-emerald-400 border-none" : "bg-amber-500/20 text-amber-400 border-none"}>
+                                      {debt.remainingAmount === 0 ? "LUNAS" : "AKTIF"}
+                                  </Badge>
+                              </div>
+                              <div className="p-4 grid grid-cols-2 gap-4 bg-white/5">
+                                  <div>
+                                      <p className="text-[10px] text-white/40 uppercase font-black">Pokok</p>
+                                      <p className="text-white font-mono">{new Intl.NumberFormat('id-ID').format(debt.totalAmount)}</p>
+                                  </div>
+                                  <div className="text-right">
+                                      <p className="text-[10px] text-white/40 uppercase font-black">Sisa</p>
+                                      <p className="text-rose-400 font-bold font-mono">{new Intl.NumberFormat('id-ID').format(debt.remainingAmount)}</p>
+                                  </div>
+                              </div>
+                              <div className="p-2 bg-black/20">
+                                  <Button 
+                                      variant="ghost" 
+                                      className="w-full text-xs text-white/60 hover:text-white"
+                                      onClick={() => handleViewHistory(debt)}
+                                  >
+                                      Lihat Riwayat Pembayaran & Remisi
+                                  </Button>
+                              </div>
+                          </CardContent>
+                      </Card>
+                  ))}
+                  {debts.length === 0 && (
+                      <div className="py-20 text-center text-white/20 italic">
+                          Belum ada data ristan bersama tercatat.
+                      </div>
+                  )}
+              </div>
+          </div>
+      ) : (
+      <>
       <Card className="glass-panel border-none bg-black/40 p-4 md:p-6">
         <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 mb-4">
             <h3 className="text-sm font-bold text-white uppercase tracking-tight flex items-center gap-2">
@@ -681,24 +751,26 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
             </Dialog>
 
             {historyDebt && (
-                <Card className="fixed inset-0 m-auto w-[90%] md:w-2/3 h-4/5 glass-panel border bg-black/90 z-50 p-6 overflow-hidden flex flex-col">
+                <Card className={`fixed inset-0 m-auto w-[95%] md:w-2/3 ${isEmployee ? 'h-[90%]' : 'h-4/5'} glass-panel border bg-black/95 z-[100] p-4 md:p-6 shadow-2xl overflow-hidden flex flex-col`}>
                     <div className="flex justify-between items-center mb-4 shrink-0">
                         <div>
-                            <h3 className="text-lg font-bold text-white">Riwayat Cicilan: {historyDebt.description}</h3>
-                            <p className="text-white/60 text-sm">{historyDebt.empName} ({historyDebt.empPin})</p>
+                            <h3 className="text-lg font-bold text-white">Riwayat: {historyDebt.description}</h3>
+                            {!isEmployee && <p className="text-white/60 text-sm">{historyDebt.empName} ({historyDebt.empPin})</p>}
                         </div>
-                        <Button onClick={() => setHistoryDebt(null)} className="bg-rose-600">Tutup</Button>
+                        <Button onClick={() => setHistoryDebt(null)} variant="outline" className="text-white border-white/20">Tutup</Button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6 shrink-0">
+                    <div className={`grid grid-cols-1 ${isEmployee ? 'sm:grid-cols-3' : 'sm:grid-cols-4'} gap-4 mb-6 shrink-0`}>
                         <div className="p-4 glass-panel border border-white/5 bg-white/5 rounded-xl">
                             <span className="text-white/40 text-xs block mb-1">Pokok Hutang</span>
                             <span className="text-white font-bold">{new Intl.NumberFormat('id-ID').format(historyDebt.totalAmount)}</span>
                         </div>
-                        <div className="p-4 glass-panel border border-emerald-500/20 bg-emerald-500/5 rounded-xl">
-                            <span className="text-emerald-400/40 text-xs block mb-1">Total Cicilan</span>
-                            <span className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(payments.reduce((sum, p) => sum + p.amount, 0))}</span>
-                        </div>
+                        {!isEmployee && (
+                          <div className="p-4 glass-panel border border-emerald-500/20 bg-emerald-500/5 rounded-xl">
+                              <span className="text-emerald-400/40 text-xs block mb-1">Total Cicilan</span>
+                              <span className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(payments.reduce((sum, p) => sum + p.amount, 0))}</span>
+                          </div>
+                        )}
                         <div className="p-4 glass-panel border border-orange-500/20 bg-orange-500/5 rounded-xl">
                             <span className="text-orange-400/40 text-xs block mb-1">Total Remisi</span>
                             <span className="text-orange-400 font-bold">{new Intl.NumberFormat('id-ID').format(payments.reduce((sum, p) => sum + (p.remissionAmount || 0), 0))}</span>
@@ -709,14 +781,14 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                         </div>
                     </div>
 
-                    <div className="overflow-y-auto flex-grow">
+                    <div className="overflow-y-auto flex-grow no-scrollbar">
                         <Table>
                             <TableHeader>
                                 <TableRow className="border-white/10 hover:bg-transparent">
                                     <TableHead className="text-white/40">Periode</TableHead>
                                     <TableHead className="text-white/40">Cicilan</TableHead>
                                     <TableHead className="text-white/40">Remisi</TableHead>
-                                    <TableHead className="text-white/40">Aksi</TableHead>
+                                    {!isEmployee && <TableHead className="text-white/40">Aksi</TableHead>}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -733,14 +805,16 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                                                 {p.remissionAmount > 0 ? new Intl.NumberFormat('id-ID').format(p.remissionAmount) : '-'}
                                                 {p.remissionPercentage > 0 && <span className="ml-1 text-xs text-white/30">({p.remissionPercentage}%)</span>}
                                             </TableCell>
-                                            <TableCell>
-                                                <Button size="sm" variant="ghost" onClick={() => handleEditPayment(p)} className="text-amber-400 shrink-0"><Edit3 className="w-4 h-4" /> Ubah</Button>
-                                            </TableCell>
+                                            {!isEmployee && (
+                                              <TableCell>
+                                                  <Button size="sm" variant="ghost" onClick={() => handleEditPayment(p)} className="text-amber-400 shrink-0"><Edit3 className="w-4 h-4" /> Ubah</Button>
+                                              </TableCell>
+                                            )}
                                         </TableRow>
                                     ))
                                 ) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-8 text-white/40 italic">
+                                        <TableCell colSpan={isEmployee ? 3 : 4} className="text-center py-8 text-white/40 italic">
                                             Belum ada cicilan tercatat.
                                         </TableCell>
                                     </TableRow>
@@ -751,6 +825,8 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId }: 
                 </Card>
             )}
           </>
+      )}
+      </>
       )}
     </div>
   );
