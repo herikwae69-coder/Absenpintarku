@@ -133,9 +133,10 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
   const [debts, setDebts] = useState<Debt[]>([]);
   const [newDebtDesc, setNewDebtDesc] = useState('');
   const [newDebtAmount, setNewDebtAmount] = useState('');
-  const [selectedEmpId, setSelectedEmpId] = useState('');
-  const [isUnlocked, setIsUnlocked] = useState(true);
-  const [historyDebt, setHistoryDebt] = useState<Debt | null>(null);
+  const [selectedEmpId, setSelectedEmpId] = React.useState('');
+  const [isUnlocked, setIsUnlocked] = React.useState(true);
+  const [showAllDebts, setShowAllDebts] = React.useState(false);
+  const [historyDebt, setHistoryDebt] = React.useState<Debt | null>(null);
   const [installmentDebt, setInstallmentDebt] = useState<Debt | null>(null);
   const [installmentAmount, setInstallmentAmount] = useState('');
   const [payments, setPayments] = useState<any[]>([]);
@@ -204,18 +205,22 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
           const matchesSearch = d.empName.toLowerCase().includes(searchTerm.toLowerCase()) || d.empPin.includes(searchTerm);
           if (!matchesSearch) return false;
           
-          if (d.remainingAmount === 0) {
+          if (!showAllDebts && d.remainingAmount === 0) {
               if (d.paidOffPeriodId) {
                   const paidIndex = periodOptions.findIndex(p => p.value === d.paidOffPeriodId);
                   if (paidIndex !== -1 && selectedIndex !== -1) {
-                      return selectedIndex >= paidIndex;
+                      // Hide if the selected period is AFTER the paid off period
+                      // Newest periods are at the beginning of the array (index 0)
+                      // So index 2 is OLDER than index 1.
+                      // If paidIndex is 5, and selectedIndex is 4, it means selected is NEWER.
+                      return selectedIndex >= paidIndex; 
                   }
               }
-              return false; // Hide legacy LUNAS or if not matching period logic
+              return false;
           }
           return true;
       });
-  }, [debts, searchTerm, periodOptions, selectedPeriodId]);
+  }, [debts, searchTerm, periodOptions, selectedPeriodId, showAllDebts]);
 
   const handleAddDebt = async () => {
     if (!selectedEmpId || !newDebtDesc || !newDebtAmount) {
@@ -307,7 +312,7 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
           const q = query(collectionGroup(db, 'payments'));
           const snapshot = await getDocs(q);
           const paymentsInPeriod = snapshot.docs
-              .map(d => ({ ...d.data(), parentDebtId: d.ref.parent.parent?.id }))
+              .map(d => ({ ...d.data() as any, parentDebtId: d.ref.parent.parent?.id }))
               .filter(p => p.periodId === selectedPeriodId && p.amount > 0);
           
           const exportData: any[] = [];
@@ -333,24 +338,56 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
           saveAs(dataBlob, `Potongan_${periodOptions.find(p => p.value === selectedPeriodId)?.label || selectedPeriodId}.xlsx`);
       } catch (error) {
           console.error(error);
-          toast.error("Gagal export data");
+          handleFirestoreError(error, OperationType.LIST, 'collectionGroup/payments');
       }
   };
 
   const handleExportAllPeriods = async () => {
-      const data = debts.map(d => ({
-          'Nama': d.empName,
-          'No Absen': d.empPin,
-          'Keterangan': d.description,
-          'Saldo Awal': d.totalAmount,
-          'Sisa': d.remainingAmount,
-          'Status': d.remainingAmount === 0 ? "LUNAS" : "BELUM LUNAS"
-      }));
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = { Sheets: { 'data': worksheet }, SheetNames: ['data'] };
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(dataBlob, 'Riwayat_Potongan_Semua_Periode.xlsx');
+    try {
+        const q = query(collectionGroup(db, 'payments'), orderBy('createdAt', 'asc'));
+        const snapshot = await getDocs(q);
+        const allPayments = snapshot.docs.map(d => ({ 
+            ...d.data() as any, 
+            parentDebtId: d.ref.parent.parent?.id 
+        }));
+
+        // Get unique periods that have payments
+        const activePeriods = [...new Set(allPayments.map(p => p.periodId))];
+        const sortedActivePeriods = periodOptions
+            .filter(p => activePeriods.includes(p.value))
+            .sort((a, b) => a.start.getTime() - b.start.getTime()); // Oldest to newest for columns
+
+        const data = debts.map(d => {
+            const row: any = {
+                'Nama': d.empName,
+                'No Absen': d.empPin,
+                'Keterangan': d.description,
+                'Pokok Hutang': d.totalAmount,
+            };
+
+            let totalPaid = 0;
+            sortedActivePeriods.forEach(p => {
+                const pPayments = allPayments.filter(pay => pay.parentDebtId === d.id && pay.periodId === p.value);
+                const pAmount = pPayments.reduce((sum, pay) => sum + pay.amount, 0);
+                row[p.label] = pAmount || 0;
+                totalPaid += pAmount;
+            });
+
+            row['Total Cicilan'] = totalPaid;
+            row['Sisa'] = d.remainingAmount;
+            row['Status'] = d.remainingAmount === 0 ? "LUNAS" : "BELUM LUNAS";
+            return row;
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = { Sheets: { 'Data': worksheet }, SheetNames: ['Data'] };
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        saveAs(dataBlob, 'Laporan_Hutang_Lengkap.xlsx');
+    } catch (e) {
+        console.error(e);
+        toast.error("Gagal export riwayat lengkap");
+    }
   };
   
   return (
@@ -363,9 +400,17 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
                     {isUnlocked ? <Lock className="w-4 h-4 text-emerald-500"/> : <Lock className="w-4 h-4 text-rose-500"/>}
                 </Button>
             </h3>
-            <div className="flex flex-col gap-2 w-full md:w-auto">
-                <Button onClick={handleExportCurrentPeriod} variant="outline" size="sm" className="gap-2 w-full"><Download className="w-4 h-4"/> Export Periode</Button>
-                <Button onClick={handleExportAllPeriods} variant="outline" size="sm" className="gap-2 w-full"><Download className="w-4 h-4"/> Export Semua</Button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                <Button 
+                    onClick={() => setShowAllDebts(!showAllDebts)} 
+                    variant={showAllDebts ? "default" : "outline"} 
+                    size="sm" 
+                    className="gap-2"
+                >
+                    {showAllDebts ? "Sembunyikan Lunas" : "Lihat Semua (Lunas)"}
+                </Button>
+                <Button onClick={handleExportCurrentPeriod} variant="outline" size="sm" className="gap-2 w-full sm:w-auto"><Download className="w-4 h-4"/> Export Periode</Button>
+                <Button onClick={handleExportAllPeriods} variant="outline" size="sm" className="gap-2 w-full sm:w-auto"><Download className="w-4 h-4"/> Export Semua</Button>
             </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
@@ -504,24 +549,64 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
             </Dialog>
 
             {historyDebt && (
-                <Card className="fixed inset-0 m-auto w-1/2 h-2/3 glass-panel border bg-black/90 z-50 p-6 overflow-y-auto">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold text-white">Riwayat Cicilan: {historyDebt.description}</h3>
+                <Card className="fixed inset-0 m-auto w-[90%] md:w-2/3 h-4/5 glass-panel border bg-black/90 z-50 p-6 overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center mb-4 shrink-0">
+                        <div>
+                            <h3 className="text-lg font-bold text-white">Riwayat Cicilan: {historyDebt.description}</h3>
+                            <p className="text-white/60 text-sm">{historyDebt.empName} ({historyDebt.empPin})</p>
+                        </div>
                         <Button onClick={() => setHistoryDebt(null)} className="bg-rose-600">Tutup</Button>
                     </div>
-                    <Table>
-                        <TableHeader>
-                            <TableRow><TableHead className="text-white/40">Periode</TableHead><TableHead className="text-white/40">Jumlah</TableHead></TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {payments.map((p: any) => (
-                                <TableRow key={p.id}>
-                                    <TableCell className="text-white">{p.periodId}</TableCell>
-                                    <TableCell className="text-emerald-400">{new Intl.NumberFormat('id-ID').format(p.amount)}</TableCell>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 shrink-0">
+                        <div className="p-4 glass-panel border border-white/5 bg-white/5 rounded-xl">
+                            <span className="text-white/40 text-xs block mb-1">Pokok Hutang</span>
+                            <span className="text-white font-bold">{new Intl.NumberFormat('id-ID').format(historyDebt.totalAmount)}</span>
+                        </div>
+                        <div className="p-4 glass-panel border border-emerald-500/20 bg-emerald-500/5 rounded-xl">
+                            <span className="text-emerald-400/40 text-xs block mb-1">Total Cicilan</span>
+                            <span className="text-emerald-400 font-bold">{new Intl.NumberFormat('id-ID').format(payments.reduce((sum, p) => sum + p.amount, 0))}</span>
+                        </div>
+                        <div className="p-4 glass-panel border border-rose-500/20 bg-rose-500/5 rounded-xl">
+                            <span className="text-rose-400/40 text-xs block mb-1">Sisa Hutang</span>
+                            <span className="text-rose-400 font-bold">{new Intl.NumberFormat('id-ID').format(historyDebt.remainingAmount)}</span>
+                        </div>
+                    </div>
+
+                    <div className="overflow-y-auto flex-grow">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="border-white/10 hover:bg-transparent">
+                                    <TableHead className="text-white/40">Periode</TableHead>
+                                    <TableHead className="text-white/40">Jumlah</TableHead>
+                                    <TableHead className="text-white/40 italic">ID Periode</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {payments.length > 0 ? (
+                                    payments.map((p: any) => (
+                                        <TableRow key={p.id} className="border-white/5">
+                                            <TableCell className="text-white font-medium">
+                                                {periodOptions.find(opt => opt.value === p.periodId)?.label || "Periode Manual"}
+                                            </TableCell>
+                                            <TableCell className="text-emerald-400 font-bold">
+                                                {new Intl.NumberFormat('id-ID').format(p.amount)}
+                                            </TableCell>
+                                            <TableCell className="text-white/20 text-xs">
+                                                {p.periodId}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center py-8 text-white/40 italic">
+                                            Belum ada cicilan tercatat.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </Card>
             )}
           </>
