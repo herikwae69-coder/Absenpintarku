@@ -20,6 +20,7 @@ export interface Employee {
   shiftId: string;
   division: string;
   leaveQuota: number;
+  organization?: 'Baru' | 'Non-Executive' | 'Executive';
   createdAt: any;
   updatedAt: any;
 }

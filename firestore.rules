@@ -34,6 +34,8 @@ service cloud.firestore {
     match /bonusNota/{id} { allow read: if true; allow write: if isValidId(id); }
     match /bonusBerat/{id} { allow read: if true; allow write: if isValidId(id); }
     match /koreksiGaji/{id} { allow read: if true; allow write: if isValidId(id); }
+    match /koreksiGajiMinus/{id} { allow read: if true; allow write: if isValidId(id); }
+    match /potonganSeragam/{id} { allow read: if true; allow write: if isValidId(id); }
     match /potonganKehilangan/{employeeId}/debts/{debtId} {
         allow read, get: if true;
         allow write: if isValidId(employeeId) && isValidId(debtId);

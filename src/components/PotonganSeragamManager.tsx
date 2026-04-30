@@ -1,0 +1,425 @@
+import React, { useState, useEffect } from 'react';
+import { db } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
+import { collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Lock, Plus, Search, Trash2, Edit3, Download, Check, Shirt } from 'lucide-react';
+import { toast } from 'sonner';
+import { Employee } from '../types';
+import * as XLSX from 'xlsx';
+
+interface Props {
+  employees: Employee[];
+  activePeriodId?: string;
+  setActivePeriodId?: (id: string) => void;
+}
+
+export function PotonganSeragamManager({ employees, activePeriodId, setActivePeriodId }: Props) {
+  const [controls, setControls] = useState<Record<string, any>>({});
+  
+  useEffect(() => {
+     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
+       const data: Record<string, any> = {};
+       snap.docs.forEach(d => { data[d.id] = d.data(); });
+       setControls(data);
+     });
+     return unsub;
+  }, []);
+
+  const getCombinedPeriods = (ctrls: Record<string, any>) => {
+      const periods = Object.entries(ctrls)
+        .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate)
+        .map(([id, c]) => ({
+          value: id,
+          label: c.name || id,
+          start: c.startDate ? new Date(c.startDate) : new Date(0)
+        }))
+        .sort((a, b) => b.start.getTime() - a.start.getTime()); // Newest first
+      return periods;
+  };
+
+  const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
+  const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+  const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
+
+  const [entries, setEntries] = useState<Record<string, { amount: number, description: string }>>({});
+  const [isLocked, setIsLocked] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [inputAmount, setInputAmount] = useState('');
+  const [inputDesc, setInputDesc] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Unlock Dialog
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) {
+        setLoading(false);
+        return;
+    }
+    setLoading(true);
+
+    const unsub = onSnapshot(doc(db, 'potonganSeragam', selectedPeriod), (snap) => {
+      if (componentMounted) {
+        if (snap.exists()) {
+          const data = snap.data();
+          setEntries(data.entries || {});
+          setIsLocked(data.isLocked || false);
+        } else {
+          setEntries({});
+          setIsLocked(false);
+        }
+        setLoading(false);
+      }
+    }, (error) => {
+      if (componentMounted) {
+        handleFirestoreError(error, OperationType.GET, `potonganSeragam/${selectedPeriod}`);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      componentMounted = false;
+      unsub();
+    };
+  }, [selectedPeriod]);
+
+  const saveEntries = async (updated: Record<string, { amount: number, description: string }>) => {
+    try {
+      await setDoc(doc(db, 'potonganSeragam', selectedPeriod), {
+        periodId: selectedPeriod,
+        entries: updated,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `potonganSeragam/${selectedPeriod}`);
+    }
+  };
+
+  const handleAdd = () => {
+    if (!selectedEmpId || !inputAmount || !inputDesc) {
+      toast.error("Pilih karyawan, isi nama seragam, dan harga");
+      return;
+    }
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const amount = parseInt(inputAmount.replace(/\D/g, '')) || 0;
+    const updated = { ...entries, [selectedEmpId]: { amount, description: inputDesc } };
+    setEntries(updated);
+    saveEntries(updated);
+    
+    setSelectedEmpId('');
+    setInputAmount('');
+    setInputDesc('');
+    setSearchTerm('');
+    toast.success("Data ditambahkan");
+  };
+
+  const handleRemove = (empId: string) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const pass = prompt("Masukkan password untuk hapus potongan seragam:");
+    if (pass !== 'admin123') {
+        toast.error("Password salah");
+        return;
+    }
+    const updated = { ...entries };
+    delete updated[empId];
+    setEntries(updated);
+    saveEntries(updated);
+    toast.success("Data dihapus");
+  };
+  
+  const handleEdit = (empId: string, currentData: { amount: number, description: string }) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    const pass = prompt("Masukkan password untuk edit potongan seragam:");
+    if (pass !== 'admin123') {
+        toast.error("Password salah");
+        return;
+    }
+    
+    const newDesc = prompt("Keterangan seragam baru:", currentData.description);
+    if (newDesc === null) return;
+    
+    const newAmountStr = prompt("Harga baru:", currentData.amount.toString());
+    if (newAmountStr === null) return;
+    
+    const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
+    if (newAmount < 0) {
+        toast.error("Nominal tidak valid");
+        return;
+    }
+
+    const updated = { ...entries, [empId]: { amount: newAmount, description: newDesc || currentData.description } };
+    setEntries(updated);
+    saveEntries(updated);
+    toast.success("Data diubah");
+  };
+
+  const handleDownload = () => {
+    const data = Object.entries(entries).map(([id, entryData]: [string, any]) => {
+      const emp = employees.find(e => e.id === id);
+      return {
+        'No. Absen': emp?.pin || '',
+        'Nama': emp?.name || '',
+        'Nominal': entryData.amount,
+        'Keterangan': entryData.description
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Potongan Seragam");
+    XLSX.writeFile(wb, `Potongan_Seragam_${currentPeriod?.label || selectedPeriod}.xlsx`);
+  };
+
+  const toggleLock = async () => {
+      if (isLocked) {
+          setShowUnlockDialog(true);
+      } else {
+           await setDoc(doc(db, 'potonganSeragam', selectedPeriod), { isLocked: true }, { merge: true });
+           toast.success("Periode dikunci");
+      }
+  }
+
+  const handleUnlock = async () => {
+    if (password === 'admin123') { 
+       await setDoc(doc(db, 'potonganSeragam', selectedPeriod), { isLocked: false }, { merge: true });
+       setShowUnlockDialog(false);
+       setPassword('');
+       toast.success("Periode dibuka");
+    } else {
+       toast.error("Password salah");
+    }
+  }
+
+  const getFilteredEmployees = () => {
+      if (!searchTerm) {
+          return employees.slice(0, 5); // Show first 5 by default when searching
+      }
+      return employees.filter(e => 
+          (e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+           e.pin.includes(searchTerm)) &&
+          e.isActive !== false
+      ).slice(0, 5);
+  };
+
+  if (loading) {
+     return <div className="p-8 text-center text-white/40">Memuat data...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <Shirt className="w-5 h-5 text-fuchsia-400" /> Potongan Seragam
+          </h2>
+          <p className="text-white/40 text-xs font-medium lowercase">periode: {currentPeriod?.label || selectedPeriod}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-[180px] glass-panel border-white/10 text-white h-11 px-6 rounded-xl">
+              <SelectValue placeholder="Pilih Periode">
+                 {currentPeriod?.label || selectedPeriod}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent className="glass-panel border-white/10 text-white">
+              {periodOptions.map((p) => (
+                <SelectItem key={p.value} value={p.value} className="focus:bg-white/10">{p.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button 
+             variant="outline" 
+             onClick={toggleLock}
+             className={`h-11 px-6 rounded-xl border-white/10 transition-colors ${
+                 isLocked ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 font-bold' : 'glass-panel text-white/70 hover:text-white'
+             }`}
+          >
+             {isLocked ? <><Lock className="w-4 h-4 mr-2" /> Kunci Aktif</> : 'Kunci Periode'}
+          </Button>
+          <Button onClick={handleDownload} variant="outline" className="glass-panel border-white/10 text-white hover:bg-white/10 h-11 px-6 rounded-xl">
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
+        <DialogContent className="glass-panel border-none bg-black/90 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Buka Kunci Periode</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input 
+              type="password" 
+              placeholder="Masukkan password..." 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="bg-white/5 border-white/10 text-white w-full"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowUnlockDialog(false)} className="text-white/50 hover:text-white hover:bg-white/5">Batal</Button>
+            <Button onClick={handleUnlock} className="bg-rose-600 hover:bg-rose-700 text-white">Buka Kunci</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Card className="glass-panel border-none bg-black/40">
+        <CardContent className="p-6 space-y-6">
+          <div className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex-1 w-full relative group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 group-focus-within:text-fuchsia-400 transition-colors" />
+                <Input 
+                    placeholder="Ketik nama / absen karyawan..." 
+                    value={searchTerm}
+                    onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setSelectedEmpId('');
+                    }}
+                    className="pl-9 bg-white/5 border-white/10 text-white focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500 rounded-xl"
+                />
+                
+                {searchTerm && !selectedEmpId && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto overflow-x-hidden p-2">
+                        {getFilteredEmployees().length > 0 ? (
+                            getFilteredEmployees().map(emp => (
+                                <button
+                                    key={emp.id}
+                                    onClick={() => {
+                                        setSelectedEmpId(emp.id);
+                                        setSearchTerm(emp.name);
+                                    }}
+                                    className={`w-full text-left px-4 py-3 rounded-lg text-sm transition-colors flex items-center justify-between ${
+                                        selectedEmpId === emp.id 
+                                            ? 'bg-fuchsia-500/20 text-fuchsia-400' 
+                                            : 'text-white/70 hover:bg-white/5 hover:text-white'
+                                    }`}
+                                >
+                                    <div>
+                                        <span className="font-bold mr-2">{emp.pin}</span>
+                                        <span>{emp.name}</span>
+                                    </div>
+                                    {selectedEmpId === emp.id && <Check className="w-4 h-4" />}
+                                </button>
+                            ))
+                        ) : (
+                            <div className="px-4 py-3 text-sm text-white/40 text-center italic">
+                                Karyawan tidak ditemukan
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+            
+            <div className="flex-1 w-full">
+              <Input 
+                placeholder="Keterangan Seragam (e.g. Baju PDH)" 
+                value={inputDesc}
+                onChange={(e) => setInputDesc(e.target.value)}
+                className="bg-white/5 border-white/10 text-white rounded-xl"
+              />
+            </div>
+
+            <div className="w-[180px]">
+              <Input 
+                placeholder="Harga (Rp)" 
+                value={inputAmount}
+                onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setInputAmount(val ? new Intl.NumberFormat('id-ID').format(parseInt(val)) : '');
+                }}
+                className="bg-white/5 border-white/10 text-white rounded-xl"
+              />
+            </div>
+            
+            <Button 
+                onClick={handleAdd} 
+                disabled={isLocked || !selectedEmpId || !inputAmount || !inputDesc} 
+                className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold h-10 px-8 rounded-xl w-full md:w-auto"
+            >
+                <Plus className="w-4 h-4 mr-2" />
+                Tambah
+            </Button>
+          </div>
+
+          <div className="rounded-xl border border-white/5 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/5 bg-white/5 hover:bg-white/5">
+                  <TableHead className="text-white/40 font-medium">No. Absen</TableHead>
+                  <TableHead className="text-white/40 font-medium">Nama</TableHead>
+                  <TableHead className="text-white/40 font-medium">Keterangan</TableHead>
+                  <TableHead className="text-white/40 font-medium text-right">Harga</TableHead>
+                  <TableHead className="w-[100px] text-right"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(entries).map(([empId, itemData]: [string, any]) => {
+                  const emp = employees.find(e => e.id === empId);
+                  return (
+                    <TableRow key={empId} className="border-white/5 hover:bg-white/[0.02]">
+                      <TableCell className="font-mono text-white/60">{emp?.pin}</TableCell>
+                      <TableCell className="font-medium text-white">{emp?.name}</TableCell>
+                      <TableCell className="text-white/70">{itemData.description}</TableCell>
+                      <TableCell className="text-right font-bold text-fuchsia-400">
+                         {new Intl.NumberFormat('id-ID').format(itemData.amount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleEdit(empId, itemData)} 
+                              disabled={isLocked}
+                              className="text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 h-8 w-8 p-0"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleRemove(empId)} 
+                              disabled={isLocked}
+                              className="text-rose-400 hover:text-rose-300 hover:bg-rose-400/10 h-8 w-8 p-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {Object.keys(entries).length === 0 && (
+                   <TableRow>
+                     <TableCell colSpan={5} className="text-center py-8 text-white/40 italic">
+                        Belum ada data potongan seragam di periode ini.
+                     </TableCell>
+                   </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
