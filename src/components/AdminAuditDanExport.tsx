@@ -85,9 +85,14 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
                 let total = 0;
                 if (docSnap.exists() && docSnap.data().entries) {
                     const entries = docSnap.data().entries;
-                    const activeList = Object.values(entries).filter((val: any) => (Number(val.amount) || Number(val) || 0) > 0);
+                    const activeList = Object.entries(entries)
+                        .filter(([id, val]: [string, any]) => {
+                            const empExists = employees.some(e => e.id === id);
+                            const amt = Number(val.amount) || Number(val) || 0;
+                            return empExists && amt > 0;
+                        });
                     count = activeList.length;
-                    total = activeList.reduce<number>((sum, val: any) => sum + (Number(val.amount) || Number(val) || 0), 0);
+                    total = activeList.reduce<number>((sum, [_, val]: [string, any]) => sum + (Number(val.amount) || Number(val) || 0), 0);
                 }
                 return { employeeCount: count, totalAmount: total };
             };
@@ -99,9 +104,14 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
                 let total = 0;
                 if (docSnap.exists() && docSnap.data().entries) {
                     const entries = docSnap.data().entries;
-                    const activeList = Object.values(entries).filter((val: any) => (Number(val.amount) || 0) > 0);
+                    const activeList = Object.entries(entries)
+                        .filter(([id, val]: [string, any]) => {
+                            const empExists = employees.some(e => e.id === id);
+                            const amt = Number(val.amount) || 0;
+                            return empExists && amt > 0;
+                        });
                     count = activeList.length;
-                    total = activeList.reduce<number>((sum, val: any) => sum + (Number(val.amount) || 0), 0);
+                    total = activeList.reduce<number>((sum, [_, val]: [string, any]) => sum + (Number(val.amount) || 0), 0);
                 }
                 return { employeeCount: count, totalAmount: total };
             };
@@ -117,13 +127,15 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
                     const nRate = data.notaRate ?? 50;
                     const bRate = data.balenRate ?? 70;
                     
-                    details = Object.entries(entries).map(([id, val]: [string, any]) => {
-                        const emp = employees.find(e => e.id === id);
-                        const n = Number(val?.notaCount) || 0;
-                        const b = Number(val?.balenCount) || 0;
-                        const amt = (n * nRate) + (b * bRate);
-                        return { name: emp?.nickname || emp?.name || id, amount: amt };
-                    }).filter(d => d.amount > 0);
+                    details = Object.entries(entries)
+                        .filter(([id, _]) => employees.some(e => e.id === id)) // Only active employees
+                        .map(([id, val]: [string, any]) => {
+                            const emp = employees.find(e => e.id === id);
+                            const n = Number(val?.notaCount) || 0;
+                            const b = Number(val?.balenCount) || 0;
+                            const amt = (n * nRate) + (b * bRate);
+                            return { name: emp?.nickname || emp?.name || id, amount: amt };
+                        }).filter(d => d.amount > 0);
                     
                     total = details.reduce((sum, d) => sum + d.amount, 0);
                 }
@@ -131,7 +143,10 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
             };
 
             // Potongan Kehilangan
-            const getPotonganStats = async (collectionGrpName: string) => {
+            const getPotonganStats = async (collectionGrpName: string, debtCollectionGrp: string) => {
+                const debtSnap = await getDocs(query(collectionGroup(db, debtCollectionGrp)));
+                const validDebtIds = new Set(debtSnap.docs.map(d => d.id));
+
                 const q = query(collectionGroup(db, collectionGrpName));
                 const snapshot = await getDocs(q);
                 let total = 0;
@@ -140,8 +155,14 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
                     const data = doc.data();
                     const amt = Number(data.amount) || 0;
                     if (data.periodId === selectedPeriod && amt > 0) {
-                        empIds.add(doc.ref.parent.parent?.parent?.parent?.id); // empId
-                        total += amt;
+                        const debtId = doc.ref.parent.parent?.id;
+                        if (debtId && validDebtIds.has(debtId)) {
+                            const empId = doc.ref.parent.parent?.parent?.parent?.id;
+                            if (empId && employees.some(e => e.id === empId)) {
+                               empIds.add(empId);
+                               total += amt;
+                            }
+                        }
                     }
                 });
                 return { employeeCount: empIds.size, totalAmount: total };
@@ -168,7 +189,7 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
             const getEstafetStats = async () => {
                 const docSnap = await getDoc(doc(db, 'bonusEstafet', selectedPeriod));
                 const emptyDates: string[] = [];
-                let employeeCount = 0;
+                let totalEmpCount = 0;
                 let totalAmount = 0;
                 if (docSnap.exists() && docSnap.data().dailyAssignments) {
                     const assignments = docSnap.data().dailyAssignments;
@@ -177,15 +198,22 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
                         if (!assignments[date] || !assignments[date].employeeIds || assignments[date].employeeIds.length === 0) {
                             emptyDates.push(date);
                         } else {
-                            assignments[date].employeeIds.forEach((id: string) => allEmpIds.add(id));
-                            totalAmount += (Number(assignments[date].bonusAmount) || 0) * assignments[date].employeeIds.length;
+                            let dayHasActive = false;
+                            assignments[date].employeeIds.forEach((id: string) => {
+                                if (employees.some(e => e.id === id)) {
+                                    allEmpIds.add(id);
+                                    totalAmount += (Number(assignments[date].bonusAmount) || 0);
+                                    dayHasActive = true;
+                                }
+                            });
+                            if (!dayHasActive) emptyDates.push(date);
                         }
                     });
-                    employeeCount = allEmpIds.size;
+                    totalEmpCount = allEmpIds.size;
                 } else {
                     periodDates.forEach(date => emptyDates.push(date));
                 }
-                return { employeeCount, totalAmount, emptyDates };
+                return { employeeCount: totalEmpCount, totalAmount, emptyDates };
             };
 
             const [
@@ -210,8 +238,8 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
                 getEntriesStats('koreksiGajiMinus'),
                 getEntriesStats('bonusLainLain'),
                 getSeragamStats(),
-                getPotonganStats('payments'),
-                getPotonganStats('paymentsBersama')
+                getPotonganStats('payments', 'debts'),
+                getPotonganStats('paymentsBersama', 'debtsBersama')
             ]);
 
             setAuditData({
@@ -262,7 +290,18 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
 
             const q100 = query(collectionGroup(db, 'payments'));
             const qBersama = query(collectionGroup(db, 'paymentsBersama'));
-            const [snapPayments100, snapPaymentsBersama] = await Promise.all([getDocs(q100), getDocs(qBersama)]);
+            const qDebts100 = query(collectionGroup(db, 'debts'));
+            const qDebtsBersama = query(collectionGroup(db, 'debtsBersama'));
+            
+            const [snapPayments100, snapPaymentsBersama, snapDebts100, snapDebtsBersama] = await Promise.all([
+                getDocs(q100), 
+                getDocs(qBersama),
+                getDocs(qDebts100),
+                getDocs(qDebtsBersama)
+            ]);
+
+            const validDebtIds100 = new Set(snapDebts100.docs.map(d => d.id));
+            const validDebtIdsBersama = new Set(snapDebtsBersama.docs.map(d => d.id));
 
             const excelRows: any[] = [];
             
@@ -287,6 +326,9 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
             const processEntries = (docSnap: any, compName: string, amountKey?: string) => {
                 if (docSnap.exists() && docSnap.data().entries) {
                     Object.entries(docSnap.data().entries).forEach(([id, val]: [string, any]) => {
+                        const empExists = employees.some(e => e.id === id);
+                        if (!empExists) return;
+
                         const amount = amountKey ? Number(val[amountKey]) : Number(val);
                         addRow(id, compName, amount || 0);
                     });
@@ -337,9 +379,12 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
             snapPayments100.docs.forEach(d => {
                 const data = d.data();
                 if (data.periodId === selectedPeriod) {
-                    const empId = d.ref.parent.parent?.parent?.parent?.id;
-                    if (empId) {
-                        empPotongan100[empId] = (empPotongan100[empId] || 0) + (Number(data.amount) || 0);
+                    const debtId = d.ref.parent.parent?.id;
+                    if (debtId && validDebtIds100.has(debtId)) {
+                        const empId = d.ref.parent.parent?.parent?.parent?.id;
+                        if (empId && employees.some(e => e.id === empId)) {
+                            empPotongan100[empId] = (empPotongan100[empId] || 0) + (Number(data.amount) || 0);
+                        }
                     }
                 }
             });
@@ -352,9 +397,12 @@ export default function AdminAuditDanExport({ employees }: { employees: Employee
             snapPaymentsBersama.docs.forEach(d => {
                 const data = d.data();
                 if (data.periodId === selectedPeriod) {
-                    const empId = d.ref.parent.parent?.parent?.parent?.id;
-                    if (empId) {
-                        empPotonganBersama[empId] = (empPotonganBersama[empId] || 0) + (Number(data.amount) || 0);
+                    const debtId = d.ref.parent.parent?.id;
+                    if (debtId && validDebtIdsBersama.has(debtId)) {
+                        const empId = d.ref.parent.parent?.parent?.parent?.id;
+                        if (empId && employees.some(e => e.id === empId)) {
+                            empPotonganBersama[empId] = (empPotonganBersama[empId] || 0) + (Number(data.amount) || 0);
+                        }
                     }
                 }
             });
