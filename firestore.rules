@@ -42,11 +42,25 @@ service cloud.firestore {
         allow read, get, list: if true;
         allow write: if isValidId(employeeId) && isValidId(debtId) && isValidId(paymentId);
     }
+    match /potonganKehilanganBersama/{employeeId}/debtsBersama/{debtId} {
+        allow read, get: if true;
+        allow write: if isValidId(employeeId) && isValidId(debtId);
+    }
+    match /potonganKehilanganBersama/{employeeId}/debtsBersama/{debtId}/paymentsBersama/{paymentId} {
+        allow read, get, list: if true;
+        allow write: if isValidId(employeeId) && isValidId(debtId) && isValidId(paymentId);
+    }
 
     match /{path=**}/debts/{debt} {
         allow read: if true;
     }
     match /{path=**}/payments/{payment} {
+        allow read: if true;
+    }
+    match /{path=**}/debtsBersama/{debt} {
+        allow read: if true;
+    }
+    match /{path=**}/paymentsBersama/{payment} {
         allow read: if true;
     }
 

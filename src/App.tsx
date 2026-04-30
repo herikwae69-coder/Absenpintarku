@@ -100,6 +100,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast, Toaster } from 'sonner';
 import { PotonganKehilanganManager } from './components/PotonganKehilanganManager';
+import { PotonganKehilanganBersamaManager } from './components/PotonganKehilanganBersamaManager';
 import { 
   Dialog, 
   DialogContent, 
@@ -3447,7 +3448,10 @@ function EmployeeView({
             <Zap className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Bonus</span>
           </TabsTrigger>
           <TabsTrigger value="ristan" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
-            <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan</span>
+            <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan 100%</span>
+          </TabsTrigger>
+          <TabsTrigger value="ristan-bersama" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-rose-500 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
+            <ClipboardList className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Ristan Bersama</span>
           </TabsTrigger>
           <TabsTrigger value="riwayat" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
             <History className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Riwayat</span>
@@ -3769,6 +3773,9 @@ function EmployeeView({
 
         <TabsContent value="ristan" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
           <PotonganKehilanganManager employees={employees} />
+        </TabsContent>
+        <TabsContent value="ristan-bersama" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+          <PotonganKehilanganBersamaManager employees={employees} />
         </TabsContent>
       </Tabs>
     </div>
@@ -4915,6 +4922,7 @@ function AdminDashboard({
       label: 'Ristan & Potongan',
       items: [
         { value: 'potongan', label: 'Potongan Kehilangan (Restan 100%)', icon: <DollarSign className="w-4 h-4" /> },
+        { value: 'potongan-bersama', label: 'Potongan Kehilangan (Restan Bersama)', icon: <DollarSign className="w-4 h-4" /> },
       ]
     },
     {
@@ -5070,6 +5078,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="potongan" className="mt-0 outline-none">
                 <PotonganKehilanganManager employees={employees} activePeriodId={activePeriodId} />
+              </TabsContent>
+              <TabsContent value="potongan-bersama" className="mt-0 outline-none">
+                <PotonganKehilanganBersamaManager employees={employees} activePeriodId={activePeriodId} />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />
