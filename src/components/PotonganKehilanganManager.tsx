@@ -238,6 +238,8 @@ export function PotonganKehilanganManager({ employees, activePeriodId }: { emplo
       toast.success("Hutang ditambah");
       setNewDebtDesc('');
       setNewDebtAmount('');
+      setSearchTerm('');
+      setSelectedEmpId('');
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'potonganKehilangan/' + selectedEmpId + '/debts');
     }

@@ -43,14 +43,11 @@ service cloud.firestore {
         allow write: if isValidId(employeeId) && isValidId(debtId) && isValidId(paymentId);
     }
 
-    match /{path=**}/debts {
-        allow list: if true;
+    match /{path=**}/debts/{debt} {
+        allow read: if true;
     }
-    match /{path=**}/debts/{debtId} {
-        allow read, get: if true;
-    }
-    match /{path=**}/payments {
-        allow list: if true;
+    match /{path=**}/payments/{payment} {
+        allow read: if true;
     }
 
     // Default deny
