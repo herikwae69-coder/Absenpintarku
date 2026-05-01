@@ -27,7 +27,8 @@ import {
   deleteDoc,
   orderBy,
   limit,
-  Timestamp
+  Timestamp,
+  getCountFromServer
 } from 'firebase/firestore';
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse, eachDayOfInterval, startOfWeek, endOfWeek, getDay, addDays, isSameDay } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -91,7 +92,9 @@ import {
   ShieldAlert,
   DollarSign,
   Shirt,
-  FileDown
+  FileDown,
+  Database,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -995,12 +998,12 @@ function CameraDialog({
     if (videoRef.current && canvasRef.current) {
       const context = canvasRef.current.getContext('2d');
       if (context) {
-        const width = 320;
+        const width = 240;
         const height = (videoRef.current.videoHeight / videoRef.current.videoWidth) * width;
         canvasRef.current.width = width;
         canvasRef.current.height = height;
         context.drawImage(videoRef.current, 0, 0, width, height);
-        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.6);
+        const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.4);
         onCapture(dataUrl);
         onClose();
       }
@@ -5395,6 +5398,7 @@ function AdminDashboard({
         { value: 'office', label: 'Lokasi Kantor', icon: <MapPin className="w-4 h-4" /> },
         { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" /> },
         { value: 'kata', label: 'Kata-kata', icon: <MessageSquare className="w-4 h-4" /> },
+        { value: 'db-status', label: 'Status Database', icon: <Database className="w-4 h-4" /> },
       ]
     }
   ];
@@ -5591,6 +5595,9 @@ function AdminDashboard({
               <TabsContent value="music" className="mt-0 outline-none">
                 <AdminMusic />
               </TabsContent>
+              <TabsContent value="db-status" className="mt-0 outline-none">
+                <AdminDatabaseStatus />
+              </TabsContent>
             </div>
           </div>
         </div>
@@ -5632,6 +5639,102 @@ function AdminMusic() {
           className="field-input text-white"
         />
         <Button onClick={handleSave} className="bg-primary w-full h-12 font-bold">SIMPAN URL MUSIK</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminDatabaseStatus() {
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+
+  const collectionsToCount = [
+    'employees',
+    'attendance',
+    'manualAttendance',
+    'leaveRequests',
+    'periodControls',
+    'periodQuotas',
+    'shifts',
+    'activityLogs'
+  ];
+
+  useEffect(() => {
+    const fetchCounts = async () => {
+      setLoading(true);
+      const newCounts: Record<string, number> = {};
+      try {
+        await Promise.all(collectionsToCount.map(async (collName) => {
+          const q = query(collection(db, collName));
+          const snapshot = await getCountFromServer(q);
+          newCounts[collName] = snapshot.data().count;
+        }));
+        setCounts(newCounts);
+      } catch (err) {
+        console.error("Error fetching database counts:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCounts();
+  }, []);
+
+  return (
+    <Card className="glass-panel border-none p-6 text-white">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Database className="w-5 h-5 text-primary" />
+          Status Penyimpanan Database
+        </CardTitle>
+        <CardDescription className="text-white/60">
+          Ringkasan jumlah data yang tersimpan di sistem.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-3">
+             <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+             <p className="text-xs text-white/40 uppercase tracking-widest font-black">Menghitung Data...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {collectionsToCount.map((coll) => (
+              <div key={coll} className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col gap-1">
+                <span className="text-[10px] text-white/40 font-bold uppercase tracking-wider">{coll.replace(/([A-Z])/g, ' $1').trim()}</span>
+                <div className="flex items-end gap-2">
+                  <span className="text-2xl font-black text-primary">{counts[coll] || 0}</span>
+                  <span className="text-[10px] text-white/20 mb-1 font-bold">Dokumen</span>
+                </div>
+              </div>
+            ))}
+            
+            <div className="col-span-full mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-primary/5 border border-primary/20 flex flex-col gap-3">
+                <h4 className="text-sm font-bold text-primary flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4" /> Batas Kuota Gratis (Spark Plan)
+                </h4>
+                <ul className="text-xs text-white/70 space-y-2">
+                  <li className="flex justify-between"><span>Penyimpanan Data:</span> <span className="text-white font-bold">1 GB</span></li>
+                  <li className="flex justify-between"><span>Operasi Baca (Read):</span> <span className="text-white font-bold">50rb / hari</span></li>
+                  <li className="flex justify-between"><span>Operasi Tulis (Write):</span> <span className="text-white font-bold">20rb / hari</span></li>
+                </ul>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col gap-3 justify-center">
+                <p className="text-[11px] text-white/60 leading-relaxed italic">
+                  Note: Jika kuota harian habis, aplikasi mungkin akan error "Quota Exceeded" dan akan reset otomatis keesokan harinya.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="w-full h-10 border-white/10 text-white hover:bg-white/10 text-xs"
+                  onClick={() => window.open('https://console.firebase.google.com/', '_blank')}
+                >
+                  <ExternalLink className="w-3 h-3 mr-2" /> Detail di Firebase Console
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
