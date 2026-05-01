@@ -55,7 +55,7 @@ export default function AdminAuditDanExport({
 
     const setSelectedPeriod = (val: string) => {
         setInternalPeriod(val);
-        setActivePeriodId(val);
+        setActivePeriodId?.(val);
     };
 
     const [loading, setLoading] = useState(false);
@@ -64,6 +64,12 @@ export default function AdminAuditDanExport({
     useEffect(() => {
         if (activePeriodId) setInternalPeriod(activePeriodId);
     }, [activePeriodId]);
+
+    useEffect(() => {
+        if (selectedPeriod && employees.length > 0) {
+            fetchAuditData();
+        }
+    }, [selectedPeriod, employees.length]);
 
     useEffect(() => {
       const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
@@ -407,7 +413,11 @@ export default function AdminAuditDanExport({
                 const org = emp?.organization || 'Non-Executive';
                 if (org !== 'Non-Executive') return;
                 
-                if (!emp) return;
+                if (!emp) {
+                    console.warn(`Employee not found for ID: ${empId}`);
+                    return;
+                }
+                
                 excelRows.push({
                     'Employee ID': emp.pin,
                     'Full Name': emp.name,

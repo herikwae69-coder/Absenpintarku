@@ -4025,9 +4025,10 @@ function AdminBonusNota({ employees, activePeriodId, setActivePeriodId }: { empl
           
           const updated = { ...entries };
           data.forEach((row: any) => {
-              const pin = row['No. Absen']?.toString() || row['PIN']?.toString() || row['pin']?.toString();
-              const amount = parseInt(row['Bonus Nota'] || row['Bonus'] || row['Nominal'] || row['amount'] || 0);
-              const emp = employees.find(e => e.pin === pin);
+              const pin = (row['No. Absen'] || row['PIN'] || row['pin'] || '').toString().trim();
+              const rawAmount = row['Bonus Nota'] || row['Bonus'] || row['Nominal'] || row['Nominal Bonus'] || row['amount'] || row['Jumlah'] || 0;
+              const amount = typeof rawAmount === 'number' ? rawAmount : parseInt(String(rawAmount).replace(/\D/g, '')) || 0;
+              const emp = employees.find(e => String(e.pin).trim() === pin);
               if (emp && !isNaN(amount)) {
                   updated[emp.id] = amount;
               }
@@ -4903,9 +4904,10 @@ function AdminBonusBerat({ employees, activePeriodId, setActivePeriodId }: { emp
           
           const updated = { ...entries };
           data.forEach((row: any) => {
-              const pin = row['No. Absen']?.toString() || row['PIN']?.toString() || row['pin']?.toString();
-              const amount = parseInt(row['Bonus Berat'] || row['Bonus'] || row['Nominal'] || row['amount'] || 0);
-              const emp = employees.find(e => e.pin === pin);
+              const pin = (row['No. Absen'] || row['PIN'] || row['pin'] || '').toString().trim();
+              const rawAmount = row['Bonus Berat'] || row['Bonus'] || row['Nominal'] || row['Nominal Bonus'] || row['amount'] || row['Jumlah'] || 0;
+              const amount = typeof rawAmount === 'number' ? rawAmount : parseInt(String(rawAmount).replace(/\D/g, '')) || 0;
+              const emp = employees.find(e => String(e.pin).trim() === pin);
               if (emp && !isNaN(amount)) {
                   updated[emp.id] = amount;
               }
