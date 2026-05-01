@@ -5485,6 +5485,7 @@ function AdminDashboard({
                 <AdminAuditDanExport 
                   employees={employees} 
                   setActiveTab={setActiveTab} 
+                  selectedPeriod={activePeriodId}
                   setActivePeriodId={setActivePeriodId}
                 />
               </TabsContent>

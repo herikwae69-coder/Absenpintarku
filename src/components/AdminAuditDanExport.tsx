@@ -28,10 +28,12 @@ interface AuditResult {
 export default function AdminAuditDanExport({ 
     employees, 
     setActiveTab, 
+    selectedPeriod: activePeriodId,
     setActivePeriodId 
 }: { 
     employees: Employee[], 
     setActiveTab: (tab: string) => void,
+    selectedPeriod: string,
     setActivePeriodId: (id: string) => void
 }) {
     const [controls, setControls] = useState<Record<string, any>>({});
@@ -47,9 +49,21 @@ export default function AdminAuditDanExport({
             .sort((a,b) => b.start.getTime() - a.start.getTime()); // Newest first
     }, [controls]);
     
-    const [selectedPeriod, setSelectedPeriod] = useState('');
+    // Internal state synced with prop
+    const [internalPeriod, setInternalPeriod] = useState(activePeriodId);
+    const selectedPeriod = internalPeriod || activePeriodId;
+
+    const setSelectedPeriod = (val: string) => {
+        setInternalPeriod(val);
+        setActivePeriodId(val);
+    };
+
     const [loading, setLoading] = useState(false);
     const [auditData, setAuditData] = useState<AuditResult | null>(null);
+
+    useEffect(() => {
+        if (activePeriodId) setInternalPeriod(activePeriodId);
+    }, [activePeriodId]);
 
     useEffect(() => {
       const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
@@ -57,7 +71,7 @@ export default function AdminAuditDanExport({
         snap.docs.forEach(d => { data[d.id] = d.data(); });
         setControls(data);
         
-        // Find first non-hidden period to default to
+        // Find first non-hidden period to default to if none selected
         if (!selectedPeriod) {
             const firstActive = Object.entries(data)
                 .filter(([_, ctrl]) => !ctrl.hidden)
@@ -65,7 +79,8 @@ export default function AdminAuditDanExport({
                 .sort((a, b) => b.start.getTime() - a.start.getTime())[0];
             
             if (firstActive) {
-                setSelectedPeriod(firstActive.id);
+                setInternalPeriod(firstActive.id);
+                setActivePeriodId(firstActive.id);
             }
         }
       }, (error) => {
@@ -109,49 +124,41 @@ export default function AdminAuditDanExport({
                     if (data.entries) {
                         const entries = data.entries;
                         if (Array.isArray(entries)) {
-                            // Handle Array (like bonusLainLain)
+                            // Handle Array (like bonusLainLain and now potonganSeragam)
                             const activeList = entries.filter((entry: any) => {
-                                const empExists = employees.some(e => e.pin === entry.pin || e.id === entry.empId);
-                                const amt = Number(entry.amount) || 0;
+                                const rawId = entry.empId || entry.pin || entry.id;
+                                if (!rawId) return false;
+                                
+                                const empExists = employees.length === 0 || employees.some(e => 
+                                    String(e.id).toLowerCase() === String(rawId).toLowerCase() || 
+                                    String(e.pin).toLowerCase() === String(rawId).toLowerCase() ||
+                                    (entry.pin && String(e.pin).toLowerCase() === String(entry.pin).toLowerCase()) ||
+                                    (entry.empId && String(e.id).toLowerCase() === String(entry.empId).toLowerCase())
+                                );
+                                const amt = Number(entry.amount) || Number(entry.nominal) || 0;
                                 return empExists && amt > 0;
                             });
-                            count = activeList.length;
-                            total = activeList.reduce<number>((sum, entry: any) => sum + (Number(entry.amount) || 0), 0);
+                            // Count unique employees
+                            const uniqueIds = new Set(activeList.map((e: any) => e.empId || e.pin || e.id));
+                            count = uniqueIds.size;
+                            total = activeList.reduce<number>((sum, entry: any) => sum + (Number(entry.amount) || Number(entry.nominal) || 0), 0);
                         } else {
                             // Handle Record (Object)
                             const activeList = Object.entries(entries)
                                 .filter(([id, val]: [string, any]) => {
-                                    const empExists = employees.some(e => e.id === id);
-                                    const amt = Number(val.amount) || Number(val) || 0;
+                                    const empExists = employees.length === 0 || employees.some(e => 
+                                        String(e.id).toLowerCase() === String(id).toLowerCase() || 
+                                        String(e.pin).toLowerCase() === String(id).toLowerCase()
+                                    );
+                                    const amt = (typeof val === 'object' && val !== null) ? (Number(val.amount) || Number(val.nominal) || 0) : Number(val);
                                     return empExists && amt > 0;
                                 });
                             count = activeList.length;
-                            total = activeList.reduce<number>((sum, [_, val]: [string, any]) => sum + (Number(val.amount) || Number(val) || 0), 0);
+                            total = activeList.reduce<number>((sum, [_, val]: [string, any]) => {
+                                const amt = (typeof val === 'object' && val !== null) ? (Number(val.amount) || Number(val.nominal) || 0) : Number(val);
+                                return sum + (amt || 0);
+                            }, 0);
                         }
-                    }
-                }
-                return { employeeCount: count, totalAmount: total, isLocked };
-            };
-
-            // Potongan Seragam (has amount field)
-            const getSeragamStats = async () => {
-                const docSnap = await getDoc(doc(db, 'potonganSeragam', selectedPeriod));
-                let count = 0;
-                let total = 0;
-                let isLocked = false;
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    isLocked = data.isLocked || false;
-                    if (data.entries) {
-                        const entries = data.entries;
-                        const activeList = Object.entries(entries)
-                            .filter(([id, val]: [string, any]) => {
-                                const empExists = employees.some(e => e.id === id);
-                                const amt = Number(val.amount) || 0;
-                                return empExists && amt > 0;
-                            });
-                        count = activeList.length;
-                        total = activeList.reduce<number>((sum, [_, val]: [string, any]) => sum + (Number(val.amount) || 0), 0);
                     }
                 }
                 return { employeeCount: count, totalAmount: total, isLocked };
@@ -171,9 +178,9 @@ export default function AdminAuditDanExport({
                     const bRate = data.balenRate ?? 70;
                     
                     details = Object.entries(entries)
-                        .filter(([id, _]) => employees.some(e => e.id === id)) // Only active employees
+                        .filter(([id, _]) => employees.some(e => String(e.id) === String(id) || String(e.pin) === String(id))) // Only active employees
                         .map(([id, val]: [string, any]) => {
-                            const emp = employees.find(e => e.id === id);
+                            const emp = employees.find(e => String(e.id) === String(id) || String(e.pin) === String(id));
                             const n = Number(val?.notaCount) || 0;
                             const b = Number(val?.balenCount) || 0;
                             const amt = (n * nRate) + (b * bRate);
@@ -205,7 +212,7 @@ export default function AdminAuditDanExport({
                         const debtId = doc.ref.parent.parent?.id;
                         if (debtId && validDebtIds.has(debtId)) {
                             const empId = doc.ref.parent.parent?.parent?.parent?.id;
-                            if (empId && employees.some(e => e.id === empId)) {
+                            if (empId && employees.some(e => String(e.id) === String(empId) || String(e.pin) === String(empId))) {
                                empIds.add(empId);
                                total += amt;
                             }
@@ -254,7 +261,7 @@ export default function AdminAuditDanExport({
                             } else {
                                 let dayHasActive = false;
                                 assignments[date].employeeIds.forEach((id: string) => {
-                                    if (employees.some(e => e.id === id)) {
+                                    if (employees.some(e => String(e.id) === String(id) || String(e.pin) === String(id))) {
                                         allEmpIds.add(id);
                                         totalAmount += (Number(assignments[date].bonusAmount) || 0);
                                         dayHasActive = true;
@@ -294,7 +301,7 @@ export default function AdminAuditDanExport({
                 getEntriesStats('koreksiGaji'),
                 getEntriesStats('koreksiGajiMinus'),
                 getEntriesStats('bonusLainLain'),
-                getSeragamStats(),
+                getEntriesStats('potonganSeragam'),
                 getPotonganStats('payments', 'debts', 'potonganKehilanganConfig'),
                 getPotonganStats('paymentsBersama', 'debtsBersama', 'potonganKehilanganBersamaConfig')
             ]);
@@ -392,7 +399,10 @@ export default function AdminAuditDanExport({
             const addRow = (empId: string, compName: string, amount: number) => {
                 if (amount === 0) return; // Do not export zero amount
                 
-                const emp = employees.find(e => e.id === empId);
+                const emp = employees.find(e => 
+                    String(e.id).toLowerCase() === String(empId).toLowerCase() || 
+                    String(e.pin).toLowerCase() === String(empId).toLowerCase()
+                );
                 // Only non-executive (includes default undefined/null mapping to Non-Executive)
                 const org = emp?.organization || 'Non-Executive';
                 if (org !== 'Non-Executive') return;
@@ -406,16 +416,35 @@ export default function AdminAuditDanExport({
                 });
             };
 
-            // process generic entries
+            // process entries (supports both array and object structures)
             const processEntries = (docSnap: any, compName: string, amountKey?: string) => {
                 if (docSnap.exists() && docSnap.data().entries) {
-                    Object.entries(docSnap.data().entries).forEach(([id, val]: [string, any]) => {
-                        const empExists = employees.some(e => e.id === id);
-                        if (!empExists) return;
+                    const entries = docSnap.data().entries;
+                    if (Array.isArray(entries)) {
+                        // Accumulate by employee to handle multiple entries per period
+                        const totals: Record<string, number> = {};
+                        entries.forEach((entry: any) => {
+                            const entryIdKey = entry.empId || entry.pin;
+                            if (entryIdKey) {
+                                const amount = Number(entry.amount) || (amountKey ? Number(entry[amountKey]) : 0);
+                                const emp = employees.find(e => String(e.id) === String(entryIdKey) || String(e.pin) === String(entryIdKey));
+                                const finalId = emp ? emp.id : entryIdKey;
+                                totals[finalId] = (totals[finalId] || 0) + amount;
+                            }
+                        });
+                        Object.entries(totals).forEach(([empId, amt]) => {
+                            addRow(empId, compName, amt);
+                        });
+                    } else {
+                        // Legacy Object structure
+                        Object.entries(entries).forEach(([id, val]: [string, any]) => {
+                            const emp = employees.find(e => String(e.id) === String(id) || String(e.pin) === String(id));
+                            if (!emp) return;
 
-                        const amount = amountKey ? Number(val[amountKey]) : Number(val);
-                        addRow(id, compName, amount || 0);
-                    });
+                            const amount = amountKey ? Number(val[amountKey]) : (typeof val === 'object' ? Number(val.amount) : Number(val));
+                            addRow(emp.id, compName, amount || 0);
+                        });
+                    }
                 }
             };
 
@@ -466,8 +495,11 @@ export default function AdminAuditDanExport({
                     const debtId = d.ref.parent.parent?.id;
                     if (debtId && validDebtIds100.has(debtId)) {
                         const empId = d.ref.parent.parent?.parent?.parent?.id;
-                        if (empId && employees.some(e => e.id === empId)) {
-                            empPotongan100[empId] = (empPotongan100[empId] || 0) + (Number(data.amount) || 0);
+                        if (empId) {
+                            const emp = employees.find(e => String(e.id) === String(empId) || String(e.pin) === String(empId));
+                            if (emp) {
+                                empPotongan100[emp.id] = (empPotongan100[emp.id] || 0) + (Number(data.amount) || 0);
+                            }
                         }
                     }
                 }
@@ -484,8 +516,11 @@ export default function AdminAuditDanExport({
                     const debtId = d.ref.parent.parent?.id;
                     if (debtId && validDebtIdsBersama.has(debtId)) {
                         const empId = d.ref.parent.parent?.parent?.parent?.id;
-                        if (empId && employees.some(e => e.id === empId)) {
-                            empPotonganBersama[empId] = (empPotonganBersama[empId] || 0) + (Number(data.amount) || 0);
+                        if (empId) {
+                            const emp = employees.find(e => String(e.id) === String(empId) || String(e.pin) === String(empId));
+                            if (emp) {
+                                empPotonganBersama[emp.id] = (empPotonganBersama[emp.id] || 0) + (Number(data.amount) || 0);
+                            }
                         }
                     }
                 }
