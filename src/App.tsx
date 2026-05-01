@@ -8506,6 +8506,29 @@ function AdminLeave({
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (requests.length === 0) return;
+    const isConfirmed1 = await confirm(`Apakah yakin anda akan menghapus request libur divisi ${selectedDivision}?`);
+    if (!isConfirmed1) return;
+    
+    const pwd = await prompt("Masukkan Password Admin untuk melanjutkan penghapusan:");
+    if (pwd !== 'admin123') {
+      alert("Password salah!", "error");
+      return;
+    }
+
+    const isConfirmed2 = await confirm(`Apakah anda sudah yakin untuk menghapus ini?`);
+    if (!isConfirmed2) return;
+
+    try {
+      await Promise.all(requests.map(r => deleteDoc(doc(db, 'leaveRequests', r.id))));
+      alert(`Semua request libur divisi ${selectedDivision} periode ini berhasil dihapus.`, "success");
+    } catch(err) {
+      console.error(err);
+      alert("Terjadi kesalahan saat menghapus data.", "error");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-center mb-2 overflow-x-auto no-scrollbar">
@@ -8544,6 +8567,9 @@ function AdminLeave({
             </Select>
             <Button onClick={handleExport} disabled={exportLoading || requests.length === 0} variant="outline" className="flex gap-2 glass-panel border-white/10 text-white hover:bg-white/10 shadow-lg">
               <Download className="w-4 h-4" /> Export Excel
+            </Button>
+            <Button onClick={handleDeleteAll} disabled={requests.length === 0} variant="destructive" className="flex gap-2 shadow-lg">
+              <Trash2 className="w-4 h-4" /> Hapus Semua Request
             </Button>
           </div>
         </CardHeader>
