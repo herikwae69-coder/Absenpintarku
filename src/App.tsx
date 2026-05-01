@@ -4018,24 +4018,69 @@ function AdminBonusNota({ employees, activePeriodId, setActivePeriodId }: { empl
     reader.onload = (evt) => {
       try {
           const bstr = evt.target?.result;
-          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wb = XLSX.read(bstr, { type: 'binary', cellNF: true, cellText: true, cellDates: true });
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
-          const data = XLSX.utils.sheet_to_json(ws);
+          const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
           
           const updated = { ...entries };
+          let detectedPin = '';
+          let detectedAmount = '';
+          
           data.forEach((row: any) => {
-              const pin = (row['No. Absen'] || row['PIN'] || row['pin'] || '').toString().trim();
-              const rawAmount = row['Bonus Nota'] || row['Bonus'] || row['Nominal'] || row['Nominal Bonus'] || row['amount'] || row['Jumlah'] || 0;
-              const amount = typeof rawAmount === 'number' ? rawAmount : parseInt(String(rawAmount).replace(/\D/g, '')) || 0;
+              const rowKeys = Object.keys(row);
+              
+              const pinKey = rowKeys.find(k => {
+                  const lk = k.toLowerCase().replace(/[^a-z]/g, '');
+                  return ['noabsen', 'absen', 'pin', 'idabsen', 'nik', 'noinduk'].includes(lk);
+              });
+              if (pinKey) detectedPin = pinKey;
+              const pin = pinKey ? String(row[pinKey] || '').trim() : '';
+
+              const amountKey = rowKeys.find(k => {
+                  const lk = k.toLowerCase().trim();
+                  return ['bonus nota', 'nominal bonus', 'bonus', 'nominal', 'jumlah', 'nota', 'amount', 'total', 'grand total'].some(s => lk === s || lk.startsWith(s));
+              }) || rowKeys.find(k => {
+                  const lk = k.toLowerCase().trim();
+                  return lk.includes('nota') || (lk.includes('bonus') && !lk.includes('pin') && !lk.includes('absen'));
+              });
+              if (amountKey) detectedAmount = amountKey;
+              
+              const rawAmount = amountKey ? row[amountKey] : 0;
+              let amount = 0;
+              if (typeof rawAmount === 'number') {
+                  amount = Math.round(rawAmount);
+              } else if (rawAmount) {
+                  const str = String(rawAmount).trim();
+                  if (str && str !== '-') {
+                      const cleaned = str.replace(/[^\d.,-]/g, '');
+                      if (cleaned.includes(',') && cleaned.includes('.')) {
+                          const lastC = cleaned.lastIndexOf(',');
+                          const lastD = cleaned.lastIndexOf('.');
+                          if (lastC > lastD) amount = parseFloat(cleaned.replace(/\./g, '').replace(/,/g, '.'));
+                          else amount = parseFloat(cleaned.replace(/,/g, ''));
+                      } else if (cleaned.includes(',')) {
+                          const parts = cleaned.split(',');
+                          if (parts[parts.length-1].length === 2 && parts.length === 2) amount = parseFloat(cleaned.replace(/,/g, '.'));
+                          else amount = parseInt(cleaned.replace(/,/g, ''));
+                      } else if (cleaned.includes('.')) {
+                          const parts = cleaned.split('.');
+                          if (parts[parts.length-1].length === 2 && parts.length === 2) amount = parseFloat(cleaned);
+                          else amount = parseInt(cleaned.replace(/\./g, ''));
+                      } else {
+                          amount = parseInt(cleaned) || 0;
+                      }
+                  }
+              }
+
               const emp = employees.find(e => String(e.pin).trim() === pin);
               if (emp && !isNaN(amount)) {
-                  updated[emp.id] = amount;
+                  updated[emp.id] = Math.max(0, Math.floor(amount));
               }
           });
           setEntries(updated);
           saveEntries(updated);
-          toast.success("Impor berhasil");
+          toast.success(`Impor Berhasil! Kolom terdeteksi: PIN (${detectedPin || '?'}), Nominal (${detectedAmount || '?'})`);
       } catch (err) {
           toast.error("Gagal impor file");
       }
@@ -4897,24 +4942,69 @@ function AdminBonusBerat({ employees, activePeriodId, setActivePeriodId }: { emp
     reader.onload = (evt) => {
       try {
           const bstr = evt.target?.result;
-          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wb = XLSX.read(bstr, { type: 'binary', cellNF: true, cellText: true, cellDates: true });
           const wsname = wb.SheetNames[0];
           const ws = wb.Sheets[wsname];
-          const data = XLSX.utils.sheet_to_json(ws);
+          const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
           
           const updated = { ...entries };
+          let detectedPin = '';
+          let detectedAmount = '';
+
           data.forEach((row: any) => {
-              const pin = (row['No. Absen'] || row['PIN'] || row['pin'] || '').toString().trim();
-              const rawAmount = row['Bonus Berat'] || row['Bonus'] || row['Nominal'] || row['Nominal Bonus'] || row['amount'] || row['Jumlah'] || 0;
-              const amount = typeof rawAmount === 'number' ? rawAmount : parseInt(String(rawAmount).replace(/\D/g, '')) || 0;
+              const rowKeys = Object.keys(row);
+              
+              const pinKey = rowKeys.find(k => {
+                  const lk = k.toLowerCase().replace(/[^a-z]/g, '');
+                  return ['noabsen', 'absen', 'pin', 'idabsen', 'nik', 'noinduk'].includes(lk);
+              });
+              if (pinKey) detectedPin = pinKey;
+              const pin = pinKey ? String(row[pinKey] || '').trim() : '';
+
+              const amountKey = rowKeys.find(k => {
+                  const lk = k.toLowerCase().trim();
+                  return ['bonus berat', 'nominal bonus', 'bonus', 'nominal', 'jumlah', 'berat', 'amount', 'total', 'grand total'].some(s => lk === s || lk.startsWith(s));
+              }) || rowKeys.find(k => {
+                  const lk = k.toLowerCase().trim();
+                  return lk.includes('berat') || (lk.includes('bonus') && !lk.includes('pin') && !lk.includes('absen'));
+              });
+              if (amountKey) detectedAmount = amountKey;
+              
+              const rawAmount = amountKey ? row[amountKey] : 0;
+              let amount = 0;
+              if (typeof rawAmount === 'number') {
+                  amount = Math.round(rawAmount);
+              } else if (rawAmount) {
+                  const str = String(rawAmount).trim();
+                  if (str && str !== '-') {
+                      const cleaned = str.replace(/[^\d.,-]/g, '');
+                      if (cleaned.includes(',') && cleaned.includes('.')) {
+                          const lastC = cleaned.lastIndexOf(',');
+                          const lastD = cleaned.lastIndexOf('.');
+                          if (lastC > lastD) amount = parseFloat(cleaned.replace(/\./g, '').replace(/,/g, '.'));
+                          else amount = parseFloat(cleaned.replace(/,/g, ''));
+                      } else if (cleaned.includes(',')) {
+                          const parts = cleaned.split(',');
+                          if (parts[parts.length-1].length === 2 && parts.length === 2) amount = parseFloat(cleaned.replace(/,/g, '.'));
+                          else amount = parseInt(cleaned.replace(/,/g, ''));
+                      } else if (cleaned.includes('.')) {
+                          const parts = cleaned.split('.');
+                          if (parts[parts.length-1].length === 2 && parts.length === 2) amount = parseFloat(cleaned);
+                          else amount = parseInt(cleaned.replace(/\./g, ''));
+                      } else {
+                          amount = parseInt(cleaned) || 0;
+                      }
+                  }
+              }
+
               const emp = employees.find(e => String(e.pin).trim() === pin);
               if (emp && !isNaN(amount)) {
-                  updated[emp.id] = amount;
+                  updated[emp.id] = Math.max(0, Math.floor(amount));
               }
           });
           setEntries(updated);
           saveEntries(updated);
-          toast.success("Impor berhasil");
+          toast.success(`Impor Berhasil! Kolom terdeteksi: PIN (${detectedPin || '?'}), Nominal (${detectedAmount || '?'})`);
       } catch (err) {
           toast.error("Gagal impor file");
       }
