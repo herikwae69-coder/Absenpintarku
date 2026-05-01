@@ -6708,6 +6708,7 @@ function AdminJadwalLibur({
           isLocked: true,
           updatedAt: serverTimestamp() 
         }, { merge: true });
+        setIsEditingSchedule(false);
         alert("Terima kasih! Data telah dikunci sementara. Anda bisa melanjutkannya nanti.");
       } else {
         await setDoc(doc(db, 'periodControls', statusId), { 
@@ -6730,6 +6731,24 @@ function AdminJadwalLibur({
       const pwd = await prompt("Jadwal sudah selesai disusun. Masukkan password admin untuk edit ulang:");
       if (pwd === 'admin123') {
         setIsEditingSchedule(true);
+      } else {
+        alert("Password salah!", "error");
+      }
+    } else if (isLocked) {
+      const pwd = await prompt("Jadwal sedang dikunci sementara. Masukkan password admin untuk melanjutkan pekerjaan:");
+      if (pwd === 'admin123') {
+        const statusId = `status_${selectedPeriod}_${selectedDivision}`;
+        try {
+          await setDoc(doc(db, 'periodControls', statusId), { 
+            ...statusData, 
+            isLocked: false,
+            updatedAt: serverTimestamp() 
+          }, { merge: true });
+          setIsEditingSchedule(true);
+        } catch (err) {
+          console.error(err);
+          alert("Gagal membuka kunci jadwal.");
+        }
       } else {
         alert("Password salah!", "error");
       }
@@ -6825,7 +6844,7 @@ function AdminJadwalLibur({
                 }`}
               >
                 {isEditingSchedule ? <Edit className="w-3 h-3 mr-2" /> : <LockIcon className="w-3 h-3 mr-2" />}
-                {isEditingSchedule ? 'SEDANG EDIT' : isFinished ? 'EDIT ULANG' : 'MULAIL EDIT'}
+                {isEditingSchedule ? 'SEDANG EDIT' : isFinished ? 'EDIT ULANG' : isLocked ? 'KERJAKAN LAGI' : 'MULAI EDIT'}
               </Button>
 
               {isEditingSchedule && (
@@ -6884,7 +6903,7 @@ function AdminJadwalLibur({
                 }
                 setShowExcelHeaderDialog(true);
               }}
-              disabled={!activePeriod || !isFinished}
+              disabled={!activePeriod}
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold h-10 px-4 rounded-xl flex items-center gap-2 w-full md:w-auto shadow-lg shadow-emerald-900/20 transition-all"
               id="download-jadwal-btn"
             >
