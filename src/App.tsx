@@ -621,47 +621,48 @@ export default function App() {
       
       {/* Custom Global Dialog */}
       <Dialog open={dialogConfig?.isOpen || false} onOpenChange={(open) => !open && handleDialogCancel()}>
-        <DialogContent className="glass-panel border-white/10 text-white min-w-[320px] max-w-[700px] p-12 md:p-16 overflow-hidden">
+        <DialogContent className="glass-panel border-white/10 text-white min-w-[320px] max-w-[450px] p-6 md:p-8 overflow-hidden rounded-3xl">
           {/* Backlight effect */}
-          <div className="absolute -top-24 -left-24 w-64 h-64 bg-primary/20 blur-[100px] rounded-full" />
-          <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-500/10 blur-[100px] rounded-full" />
+          <div className="absolute -top-24 -left-24 w-48 h-48 bg-primary/20 blur-[80px] rounded-full point-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-blue-500/10 blur-[80px] rounded-full point-events-none" />
           
-          <DialogHeader className="relative z-10">
-            <DialogTitle className="text-4xl md:text-5xl font-black mb-8 flex items-center gap-6 text-primary tracking-tighter">
-              <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0 border border-primary/30">
-                <AlertCircle className="w-10 h-10" />
+          <DialogHeader className="relative z-10 space-y-4 text-left">
+            <DialogTitle className="text-xl md:text-2xl font-black flex items-center gap-3 text-primary tracking-tight">
+              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0 border border-primary/30">
+                <AlertCircle className="w-5 h-5" />
               </div>
               {dialogConfig?.title}
             </DialogTitle>
-            <DialogDescription className="text-2xl md:text-3xl text-white leading-snug font-bold tracking-tight">
+            <DialogDescription className="text-sm md:text-base text-white/90 leading-relaxed font-medium">
               {dialogConfig?.message}
             </DialogDescription>
           </DialogHeader>
           
           {dialogConfig?.type === 'prompt' && (
-            <div className="py-10 relative z-10">
+            <div className="py-6 relative z-10 w-full">
               <Input
                 autoFocus
-                className="h-24 text-4xl font-black tracking-widest text-center bg-white/5 border-white/20 focus:border-primary/50 rounded-2xl"
+                className="h-12 text-lg font-bold text-center bg-white/5 border-white/20 focus:border-primary/50 rounded-xl w-full"
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleDialogConfirm()}
-                placeholder={dialogConfig.defaultValue}
+                placeholder={dialogConfig.defaultValue || 'Ketik di sini...'}
+                type={dialogConfig?.message.toLowerCase().includes('password') ? 'password' : 'text'}
               />
             </div>
           )}
 
-          <DialogFooter className="flex flex-col sm:flex-row gap-4 mt-12 relative z-10">
+          <DialogFooter className="flex flex-row gap-3 mt-6 relative z-10">
             <Button 
               variant="outline" 
               onClick={handleDialogCancel}
-              className="h-20 text-2xl font-black flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-2xl"
+              className="h-11 text-sm font-bold flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl"
             >
               BATAL
             </Button>
             <Button 
               onClick={handleDialogConfirm}
-              className="h-20 text-2xl font-black flex-1 shadow-2xl shadow-primary/40 rounded-2xl bg-primary hover:bg-primary/90"
+              className="h-11 text-sm font-bold flex-1 shadow-lg shadow-primary/25 rounded-xl bg-primary hover:bg-primary/90"
             >
               OKE
             </Button>
@@ -6903,7 +6904,7 @@ function AdminJadwalLibur({
                 }
                 setShowExcelHeaderDialog(true);
               }}
-              disabled={!activePeriod}
+              disabled={!activePeriod || !isFinished}
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold h-10 px-4 rounded-xl flex items-center gap-2 w-full md:w-auto shadow-lg shadow-emerald-900/20 transition-all"
               id="download-jadwal-btn"
             >
