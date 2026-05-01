@@ -463,6 +463,8 @@ export default function App() {
     localStorage.removeItem('jg1_isAdmin');
   };
 
+  useAutoLogout(currentUser, handleLogout);
+
   const today = format(new Date(), 'yyyy-MM-dd');
 
   // Custom Dialog State

@@ -568,122 +568,120 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
         </div>
       </Card>
       
-      {true && (
-          <>
-            <Card className="glass-panel border-none bg-black/40">
-                <CardContent className="p-6 space-y-4">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-tight">Tambah Hutang Baru</h3>
-                    
-                    <div className="relative z-10 mb-2">
-                        <Search className="absolute left-3 top-3 w-5 h-5 text-white/30" />
-                        <Input 
-                            placeholder="Cari Absen atau Nama Karyawan..." 
-                            value={searchTerm} 
-                            onChange={e => {
-                                const val = e.target.value;
-                                setSearchTerm(val);
-                                const found = employees.find(emp => emp.name.toLowerCase().includes(val.toLowerCase()) || emp.pin.includes(val));
-                                if (found && val) setSelectedEmpId(found.id);
-                                else setSelectedEmpId('');
-                            }} 
-                            onKeyDown={e => {
-                                if (e.key === 'Enter' && selectedEmpId) {
-                                    const found = employees.find(emp => emp.id === selectedEmpId);
-                                    if (found) {
-                                        setSearchTerm(found.name);
-                                    }
-                                }
-                            }}
-                            className="pl-10 glass-panel border-white/10 text-white" 
-                            disabled={isLocked} 
-                        />
-                        {searchTerm && selectedEmpId && (searchTerm.toLowerCase() !== employees.find(e => e.id === selectedEmpId)?.name.toLowerCase()) && (
-                            <div 
-                                className="absolute w-full mt-1 glass-panel border border-white/10 bg-black/90 p-3 cursor-pointer hover:bg-white/10 rounded-md shadow-xl backdrop-blur-md"
-                                onClick={() => {
-                                    const found = employees.find(emp => emp.id === selectedEmpId);
-                                    if (found) setSearchTerm(found.name);
-                                }}
-                            >
-                                <span className="text-emerald-400 font-bold">{employees.find(e => e.id === selectedEmpId)?.name}</span>
-                                <span className="text-white/40 text-sm ml-2">- PIN: {employees.find(e => e.id === selectedEmpId)?.pin}</span>
-                            </div>
-                        )}
-                    </div>
-                    {isLocked && <p className="text-rose-400 text-sm">Hutang dikunci! Password diperlukan.</p>}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input placeholder="Keterangan" value={newDebtDesc} onChange={e => setNewDebtDesc(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isLocked} />
-                        <Input type="number" placeholder="Total Nominal" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isLocked} />
-                    </div>
-                     <Button onClick={handleAddDebt} disabled={isLocked} className="w-full bg-primary text-white font-bold"><Plus className="w-4 h-4 mr-2" /> Tambah Hutang</Button>
-                </CardContent>
-            </Card>
-
-            <Card className="glass-panel border-none bg-black/40">
-                <CardContent className="p-6">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="border-white/5">
-                            <TableHead className="text-white/40">No Absen</TableHead>
-                            <TableHead className="text-white/40">Nama</TableHead>
-                            <TableHead className="text-white/40">Keterangan</TableHead>
-                            <TableHead className="text-white/40">Hutang Awal</TableHead>
-                            <TableHead className="text-white/40">Sisa</TableHead>
-                            <TableHead className="text-white/40">Status</TableHead>
-                            <TableHead className="text-white/40">Aksi</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredDebts.map(debt => (
-                            <TableRow key={debt.id} className="border-white/5">
-                                <TableCell className="text-white">{debt.empPin}</TableCell>
-                                <TableCell className="text-white">{debt.empName}</TableCell>
-                                <TableCell className="text-white">{debt.description}</TableCell>
-                                <TableCell className="text-white">{new Intl.NumberFormat('id-ID').format(debt.totalAmount)}</TableCell>
-                                <TableCell className="text-rose-400 font-bold">{new Intl.NumberFormat('id-ID').format(debt.remainingAmount)}</TableCell>
-                                <TableCell className={debt.remainingAmount === 0 ? "text-emerald-400" : "text-amber-400"}>
-                                    {debt.remainingAmount === 0 ? "LUNAS" : "BELUM LUNAS"}
-                                </TableCell>
-                                <TableCell>
-                                   <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                                        <Button size="sm" variant="ghost" className="text-emerald-400 shrink-0" onClick={() => handleInstallmentClick(debt)} disabled={isLocked || debt.remainingAmount === 0}>Cicil</Button>
-                                        <Button size="sm" variant="ghost" className="text-amber-400 shrink-0" onClick={() => handleViewHistory(debt)}>Riwayat</Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={isLocked} className="shrink-0"><Edit3 className="w-4 h-4" /></Button>
-                                        <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400 shrink-0" disabled={isLocked}><Trash2 className="w-4 h-4" /></Button>
-                                   </div>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                </CardContent>
-            </Card>
-
-            <Dialog open={!!installmentDebt} onOpenChange={(val) => !val && setInstallmentDebt(null)}>
-              <DialogContent className="glass-panel text-white border-white/20 sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-white">Masukkan Nominal Cicilan</DialogTitle>
-                  <DialogDescription className="text-white/60">
-                    Sisa hutang: {installmentDebt ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(installmentDebt.remainingAmount) : 0}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
+      <Card className="glass-panel border-none bg-black/40">
+          <CardContent className="p-6 space-y-4">
+              <h3 className="text-sm font-bold text-white uppercase tracking-tight">Tambah Hutang Baru</h3>
+              
+              <div className="relative z-10 mb-2">
+                  <Search className="absolute left-3 top-3 w-5 h-5 text-white/30" />
                   <Input 
-                    type="number" 
-                    placeholder="Contoh: 100000" 
-                    value={installmentAmount} 
-                    onChange={e => setInstallmentAmount(e.target.value)} 
-                    className="glass-panel border-white/10 text-white"
-                    autoFocus
+                      placeholder="Cari Absen atau Nama Karyawan..." 
+                      value={searchTerm} 
+                      onChange={e => {
+                          const val = e.target.value;
+                          setSearchTerm(val);
+                          const found = employees.find(emp => emp.name.toLowerCase().includes(val.toLowerCase()) || emp.pin.includes(val));
+                          if (found && val) setSelectedEmpId(found.id);
+                          else setSelectedEmpId('');
+                      }} 
+                      onKeyDown={e => {
+                          if (e.key === 'Enter' && selectedEmpId) {
+                              const found = employees.find(emp => emp.id === selectedEmpId);
+                              if (found) {
+                                  setSearchTerm(found.name);
+                              }
+                          }
+                      }}
+                      className="pl-10 glass-panel border-white/10 text-white" 
+                      disabled={isLocked} 
                   />
-                  <p className="text-xs text-white/40 mt-2">Nominal akan dipotong pada periode terpilih: {periodOptions.find(p => p.value === selectedPeriodId)?.label || selectedPeriodId}</p>
-                </div>
-                <DialogFooter className="flex sm:justify-end gap-2">
-                  <Button variant="ghost" onClick={() => setInstallmentDebt(null)}>Batal</Button>
-                  <Button onClick={submitInstallment} className="bg-primary hover:bg-primary/90 text-white font-bold">Simpan Cicilan</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  {searchTerm && selectedEmpId && (searchTerm.toLowerCase() !== employees.find(e => e.id === selectedEmpId)?.name.toLowerCase()) && (
+                      <div 
+                          className="absolute w-full mt-1 glass-panel border border-white/10 bg-black/90 p-3 cursor-pointer hover:bg-white/10 rounded-md shadow-xl backdrop-blur-md"
+                          onClick={() => {
+                              const found = employees.find(emp => emp.id === selectedEmpId);
+                              if (found) setSearchTerm(found.name);
+                          }}
+                      >
+                          <span className="text-emerald-400 font-bold">{employees.find(e => e.id === selectedEmpId)?.name}</span>
+                          <span className="text-white/40 text-sm ml-2">- PIN: {employees.find(e => e.id === selectedEmpId)?.pin}</span>
+                      </div>
+                  )}
+              </div>
+              {isLocked && <p className="text-rose-400 text-sm">Hutang dikunci! Password diperlukan.</p>}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input placeholder="Keterangan" value={newDebtDesc} onChange={e => setNewDebtDesc(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isLocked} />
+                  <Input type="number" placeholder="Total Nominal" value={newDebtAmount} onChange={e => setNewDebtAmount(e.target.value)} className="glass-panel border-white/10 text-white" disabled={isLocked} />
+              </div>
+               <Button onClick={handleAddDebt} disabled={isLocked} className="w-full bg-primary text-white font-bold"><Plus className="w-4 h-4 mr-2" /> Tambah Hutang</Button>
+          </CardContent>
+      </Card>
+
+      <Card className="glass-panel border-none bg-black/40">
+          <CardContent className="p-6">
+          <Table>
+              <TableHeader>
+                  <TableRow className="border-white/5">
+                      <TableHead className="text-white/40">No Absen</TableHead>
+                      <TableHead className="text-white/40">Nama</TableHead>
+                      <TableHead className="text-white/40">Keterangan</TableHead>
+                      <TableHead className="text-white/40">Hutang Awal</TableHead>
+                      <TableHead className="text-white/40">Sisa</TableHead>
+                      <TableHead className="text-white/40">Status</TableHead>
+                      <TableHead className="text-white/40">Aksi</TableHead>
+                  </TableRow>
+              </TableHeader>
+              <TableBody>
+                  {filteredDebts.map(debt => (
+                      <TableRow key={debt.id} className="border-white/5">
+                          <TableCell className="text-white">{debt.empPin}</TableCell>
+                          <TableCell className="text-white">{debt.empName}</TableCell>
+                          <TableCell className="text-white">{debt.description}</TableCell>
+                          <TableCell className="text-white">{new Intl.NumberFormat('id-ID').format(debt.totalAmount)}</TableCell>
+                          <TableCell className="text-rose-400 font-bold">{new Intl.NumberFormat('id-ID').format(debt.remainingAmount)}</TableCell>
+                          <TableCell className={debt.remainingAmount === 0 ? "text-emerald-400" : "text-amber-400"}>
+                              {debt.remainingAmount === 0 ? "LUNAS" : "BELUM LUNAS"}
+                          </TableCell>
+                          <TableCell>
+                             <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                                  <Button size="sm" variant="ghost" className="text-emerald-400 shrink-0" onClick={() => handleInstallmentClick(debt)} disabled={isLocked || debt.remainingAmount === 0}>Cicil</Button>
+                                  <Button size="sm" variant="ghost" className="text-amber-400 shrink-0" onClick={() => handleViewHistory(debt)}>Riwayat</Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handleEditDebt(debt)} disabled={isLocked} className="shrink-0"><Edit3 className="w-4 h-4" /></Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handleDeleteDebt(debt)} className="text-rose-400 shrink-0" disabled={isLocked}><Trash2 className="w-4 h-4" /></Button>
+                             </div>
+                          </TableCell>
+                      </TableRow>
+                  ))}
+              </TableBody>
+          </Table>
+          </CardContent>
+      </Card>
+
+      <Dialog open={!!installmentDebt} onOpenChange={(val) => !val && setInstallmentDebt(null)}>
+        <DialogContent className="glass-panel text-white border-white/20 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Masukkan Nominal Cicilan</DialogTitle>
+            <DialogDescription className="text-white/60">
+              Sisa hutang: {installmentDebt ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(installmentDebt.remainingAmount) : 0}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input 
+              type="number" 
+              placeholder="Contoh: 100000" 
+              value={installmentAmount} 
+              onChange={e => setInstallmentAmount(e.target.value)} 
+              className="glass-panel border-white/10 text-white"
+              autoFocus
+            />
+            <p className="text-xs text-white/40 mt-2">Nominal akan dipotong pada periode terpilih: {periodOptions.find(p => p.value === selectedPeriodId)?.label || selectedPeriodId}</p>
+          </div>
+          <DialogFooter className="flex sm:justify-end gap-2">
+            <Button variant="ghost" onClick={() => setInstallmentDebt(null)}>Batal</Button>
+            <Button onClick={submitInstallment} className="bg-primary hover:bg-primary/90 text-white font-bold">Simpan Cicilan</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
             {historyDebt && (
                 <Card className={`fixed inset-0 m-auto w-[95%] md:w-2/3 ${isEmployee ? 'h-[90%]' : 'h-4/5'} glass-panel border bg-black/95 z-[100] p-4 md:p-6 shadow-2xl overflow-hidden flex flex-col`}>
@@ -751,8 +749,6 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
                 </Card>
             )}
           </>
-      )}
-      </>
       )}
     </div>
   );

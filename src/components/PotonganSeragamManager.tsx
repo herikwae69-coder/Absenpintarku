@@ -52,7 +52,7 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
 
-  const [entries, setEntries] = useState<Record<string, { amount: number, description: string }>>({});
+  const [entries, setEntries] = useState<any[]>([]);
   const [isLocked, setIsLocked] = useState(false);
   const [loading, setLoading] = useState(true);
   
@@ -60,6 +60,23 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
   const [inputAmount, setInputAmount] = useState('');
   const [inputDesc, setInputDesc] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Grouped entries for the table
+  const groupedEntries = React.useMemo(() => {
+    const groups: Record<string, { empId: string, total: number, items: any[] }> = {};
+    entries.forEach(entry => {
+      if (!groups[entry.empId]) {
+        groups[entry.empId] = { empId: entry.empId, total: 0, items: [] };
+      }
+      groups[entry.empId].total += entry.amount;
+      groups[entry.empId].items.push(entry);
+    });
+    return Object.values(groups).sort((a, b) => {
+        const empA = employees.find(e => e.id === a.empId);
+        const empB = employees.find(e => e.id === b.empId);
+        return (empA?.name || '').localeCompare(empB?.name || '');
+    });
+  }, [entries, employees]);
 
   // Unlock Dialog
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
@@ -71,14 +88,24 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
         const history: any[] = [];
         snap.docs.forEach(d => {
           const data = d.data();
-          if (data.entries && data.entries[currentEmployeeId]) {
+          if (data.entries && Array.isArray(data.entries)) {
+            data.entries.forEach((entry: any) => {
+              if (entry.empId === currentEmployeeId) {
+                history.push({
+                  periodId: d.id,
+                  ...entry
+                });
+              }
+            });
+          } else if (data.entries && data.entries[currentEmployeeId]) {
+            // Backward compatibility for old single-entry structure
             history.push({
               periodId: d.id,
               ...data.entries[currentEmployeeId]
             });
           }
         });
-        setAllPeriodData(history);
+        setAllPeriodData(history.sort((a, b) => b.periodId.localeCompare(a.periodId)));
         setLoading(false);
       });
       return unsub;
@@ -101,10 +128,21 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
       if (componentMounted) {
         if (snap.exists()) {
           const data = snap.data();
-          setEntries(data.entries || {});
+          let rawEntries = data.entries || [];
+          // Handle migration from old object structure to new array structure
+          if (!Array.isArray(rawEntries)) {
+            rawEntries = Object.entries(rawEntries).map(([empId, val]: [string, any]) => ({
+              id: `migrated-${empId}`,
+              empId,
+              amount: val.amount,
+              description: val.description,
+              createdAt: data.updatedAt || serverTimestamp()
+            }));
+          }
+          setEntries(rawEntries);
           setIsLocked(data.isLocked || false);
         } else {
-          setEntries({});
+          setEntries([]);
           setIsLocked(false);
         }
         setLoading(false);
@@ -122,7 +160,7 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
     };
   }, [selectedPeriod]);
 
-  const saveEntries = async (updated: Record<string, { amount: number, description: string }>) => {
+  const saveEntries = async (updated: any[]) => {
     try {
       const docRef = doc(db, 'potonganSeragam', selectedPeriod);
       const snap = await getDoc(docRef);
@@ -154,7 +192,14 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
       return;
     }
     const amount = parseInt(inputAmount.replace(/\D/g, '')) || 0;
-    const updated = { ...entries, [selectedEmpId]: { amount, description: inputDesc } };
+    const newEntry = {
+        id: crypto.randomUUID ? crypto.randomUUID() : (Date.now() + Math.random().toString(36).substring(2)),
+        empId: selectedEmpId,
+        amount,
+        description: inputDesc,
+        createdAt: new Date().toISOString()
+    };
+    const updated = [...entries, newEntry];
     setEntries(updated);
     saveEntries(updated);
     
@@ -165,7 +210,7 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
     toast.success("Data ditambahkan");
   };
 
-  const handleRemove = (empId: string) => {
+  const handleRemove = (entryId: string) => {
     if (isLocked) {
       toast.error("Periode dikunci");
       return;
@@ -175,14 +220,13 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
         toast.error("Password salah");
         return;
     }
-    const updated = { ...entries };
-    delete updated[empId];
+    const updated = entries.filter(e => e.id !== entryId);
     setEntries(updated);
     saveEntries(updated);
     toast.success("Data dihapus");
   };
   
-  const handleEdit = (empId: string, currentData: { amount: number, description: string }) => {
+  const handleEdit = (entry: any) => {
     if (isLocked) {
       toast.error("Periode dikunci");
       return;
@@ -193,10 +237,10 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
         return;
     }
     
-    const newDesc = prompt("Keterangan seragam baru:", currentData.description);
+    const newDesc = prompt("Keterangan seragam baru:", entry.description);
     if (newDesc === null) return;
     
-    const newAmountStr = prompt("Harga baru:", currentData.amount.toString());
+    const newAmountStr = prompt("Harga baru:", entry.amount.toString());
     if (newAmountStr === null) return;
     
     const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
@@ -205,20 +249,21 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
         return;
     }
 
-    const updated = { ...entries, [empId]: { amount: newAmount, description: newDesc || currentData.description } };
+    const updated = entries.map(e => e.id === entry.id ? { ...e, amount: newAmount, description: newDesc || e.description } : e);
     setEntries(updated);
     saveEntries(updated);
     toast.success("Data diubah");
   };
 
   const handleDownload = () => {
-    const data = Object.entries(entries).map(([id, entryData]: [string, any]) => {
-      const emp = employees.find(e => e.id === id);
+    const data = entries.map((entry: any) => {
+      const emp = employees.find(e => e.id === entry.empId);
       return {
         'No. Absen': emp?.pin || '',
         'Nama': emp?.name || '',
-        'Nominal': entryData.amount,
-        'Keterangan': entryData.description
+        'Keterangan': entry.description,
+        'Nominal': entry.amount,
+        'Tgl Input': entry.createdAt ? new Date(entry.createdAt).toLocaleDateString('id-ID') : '-'
       };
     });
     const ws = XLSX.utils.json_to_sheet(data);
@@ -453,50 +498,72 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
                 <TableRow className="border-white/5 bg-white/5 hover:bg-white/5">
                   <TableHead className="text-white/40 font-medium">No. Absen</TableHead>
                   <TableHead className="text-white/40 font-medium">Nama</TableHead>
-                  <TableHead className="text-white/40 font-medium">Keterangan</TableHead>
-                  <TableHead className="text-white/40 font-medium text-right">Harga</TableHead>
+                  <TableHead className="text-white/40 font-medium">Detail Seragam</TableHead>
+                  <TableHead className="text-white/40 font-medium text-right">Potongan</TableHead>
                   <TableHead className="w-[100px] text-right"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {Object.entries(entries).map(([empId, itemData]: [string, any]) => {
-                  const emp = employees.find(e => e.id === empId);
+                {groupedEntries.map((group) => {
+                  const emp = employees.find(e => e.id === group.empId);
                   return (
-                    <TableRow key={empId} className="border-white/5 hover:bg-white/[0.02]">
-                      <TableCell className="font-mono text-white/60">{emp?.pin}</TableCell>
-                      <TableCell className="font-medium text-white">{emp?.name}</TableCell>
-                      <TableCell className="text-white/70">{itemData.description}</TableCell>
-                      <TableCell className="text-right font-bold text-fuchsia-400">
-                         {new Intl.NumberFormat('id-ID').format(itemData.amount)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleEdit(empId, itemData)} 
-                              disabled={isLocked}
-                              className="text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 h-8 w-8 p-0"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleRemove(empId)} 
-                              disabled={isLocked}
-                              className="text-rose-400 hover:text-rose-300 hover:bg-rose-400/10 h-8 w-8 p-0"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                    <React.Fragment key={group.empId}>
+                        {/* Summary Row */}
+                        <TableRow className="border-white/5 bg-white/[0.01]">
+                            <TableCell className="font-mono text-white/60">{emp?.pin}</TableCell>
+                            <TableCell className="font-bold text-white uppercase">{emp?.name}</TableCell>
+                            <TableCell className="text-white/40 italic text-xs">
+                                Akumulasi ({group.items.length} item)
+                            </TableCell>
+                            <TableCell className="text-right font-black text-fuchsia-400 text-lg">
+                                {new Intl.NumberFormat('id-ID').format(group.total)}
+                            </TableCell>
+                            <TableCell className="text-right"></TableCell>
+                        </TableRow>
+                        
+                        {/* Detail Rows */}
+                        {group.items.map((item) => (
+                          <TableRow key={item.id} className="border-white/5 hover:bg-white/[0.05] bg-black/20">
+                            <TableCell className="py-2"></TableCell>
+                            <TableCell className="py-2"></TableCell>
+                            <TableCell className="text-white/70 py-2 text-sm flex items-center gap-2">
+                                <Shirt className="w-3 h-3 text-fuchsia-400/50" />
+                                {item.description}
+                                {item.createdAt && <span className="text-[10px] text-white/20 italic ml-2">{new Date(item.createdAt).toLocaleDateString('id-ID')}</span>}
+                            </TableCell>
+                            <TableCell className="text-right font-medium text-white/60 py-2">
+                                {new Intl.NumberFormat('id-ID').format(item.amount)}
+                            </TableCell>
+                            <TableCell className="text-right py-2">
+                              <div className="flex items-center justify-end">
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleEdit(item)} 
+                                    disabled={isLocked}
+                                    className="text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 h-7 w-7 p-0"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleRemove(item.id)} 
+                                    disabled={isLocked}
+                                    className="text-rose-400 hover:text-rose-300 hover:bg-rose-400/10 h-7 w-7 p-0"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </React.Fragment>
                   );
                 })}
-                {Object.keys(entries).length === 0 && (
+                {entries.length === 0 && (
                    <TableRow>
-                     <TableCell colSpan={5} className="text-center py-8 text-white/40 italic">
+                     <TableCell colSpan={5} className="text-center py-12 text-white/40 italic">
                         Belum ada data potongan seragam di periode ini.
                      </TableCell>
                    </TableRow>
