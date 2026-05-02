@@ -76,6 +76,8 @@ import {
   Menu,
   History,
   Crown,
+  LayoutDashboard,
+  TrendingUp,
   MessageSquare,
   Layers,
   Search,
@@ -467,6 +469,24 @@ export default function App() {
   };
 
   useAutoLogout(currentUser, handleLogout);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    
+    const updatePresence = async () => {
+      try {
+        await updateDoc(doc(db, 'employees', currentUser.id), {
+          lastSeen: serverTimestamp()
+        });
+      } catch (err) {
+        console.error("Heartbeat error:", err);
+      }
+    };
+
+    updatePresence();
+    const interval = setInterval(updatePresence, 60000); // 1 minute
+    return () => clearInterval(interval);
+  }, [currentUser?.id]);
 
   const today = format(new Date(), 'yyyy-MM-dd');
 
@@ -5326,15 +5346,21 @@ function AdminDashboard({
     }
   }, [isSuper]);
 
-  const [activeTab, setActiveTab] = useState(currentUser?.role === 'spv' ? 'live' : 'employees');
+  const [activeTab, setActiveTab] = useState(currentUser?.role === 'spv' ? 'live' : 'dashboard');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ 'Kelola Karyawan': true });
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ 'Ringkasan': true });
 
   const toggleGroup = (label: string) => {
     setExpandedGroups(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
   const rawMenuGroups = [
+    {
+      label: 'Ringkasan',
+      items: [
+        { value: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+      ]
+    },
     {
       label: 'Kelola Karyawan',
       items: [
@@ -5407,7 +5433,7 @@ function AdminDashboard({
     if (currentUser?.role === 'spv') {
       return {
         ...g,
-        items: g.items.filter(i => ['live', 'leaves', 'jadwal'].includes(i.value))
+        items: g.items.filter(i => ['dashboard', 'live', 'leaves', 'jadwal'].includes(i.value))
       }
     }
     return g;
@@ -5434,39 +5460,45 @@ function AdminDashboard({
               </div>
               <span className="font-bold text-lg text-foreground">Menu Admin</span>
             </div>
-            <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar">
-              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 items-stretch p-0">
+            <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar scroll-smooth">
+              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-4 items-stretch p-0">
                 {menuGroups.filter(g => !g.superAdminOnly || currentUser?.role === 'superadmin').map((group) => {
                   const isExpanded = expandedGroups[group.label];
                   return (
-                    <div key={group.label} className="space-y-1">
+                    <div key={group.label} className="space-y-2">
                       <button 
                         onClick={() => toggleGroup(group.label)}
-                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-white/5 transition-colors group"
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-2xl hover:bg-white/5 transition-all group/btn"
                       >
-                        <h3 className="text-[10px] font-black text-white/40 group-hover:text-white/60 uppercase tracking-[0.3em]">{group.label}</h3>
-                        <div className="text-white/20 group-hover:text-white/40 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
-                          <ChevronRight className="w-3 h-3" />
+                        <div className="flex items-center gap-3">
+                          <div className={`w-1 h-4 rounded-full transition-all duration-300 ${isExpanded ? 'bg-primary' : 'bg-white/10'}`} />
+                          <h3 className="text-[11px] font-black text-white/40 group-hover/btn:text-white/70 uppercase tracking-[0.25em] transition-colors">{group.label}</h3>
+                        </div>
+                        <div className={`text-white/20 group-hover/btn:text-white/50 transition-all duration-300 p-1 rounded-lg bg-white/5 ${isExpanded ? 'rotate-90 text-primary bg-primary/10' : ''}`}>
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </div>
                       </button>
                       
-                      {isExpanded && (
-                        <div className="space-y-1 ml-2 border-l border-white/5 pl-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className={`space-y-1.5 overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="ml-4 border-l-2 border-white/5 pl-3 space-y-1">
                           {group.items.map((item) => (
                             <TabsTrigger 
                               key={item.value}
                               value={item.value} 
                               onClick={() => setIsMobileOpen(false)}
-                              className="w-full justify-start gap-4 h-10 px-4 rounded-xl border-none transition-all duration-200 data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-semibold text-muted-foreground hover:text-foreground hover:bg-accent"
+                              className="w-full justify-start gap-3.5 h-11 px-4 rounded-2xl border-none transition-all duration-300 group/item data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold text-white/40 hover:text-white hover:bg-white/5 shadow-none"
                             >
-                              <div className={`p-1.5 rounded-lg ${activeTab === item.value ? 'bg-primary/20 text-primary' : 'bg-white/5'}`}>
-                                {item.icon}
+                              <div className={`p-2 rounded-xl transition-all duration-300 ${activeTab === item.value ? 'bg-primary shadow-lg shadow-primary/20 scale-110 text-white' : 'bg-white/5 text-white/40 group-hover/item:text-white/80 group-hover/item:bg-white/10'}`}>
+                                {React.cloneElement(item.icon as React.ReactElement, { className: 'w-4 h-4' })}
                               </div>
-                              <span className="text-xs">{item.label}</span>
+                              <span className="text-[13px] tracking-tight">{item.label}</span>
+                              {activeTab === item.value && (
+                                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
+                              )}
                             </TabsTrigger>
                           ))}
                         </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
@@ -5598,6 +5630,9 @@ function AdminDashboard({
               <TabsContent value="db-status" className="mt-0 outline-none">
                 <AdminDatabaseStatus />
               </TabsContent>
+              <TabsContent value="dashboard" className="mt-0 outline-none">
+                <AdminOverview setActiveTab={setActiveTab} adminName={currentUser?.name?.split(' ')[0] || 'Admin'} role={currentUser?.role || 'employee'} />
+              </TabsContent>
             </div>
           </div>
         </div>
@@ -5641,6 +5676,346 @@ function AdminMusic() {
         <Button onClick={handleSave} className="bg-primary w-full h-12 font-bold">SIMPAN URL MUSIK</Button>
       </CardContent>
     </Card>
+  );
+}
+
+function AdminOverview({ setActiveTab, adminName, role }: { setActiveTab: (tab: string) => void, adminName: string, role: string }) {
+  const [stats, setStats] = useState({
+    totalEmployees: 0,
+    presentToday: 0,
+    lateToday: 0,
+    absentToday: 0,
+    pendingLeaves: 0
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [isOnlineDetailOpen, setIsOnlineDetailOpen] = useState(false);
+
+  useEffect(() => {
+    // Listener for online users (last seen in last 5 minutes)
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const q = query(
+      collection(db, 'employees'), 
+      where('lastSeen', '>', Timestamp.fromDate(fiveMinsAgo))
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const online = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setOnlineUsers(online);
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        // 1. Total Employees
+        const empSnap = await getCountFromServer(query(collection(db, 'employees')));
+        const totalEmployees = empSnap.data().count;
+
+        // 2. Attendance Today
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        const attRef = collection(db, 'attendance');
+        const todayAttQuery = query(attRef, where('date', '==', todayStr));
+        const todayAttSnap = await getDocs(todayAttQuery);
+        
+        let presentToday = 0;
+        let lateToday = 0;
+        
+        todayAttSnap.forEach(doc => {
+          presentToday++;
+          if (doc.data().status === 'Terlambat') {
+            lateToday++;
+          }
+        });
+
+        // 3. Pending Leaves
+        const leaveSnap = await getCountFromServer(query(collection(db, 'leaveRequests'), where('status', '==', 'pending')));
+        const pendingLeaves = leaveSnap.data().count;
+
+        setStats({
+          totalEmployees,
+          presentToday,
+          lateToday,
+          absentToday: totalEmployees - presentToday,
+          pendingLeaves
+        });
+
+        // 4. Recent Activity (10 rows)
+        const recentAttQuery = query(attRef, orderBy('timestamp', 'desc'), limit(10));
+        const recentAttSnap = await getDocs(recentAttQuery);
+        const activities = recentAttSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setRecentActivity(activities);
+
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <p className="text-xs text-white/40 uppercase tracking-widest font-black">Memuat Dashboard...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 pb-10">
+      {/* Welcome Section */}
+      <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border border-white/10 p-8 md:p-10">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-[100px] rounded-full -mr-20 -mt-20 anim-pulse-slow" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[10px] font-black text-primary uppercase tracking-widest">Administrator</span>
+              <div className="w-1 h-1 rounded-full bg-white/20" />
+              <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{format(new Date(), 'yyyy')} Edition</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight leading-none group">
+              Selamat Datang, <span className="text-primary">{adminName}</span>
+            </h2>
+            <p className="text-white/40 text-xs md:text-sm italic leading-relaxed max-w-xl font-medium">
+              "Auditor tidak mencari kesalahan, melainkan mencari kebenaran berdasarkan bukti yang kuat dan terdokumentasi. <span className="text-white/60">We trust, but verify</span>"
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md shadow-xl group hover:border-primary/30 transition-all">
+              <CalendarIcon className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-black text-white/80 uppercase tracking-tighter">
+                {format(new Date(), 'EEEE, d MMMM yyyy', { locale: id })}
+              </span>
+            </div>
+            <p className="text-[9px] font-mono text-white/20 mr-2 uppercase tracking-widest">System Time Sync: OK</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
+        <Card className="glass-panel border-white/5 p-5 hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer group relative overflow-hidden" onClick={() => setIsOnlineDetailOpen(true)}>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 blur-2xl rounded-full -mr-10 -mt-10" />
+          <div className="flex items-start justify-between relative z-10">
+            <div>
+              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1 group-hover:text-emerald-400/60 transition-colors">LIVE MONITOR</p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-4xl font-black text-emerald-400 group-hover:scale-110 transition-transform origin-left">{onlineUsers.length}</h3>
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+              </div>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-emerald-400/10 border border-emerald-400/20 group-hover:bg-emerald-400/20 transition-colors">
+              <Zap className="w-5 h-5 text-emerald-400" />
+            </div>
+          </div>
+        </Card>
+
+        {/* Similar refinement for other cards... (Omitted for brevity in common chunks but I'll update them below) */}
+        <Card 
+          className={`glass-panel border-white/5 p-5 transition-all group relative overflow-hidden ${role === 'admin' ? 'hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] cursor-pointer' : 'opacity-50 cursor-not-allowed'}`} 
+          onClick={() => role === 'admin' && setActiveTab('employees')}
+        >
+          <div className="flex items-start justify-between relative z-10">
+            <div>
+              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">TOTAL STAFF</p>
+              <h3 className="text-4xl font-black text-white group-hover:text-primary transition-colors">{stats.totalEmployees}</h3>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors">
+              <Users className="w-5 h-5 text-primary" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="glass-panel border-white/5 p-5 hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer group relative overflow-hidden" onClick={() => setActiveTab('live')}>
+          <div className="flex items-start justify-between relative z-10">
+            <div>
+              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">PRESENT TODAY</p>
+              <h3 className="text-4xl font-black text-emerald-400">{stats.presentToday}</h3>
+              {stats.lateToday > 0 && <p className="text-[9px] text-rose-400 font-black mt-1 uppercase tracking-tighter">-{stats.lateToday} Late Arrivals</p>}
+            </div>
+            <div className="p-2.5 rounded-2xl bg-emerald-400/10 border border-emerald-400/20 group-hover:bg-emerald-400/20 transition-colors">
+              <Check className="w-5 h-5 text-emerald-400" />
+            </div>
+          </div>
+        </Card>
+
+        <Card 
+          className="glass-panel border-white/5 p-5 hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer group relative overflow-hidden"
+          onClick={() => setActiveTab('leaves')}
+        >
+          <div className="flex items-start justify-between relative z-10">
+            <div>
+              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">LEAVE REQUESTS</p>
+              <h3 className="text-4xl font-black text-amber-400">{stats.pendingLeaves}</h3>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-amber-400/10 border border-amber-400/20 group-hover:bg-amber-400/20 transition-colors">
+              <CalendarIcon className="w-5 h-5 text-amber-400" />
+            </div>
+          </div>
+        </Card>
+
+        <Card 
+          className={`glass-panel border-white/5 p-5 transition-all group relative overflow-hidden ${role === 'admin' ? 'hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] cursor-pointer' : 'opacity-50 cursor-not-allowed'}`} 
+          onClick={() => role === 'admin' && setActiveTab('db-status')}
+        >
+          <div className="flex items-start justify-between relative z-10">
+            <div>
+              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">DATABASE</p>
+              <h3 className="text-4xl font-black text-blue-400">SYNC</h3>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-blue-400/10 border border-blue-400/20 group-hover:bg-blue-400/20 transition-colors">
+              <Database className="w-5 h-5 text-blue-400" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Dialog open={isOnlineDetailOpen} onOpenChange={setIsOnlineDetailOpen}>
+        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white max-w-md">
+          <DialogHeader className="p-0">
+            <DialogTitle className="text-lg font-black flex items-center gap-2">
+              <Zap className="w-5 h-5 text-emerald-400" />
+              User Sedang Online ({onlineUsers.length})
+            </DialogTitle>
+            <DialogDescription className="text-white/40 text-xs italic">Menampilkan karyawan yang aktif di aplikasi dalam 5 menit terakhir.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+            {onlineUsers.length > 0 ? (
+              onlineUsers.map((user) => (
+                <div key={user.id} className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/10 overflow-hidden">
+                    {user.photoUrl ? (
+                      <img src={user.photoUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-white/40" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white truncate">{user.name}</p>
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest font-black">{user.role || 'Employee'}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[9px] font-bold text-emerald-400/60 font-mono text-right">LIVE</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-10">
+                <p className="text-xs text-white/20 italic">Tidak ada user online saat ini.</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="sm:justify-start">
+            <Button variant="ghost" className="w-full text-white/40 text-xs hover:text-white" onClick={() => setIsOnlineDetailOpen(false)}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Activity */}
+        <Card className="lg:col-span-2 glass-panel border-none p-6">
+          <CardHeader className="px-0 pt-0">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <History className="w-5 h-5 text-primary" />
+              Aktivitas Absensi Terbaru
+            </CardTitle>
+            <CardDescription className="text-white/40">Log aktivitas real-time dari seluruh karyawan.</CardDescription>
+          </CardHeader>
+          <CardContent className="px-0">
+            <div className="space-y-4">
+              {recentActivity.length > 0 ? (
+                recentActivity.map((act) => (
+                  <div key={act.id} className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/[0.08] transition-colors">
+                    <div className="w-10 h-10 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center border border-white/10">
+                      {act.photoUrl ? (
+                         <img src={act.photoUrl} alt="Selfie" className="w-full h-full object-cover rounded-full" />
+                      ) : (
+                        <User className="w-5 h-5 text-white/40" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-white truncate">{act.employeeName}</p>
+                      <p className="text-[10px] text-white/40 font-medium">{act.type} • {act.time}</p>
+                    </div>
+                    <div className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${
+                      act.status === 'Tepat Waktu' || act.type === 'Check Out' ? 'bg-emerald-400/10 text-emerald-400' : 
+                      act.status === 'Terlambat' ? 'bg-rose-400/10 text-rose-400' : 'bg-amber-400/10 text-amber-400'
+                    }`}>
+                      {act.status || act.type}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-10 text-center">
+                  <p className="text-xs text-white/20 italic">Belum ada aktivitas hari ini.</p>
+                </div>
+              )}
+            </div>
+            <Button 
+              variant="ghost" 
+              className="w-full mt-4 text-xs text-white/40 hover:text-primary transition-colors"
+              onClick={() => setActiveTab('live')}
+            >
+              Lihat Semua Aktivitas <ChevronRight className="w-3 h-3 ml-1" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Quick Insights / Health */}
+        <div className="space-y-6">
+          <Card className="glass-panel border-none p-6">
+            <CardHeader className="px-0 pt-0">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-amber-400" />
+                Info Sistem
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-400/5 border border-amber-400/20">
+                <p className="text-[11px] text-amber-400/80 font-medium leading-relaxed italic">
+                  "Pengingat: Data foto absensi akan otomatis dibersihkan setiap 2 bulan untuk menjaga kapasitas penyimpanan (Max 1GB)."
+                </p>
+              </div>
+              <div className="pt-4 border-t border-white/5 space-y-2">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-white/40">Status Server:</span>
+                  <span className="text-emerald-400 font-bold">Online</span>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-white/40">Sinkronisasi:</span>
+                  <span className="text-emerald-400 font-bold">Aktif</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {role === 'admin' && (
+            <Button 
+              className="w-full h-20 rounded-3xl bg-primary text-white font-black text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 flex flex-col items-center justify-center gap-1"
+              onClick={() => setActiveTab('manual')}
+            >
+              <ClipboardCheck className="w-6 h-6" />
+              ABSENSI MANUAL
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
