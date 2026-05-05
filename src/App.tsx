@@ -28,6 +28,7 @@ import {
   orderBy,
   limit,
   Timestamp,
+  collectionGroup,
   getCountFromServer
 } from 'firebase/firestore';
 import { format, startOfDay, endOfDay, isAfter, isBefore, parse, eachDayOfInterval, startOfWeek, endOfWeek, getDay, addDays, isSameDay } from 'date-fns';
@@ -85,7 +86,7 @@ import {
   Zap,
   MapPin,
   Camera,
-  Map,
+  Map as MapIcon,
   Locate,
   X,
   Calculator,
@@ -5685,12 +5686,16 @@ function AdminOverview({ setActiveTab, adminName, role }: { setActiveTab: (tab: 
     presentToday: 0,
     lateToday: 0,
     absentToday: 0,
-    pendingLeaves: 0
+    pendingLeaves: 0,
+    badDebtsCount: 0,
+    totalBadDebtAmount: 0
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [badDebtList, setBadDebtList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [isOnlineDetailOpen, setIsOnlineDetailOpen] = useState(false);
+  const [isBadDebtOpen, setIsBadDebtOpen] = useState(false);
 
   useEffect(() => {
     // Listener for online users (last seen in last 5 minutes)
@@ -5739,12 +5744,56 @@ function AdminOverview({ setActiveTab, adminName, role }: { setActiveTab: (tab: 
         const leaveSnap = await getCountFromServer(query(collection(db, 'leaveRequests'), where('status', '==', 'pending')));
         const pendingLeaves = leaveSnap.data().count;
 
+        // 5. Bad Debts (Inactive employees with remaining balance)
+        const allEmployeesSnap = await getDocs(collection(db, 'employees'));
+        const employeesMap = new Map();
+        allEmployeesSnap.forEach(doc => employeesMap.set(doc.id, { id: doc.id, ...doc.data() }));
+
+        const badDebtsQuery = query(collectionGroup(db, 'debts'), where('remainingAmount', '>', 0));
+        const badDebtsBersamaQuery = query(collectionGroup(db, 'debtsBersama'), where('remainingAmount', '>', 0));
+        
+        const [badDebtsSnap, badDebtsBersamaSnap] = await Promise.all([
+          getDocs(badDebtsQuery),
+          getDocs(badDebtsBersamaQuery)
+        ]);
+        
+        const monitorList: any[] = [];
+        let totalBadDebtAmount = 0;
+
+        const processSnap = (snap: any, type: string) => {
+          snap.forEach((doc: any) => {
+            const data = doc.data();
+            const empId = doc.ref.parent.parent?.id;
+            const employee = employeesMap.get(empId);
+            
+            if (employee && employee.isActive === false) {
+              totalBadDebtAmount += data.remainingAmount;
+              monitorList.push({
+                id: doc.id,
+                ...data,
+                employeeName: employee.name,
+                employeeNickname: employee.nickname,
+                employeeRole: employee.role,
+                empId,
+                debtType: type
+              });
+            }
+          });
+        };
+
+        processSnap(badDebtsSnap, 'Individu');
+        processSnap(badDebtsBersamaSnap, 'Bersama');
+
+        setBadDebtList(monitorList);
+
         setStats({
           totalEmployees,
           presentToday,
           lateToday,
           absentToday: totalEmployees - presentToday,
-          pendingLeaves
+          pendingLeaves,
+          badDebtsCount: monitorList.length,
+          totalBadDebtAmount
         });
 
         // 4. Recent Activity (10 rows)
@@ -5882,6 +5931,25 @@ function AdminOverview({ setActiveTab, adminName, role }: { setActiveTab: (tab: 
             </div>
           </div>
         </Card>
+
+        {stats.badDebtsCount > 0 && (
+          <Card 
+            className="glass-panel border-rose-500/20 p-5 bg-rose-500/5 hover:bg-rose-500/10 hover:scale-[1.02] transition-all cursor-pointer group relative overflow-hidden"
+            onClick={() => setIsBadDebtOpen(true)}
+          >
+            <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/10 blur-2xl rounded-full -mr-10 -mt-10" />
+            <div className="flex items-start justify-between relative z-10">
+              <div>
+                <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">BAD DEBT ALERTS</p>
+                <h3 className="text-4xl font-black text-rose-500">{stats.badDebtsCount}</h3>
+                <p className="text-[10px] text-rose-400/60 font-bold mt-1">Total: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(stats.totalBadDebtAmount)}</p>
+              </div>
+              <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/20">
+                <ShieldAlert className="w-5 h-5 text-rose-500" />
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
 
       <Dialog open={isOnlineDetailOpen} onOpenChange={setIsOnlineDetailOpen}>
@@ -5922,6 +5990,93 @@ function AdminOverview({ setActiveTab, adminName, role }: { setActiveTab: (tab: 
           </div>
           <DialogFooter className="sm:justify-start">
             <Button variant="ghost" className="w-full text-white/40 text-xs hover:text-white" onClick={() => setIsOnlineDetailOpen(false)}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isBadDebtOpen} onOpenChange={setIsBadDebtOpen}>
+        <DialogContent className="glass-panel border-rose-500/20 bg-black/95 text-white max-w-2xl rounded-[2.5rem] border-2 shadow-[0_0_50px_rgba(244,63,94,0.15)]">
+          <DialogHeader className="pt-6 px-6">
+            <DialogTitle className="text-2xl font-black flex items-center gap-3 text-rose-500">
+              <div className="p-2 rounded-xl bg-rose-500/10">
+                <ShieldAlert className="w-7 h-7" />
+              </div>
+              Bad Debt Monitoring
+            </DialogTitle>
+            <DialogDescription className="text-white/40 text-sm italic font-medium mt-1">
+              Daftar kewajiban finansial dari karyawan yang sudah tidak aktif (non-aktif).
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="px-6 py-4 max-h-[60vh] overflow-y-auto custom-scrollbar space-y-4">
+            {badDebtList.length > 0 ? (
+              <div className="grid gap-4">
+                {badDebtList.map((debt) => (
+                  <div key={debt.id} className="p-6 rounded-[2rem] bg-white/[0.03] border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-white/[0.06] hover:border-rose-500/30 transition-all group">
+                    <div className="flex items-center gap-5">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500/20 to-transparent flex items-center justify-center border border-rose-500/20 group-hover:scale-110 transition-transform duration-500">
+                        <User className="w-7 h-7 text-rose-400" />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-black text-white text-lg tracking-tight group-hover:text-rose-400 transition-colors uppercase">{debt.employeeName}</h4>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[9px] font-black bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-full border border-rose-500/30 tracking-widest uppercase">TERPUTUS</span>
+                          <span className="text-[9px] font-black bg-blue-500/20 text-blue-400 px-2.5 py-1 rounded-full border border-blue-500/30 tracking-widest uppercase">{debt.debtType}</span>
+                          <span className="text-[10px] text-white/40 font-bold uppercase tracking-tight">{debt.description}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-start md:items-end gap-1 px-5 py-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 min-w-[180px]">
+                      <p className="text-[9px] font-black text-rose-400 uppercase tracking-[0.2em] mb-1">Unpaid Balance</p>
+                      <p className="text-2xl font-black text-rose-500 font-mono tracking-tighter">
+                        {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(debt.remainingAmount)}
+                      </p>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-[10px] text-rose-400 hover:bg-rose-500/10 mt-2 h-7 px-2 font-bold uppercase tracking-tighter"
+                        onClick={async () => {
+                          setConfirmInfo({
+                            msg: `Selesaikan & hapus catatan hutang ${debt.employeeName}? Tindakan ini tidak dapat dibatalkan.`,
+                            onConfirm: async () => {
+                              try {
+                                const path = debt.debtType === 'Individu' ? 'potonganKehilangan' : 'potonganKehilanganBersama';
+                                const subPath = debt.debtType === 'Individu' ? 'debts' : 'debtsBersama';
+                                await deleteDoc(doc(db, path, debt.empId, subPath, debt.id));
+                                setAlertInfo({ msg: "Catatan hutang berhasil dihapus.", type: "success" });
+                              } catch (err) {
+                                console.error(err);
+                                setAlertInfo({ msg: "Gagal menghapus catatan hutang.", type: "error" });
+                              }
+                            }
+                          });
+                        }}
+                      >
+                        Selesaikan & Hapus
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-20 bg-emerald-500/5 rounded-[2.5rem] border border-dashed border-emerald-500/20">
+                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
+                  <Check className="w-8 h-8 text-emerald-400" />
+                </div>
+                <h4 className="text-white font-bold text-lg mb-1">Semua Aman</h4>
+                <p className="text-white/30 text-sm font-medium italic">Tidak ada sisa hutang pada karyawan non-aktif.</p>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="p-6 pt-2">
+            <Button 
+               variant="outline" 
+               className="w-full h-14 rounded-2xl border-white/10 bg-white/5 text-white/60 font-black tracking-widest hover:bg-white/10 hover:text-white transition-all uppercase text-xs" 
+               onClick={() => setIsBadDebtOpen(false)}
+            >
+              Kembali ke Dashboard
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -6138,6 +6293,7 @@ function AdminEmployees({
   const [isEditing, setIsEditing] = useState<Employee | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showInactive, setShowInactive] = useState(false);
   const [formData, setFormData] = useState({ 
     name: '', 
     nickname: '',
@@ -6148,13 +6304,14 @@ function AdminEmployees({
     password: ''
   });
 
-  const filteredEmployees = employees.filter(e => 
-    (e.isActive !== false) && (
-      e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredEmployees = employees.filter(e => {
+    const matchesSearch = e.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       (e.nickname && e.nickname.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (e.pin && e.pin.includes(searchTerm))
-    )
-  );
+      (e.pin && e.pin.includes(searchTerm));
+    
+    if (showInactive) return matchesSearch;
+    return (e.isActive !== false) && matchesSearch;
+  });
 
   const resetForm = () => setFormData({ 
     name: '', 
@@ -6350,6 +6507,11 @@ function AdminEmployees({
             </Label>
           </div>
 
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+            <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Tampilkan Non-Aktif</span>
+            <Switch checked={showInactive} onCheckedChange={setShowInactive} />
+          </div>
+
           <Dialog open={showAdd} onOpenChange={(val) => { setShowAdd(val); if (!val) { setIsEditing(null); resetForm(); } }}>
             <DialogTrigger 
               render={
@@ -6464,6 +6626,7 @@ function AdminEmployees({
                 <TableHead className="text-white/40 whitespace-nowrap">Divisi</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">Organisasi</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">No. Absen</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Status</TableHead>
                 <TableHead className="text-right text-white/40 whitespace-nowrap">Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -6477,6 +6640,13 @@ function AdminEmployees({
                   <TableCell className="text-white/60 whitespace-nowrap">{e.division || '-'}</TableCell>
                   <TableCell className="text-white/60 whitespace-nowrap italic text-xs">{e.organization || 'Non-Executive'}</TableCell>
                   <TableCell className="text-muted-foreground font-mono whitespace-nowrap">{e.pin}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {e.isActive !== false ? (
+                      <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-400/30 tracking-widest uppercase">AKTIF</span>
+                    ) : (
+                      <span className="text-[9px] font-black bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-full border border-rose-500/30 tracking-widest uppercase">NON-AKTIF</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
                     <Button variant="ghost" size="icon" onClick={() => triggerEdit(e)} className="hover:bg-white/10">
                       <Edit className="w-4 h-4 text-primary" />
