@@ -136,7 +136,6 @@ import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import JSZip from 'jszip';
-import { GoogleGenAI } from "@google/genai";
 import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance, ActivityLog, JobPosition, JobLevel } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
 
@@ -9702,18 +9701,25 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
   const fetchLyrics = async () => {
     if (!songDetails || !songDetails.title) return;
     setFetchingLyrics(true);
-    setShowLyricsUI(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
-      const prompt = `Berikan lirik lengkap untuk lagu "${songDetails.title}" oleh "${songDetails.artist || 'Unknown Painter'}". 
-      Hanya berikan liriknya saja tanpa penjelasan tambahan. Jika lirik tidak ditemukan, katakan "Lirik tidak ditemukan".`;
-      
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
+      const response = await fetch('/api/lyrics', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          title: songDetails.title, 
+          artist: songDetails.artist 
+        }),
       });
       
-      setLyrics(response.text || 'Lirik tidak tersedia.');
+      const data = await response.json();
+      
+      if (data.lyrics) {
+        setLyrics(data.lyrics);
+      } else {
+        setLyrics('Lirik tidak ditemukan.');
+      }
     } catch (error) {
       console.error("Error fetching lyrics:", error);
       setLyrics('Terjadi kesalahan saat mengambil lirik.');
@@ -10237,19 +10243,14 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
 
                   {songDetails && (
                     <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Music className="w-3 h-3 text-primary animate-pulse" />
-                          <p className="text-white/40 text-[10px] font-bold uppercase tracking-wider">
-                            Now Playing: <span className="text-white">{songDetails.title}</span> {songDetails.artist && `· ${songDetails.artist}`}
-                          </p>
-                        </div>
-                        {fetchingLyrics && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
-                      </div>
-
-                      <div className="bg-black/20 rounded-xl p-4 border border-white/5 max-h-40 overflow-y-auto custom-scrollbar">
+                      <div className="bg-black/20 rounded-xl p-4 border border-white/5 max-h-40 overflow-y-auto custom-scrollbar relative">
+                        {fetchingLyrics && (
+                          <div className="absolute top-2 right-2">
+                            <Loader2 className="w-3 h-3 text-primary animate-spin" />
+                          </div>
+                        )}
                         <p className="text-[10px] leading-relaxed text-white/60 whitespace-pre-line text-center italic">
-                          {lyrics || (fetchingLyrics ? "Mengambil lirik..." : "Lirik tidak tersedia.")}
+                          {lyrics || (fetchingLyrics ? "Sedang mengambil lirik..." : "Lirik tidak tersedia.")}
                         </p>
                       </div>
                     </div>

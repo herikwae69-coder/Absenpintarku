@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -26,6 +26,7 @@
     "date-holidays": "^3.27.0",
     "dotenv": "^17.2.3",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "firebase": "^12.12.1",
     "jszip": "^3.10.1",
