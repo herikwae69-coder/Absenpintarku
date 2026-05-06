@@ -19,8 +19,26 @@ export interface Employee {
   isActive?: boolean;
   division: string;
   organization?: 'Baru' | 'Non-Executive' | 'Executive';
+  jobPositionId?: string; // ID of the job position
+  jobLevelId?: string;    // ID of the job level
+  joinDate?: string;      // YYYY-MM-DD
   createdAt: any;
   updatedAt: any;
+}
+
+export interface JobPosition {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface JobLevel {
+  id: string;
+  jobPositionId: string; // Linked to a specific position
+  name: string;
+  rank: number; // For promotion order
+  promotionCriteria?: string;
+  description?: string;
 }
 
 export interface Shift {

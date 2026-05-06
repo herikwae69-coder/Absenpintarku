@@ -97,7 +97,10 @@ import {
   Shirt,
   FileDown,
   Database,
-  ExternalLink
+  ExternalLink,
+  Briefcase,
+  BarChart3,
+  CalendarDays
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -131,7 +134,7 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import JSZip from 'jszip';
-import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance, ActivityLog } from './types';
+import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance, ActivityLog, JobPosition, JobLevel } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -368,6 +371,8 @@ export default function App() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
+  const [jobPositions, setJobPositions] = useState<JobPosition[]>([]);
+  const [jobLevels, setJobLevels] = useState<JobLevel[]>([]);
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [view, setView] = useState<'login' | 'employee' | 'admin'>('login');
@@ -416,11 +421,22 @@ export default function App() {
       setDivisions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Division)));
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'divisions'));
 
+    const unsubJobPositions = onSnapshot(collection(db, 'jobPositions'), (snapshot) => {
+      setJobPositions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as JobPosition)));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'jobPositions'));
+
+    const unsubJobLevels = onSnapshot(collection(db, 'jobLevels'), (snapshot) => {
+      const levels = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as JobLevel));
+      setJobLevels(levels.sort((a, b) => a.rank - b.rank));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'jobLevels'));
+
     return () => {
       unsubEmployees();
       unsubShifts();
       unsubSections();
       unsubDivisions();
+      unsubJobPositions();
+      unsubJobLevels();
     };
   }, []);
 
@@ -630,6 +646,8 @@ export default function App() {
             shifts={shifts} 
             sections={sections}
             divisions={divisions}
+            jobPositions={jobPositions}
+            jobLevels={jobLevels}
             onLogout={handleLogout} 
             currentUser={currentUser}
             theme={theme}
@@ -5281,6 +5299,8 @@ function AdminDashboard({
   shifts, 
   sections, 
   divisions,
+  jobPositions,
+  jobLevels,
   onLogout,
   currentUser,
   theme,
@@ -5295,6 +5315,8 @@ function AdminDashboard({
   shifts: Shift[],
   sections: Section[],
   divisions: Division[],
+  jobPositions: JobPosition[],
+  jobLevels: JobLevel[],
   onLogout: () => void,
   currentUser: Employee | null,
   theme: 'light' | 'dark',
@@ -5422,6 +5444,7 @@ function AdminDashboard({
       label: 'Superadmin',
       superAdminOnly: true,
       items: [
+        { value: 'job-config', label: 'Struktur & Karir', icon: <Briefcase className="w-4 h-4" /> },
         { value: 'office', label: 'Lokasi Kantor', icon: <MapPin className="w-4 h-4" /> },
         { value: 'music', label: 'Musik Request', icon: <Music className="w-4 h-4" /> },
         { value: 'kata', label: 'Kata-kata', icon: <MessageSquare className="w-4 h-4" /> },
@@ -5537,7 +5560,7 @@ function AdminDashboard({
 
             <div className="focus-visible:outline-none min-h-[500px]">
               <TabsContent value="employees" className="mt-0 outline-none">
-                <AdminEmployees employees={employees} shifts={shifts} sections={sections} divisions={divisions} currentUser={currentUser} confirm={confirm} prompt={prompt} alert={alert} />
+                <AdminEmployees employees={employees} shifts={shifts} sections={sections} divisions={divisions} jobPositions={jobPositions} jobLevels={jobLevels} currentUser={currentUser} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="shifts" className="mt-0 outline-none">
                 <AdminShifts shifts={shifts} confirm={confirm} prompt={prompt} alert={alert} />
@@ -5553,6 +5576,9 @@ function AdminDashboard({
               </TabsContent>
               <TabsContent value="manual" className="mt-0 outline-none">
                 <AdminManualAttendance employees={employees} divisions={divisions} />
+              </TabsContent>
+              <TabsContent value="job-config" className="mt-0 outline-none">
+                <AdminJobConfig jobPositions={jobPositions} jobLevels={jobLevels} confirm={confirm} prompt={prompt} alert={alert} />
               </TabsContent>
               <TabsContent value="bonus-master" className="mt-0 outline-none">
                 <AdminBonusMaster activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
@@ -6276,6 +6302,8 @@ function AdminEmployees({
   shifts, 
   sections, 
   divisions, 
+  jobPositions,
+  jobLevels,
   currentUser,
   confirm,
   prompt,
@@ -6285,6 +6313,8 @@ function AdminEmployees({
   shifts: Shift[], 
   sections: Section[], 
   divisions: Division[], 
+  jobPositions: JobPosition[],
+  jobLevels: JobLevel[],
   currentUser: Employee | null,
   confirm: (msg: string, title?: string) => Promise<boolean>,
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
@@ -6301,6 +6331,9 @@ function AdminEmployees({
     role: 'employee' as const, 
     division: divisions?.[0]?.name || 'Depan',
     organization: 'Non-Executive' as 'Baru' | 'Non-Executive' | 'Executive',
+    jobPositionId: '',
+    jobLevelId: '',
+    joinDate: format(new Date(), 'yyyy-MM-dd'),
     password: ''
   });
 
@@ -6320,6 +6353,9 @@ function AdminEmployees({
     role: 'employee', 
     division: divisions?.[0]?.name || 'Depan',
     organization: 'Non-Executive' as 'Baru' | 'Non-Executive' | 'Executive',
+    jobPositionId: '',
+    jobLevelId: '',
+    joinDate: format(new Date(), 'yyyy-MM-dd'),
     password: ''
   });
 
@@ -6472,6 +6508,9 @@ function AdminEmployees({
       role: e.role, 
       division: e.division || 'Depan',
       organization: e.organization || ('Non-Executive' as 'Baru' | 'Non-Executive' | 'Executive'),
+      jobPositionId: e.jobPositionId || '',
+      jobLevelId: e.jobLevelId || '',
+      joinDate: e.joinDate || format(new Date(), 'yyyy-MM-dd'),
       password: e.password || ''
     });
     setShowAdd(true);
@@ -6570,6 +6609,43 @@ function AdminEmployees({
               </div>
 
               <div className="grid gap-2">
+                <Label className="text-white/70 text-xs">Jabatan</Label>
+                <Select 
+                  value={formData.jobPositionId || 'none'} 
+                  onValueChange={(val: any) => {
+                    const id = val === 'none' ? '' : val;
+                    setFormData({...formData, jobPositionId: id, jobLevelId: ''});
+                  }}
+                >
+                  <SelectTrigger className="field-input text-white border-white/10"><SelectValue placeholder="Pilih Jabatan" /></SelectTrigger>
+                  <SelectContent className="glass-panel border-white/10 text-white">
+                    <SelectItem value="none">Tanpa Jabatan</SelectItem>
+                    {jobPositions.map(p => (
+                      <SelectItem key={p.id} value={p.id} className="hover:bg-white/10">{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label className="text-white/70 text-xs">Level</Label>
+                <Select value={formData.jobLevelId || 'none'} onValueChange={(val: any) => setFormData({...formData, jobLevelId: val === 'none' ? '' : val})}>
+                  <SelectTrigger className="field-input text-white border-white/10"><SelectValue placeholder="Pilih Level" /></SelectTrigger>
+                  <SelectContent className="glass-panel border-white/10 text-white">
+                    <SelectItem value="none">Tanpa Level</SelectItem>
+                    {jobLevels.filter(l => l.jobPositionId === formData.jobPositionId).map(l => (
+                      <SelectItem key={l.id} value={l.id} className="hover:bg-white/10">{l.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label className="text-white/70 text-xs">Tanggal Masuk</Label>
+                <Input type="date" value={formData.joinDate} onChange={(e) => setFormData({...formData, joinDate: e.target.value})} className="field-input text-white border-white/10" />
+              </div>
+
+              <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">Hak Akses</Label>
                 <Select 
                   value={formData.role} 
@@ -6626,6 +6702,9 @@ function AdminEmployees({
                 <TableHead className="text-white/40 whitespace-nowrap">Divisi</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">Organisasi</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">No. Absen</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Jabatan</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Level</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Tgl Masuk</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">Status</TableHead>
                 <TableHead className="text-right text-white/40 whitespace-nowrap">Aksi</TableHead>
               </TableRow>
@@ -6640,6 +6719,15 @@ function AdminEmployees({
                   <TableCell className="text-white/60 whitespace-nowrap">{e.division || '-'}</TableCell>
                   <TableCell className="text-white/60 whitespace-nowrap italic text-xs">{e.organization || 'Non-Executive'}</TableCell>
                   <TableCell className="text-muted-foreground font-mono whitespace-nowrap">{e.pin}</TableCell>
+                  <TableCell className="text-white/60 whitespace-nowrap">
+                    {jobPositions.find(p => p.id === e.jobPositionId)?.name || '-'}
+                  </TableCell>
+                  <TableCell className="text-white/60 whitespace-nowrap">
+                    {jobLevels.find(l => l.id === e.jobLevelId)?.name || '-'}
+                  </TableCell>
+                  <TableCell className="text-white/60 whitespace-nowrap font-mono text-[11px]">
+                    {e.joinDate ? format(new Date(e.joinDate), 'dd MMM yyyy') : '-'}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {e.isActive !== false ? (
                       <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-400/30 tracking-widest uppercase">AKTIF</span>
@@ -6666,6 +6754,250 @@ function AdminEmployees({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// --- ADMIN: JOB CONFIGURATION (Positions & Levels) ---
+function AdminJobConfig({ 
+  jobPositions,
+  jobLevels,
+  confirm,
+  prompt,
+  alert
+}: { 
+  jobPositions: JobPosition[],
+  jobLevels: JobLevel[],
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
+  const [activeSubTab, setActiveSubTab] = useState<'positions' | 'levels'>('positions');
+  const [selectedPositionId, setSelectedPositionId] = useState<string>('');
+
+  // Auto-select first position when list is available
+  useEffect(() => {
+    if (jobPositions.length > 0 && !selectedPositionId) {
+      setSelectedPositionId(jobPositions[0].id);
+    }
+  }, [jobPositions]);
+  
+  // Positions State
+  const [showAddPosition, setShowAddPosition] = useState(false);
+  const [positionForm, setPositionForm] = useState({ name: '', description: '' });
+  const [editingPosition, setEditingPosition] = useState<JobPosition | null>(null);
+
+  // Levels State
+  const [showAddLevel, setShowAddLevel] = useState(false);
+  const [levelForm, setLevelForm] = useState({ name: '', rank: 0, promotionCriteria: '', description: '' });
+  const [editingLevel, setEditingLevel] = useState<JobLevel | null>(null);
+
+  const handleSavePosition = async () => {
+    if (!positionForm.name) return;
+    if (editingPosition) {
+      await updateDoc(doc(db, 'jobPositions', editingPosition.id), positionForm);
+    } else {
+      await addDoc(collection(db, 'jobPositions'), positionForm);
+    }
+    setShowAddPosition(false);
+    setPositionForm({ name: '', description: '' });
+    setEditingPosition(null);
+  };
+
+  const handleSaveLevel = async () => {
+    if (!levelForm.name || !selectedPositionId) return;
+    if (editingLevel) {
+      await updateDoc(doc(db, 'jobLevels', editingLevel.id), { ...levelForm, jobPositionId: selectedPositionId });
+    } else {
+      await addDoc(collection(db, 'jobLevels'), { ...levelForm, jobPositionId: selectedPositionId });
+    }
+    setShowAddLevel(false);
+    setLevelForm({ name: '', rank: 0, promotionCriteria: '', description: '' });
+    setEditingLevel(null);
+  };
+
+  const handleDeletePosition = async (id: string) => {
+    if (await confirm("Hapus jabatan ini?")) {
+      await deleteDoc(doc(db, 'jobPositions', id));
+      alert("Jabatan dihapus", "success");
+    }
+  };
+
+  const handleDeleteLevel = async (id: string) => {
+    if (await confirm("Hapus level ini?")) {
+      await deleteDoc(doc(db, 'jobLevels', id));
+      alert("Level dihapus", "success");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit border border-white/10">
+        <Button 
+          variant="ghost" 
+          onClick={() => setActiveSubTab('positions')}
+          className={`rounded-xl px-6 h-10 font-bold transition-all ${activeSubTab === 'positions' ? 'bg-primary text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+        >
+          Jabatan
+        </Button>
+        <Button 
+          variant="ghost" 
+          onClick={() => setActiveSubTab('levels')}
+          className={`rounded-xl px-6 h-10 font-bold transition-all ${activeSubTab === 'levels' ? 'bg-primary text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+        >
+          Level & Kriteria
+        </Button>
+      </div>
+
+      {activeSubTab === 'positions' ? (
+        <Card className="glass-panel border-none shadow-lg text-white">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Daftar Jabatan</CardTitle>
+              <CardDescription className="text-white/40">Kelola posisi pekerjaan untuk karyawan.</CardDescription>
+            </div>
+            <Dialog open={showAddPosition} onOpenChange={(v) => { setShowAddPosition(v); if(!v) setEditingPosition(null); }}>
+              <DialogTrigger render={<Button className="bg-primary hover:bg-primary/80 text-white rounded-xl h-10 gap-2"><Plus className="w-4 h-4"/> Tambah Jabatan</Button>} />
+              <DialogContent className="glass-panel text-white border-white/20">
+                <DialogHeader><DialogTitle>{editingPosition ? 'Edit Jabatan' : 'Tambah Jabatan'}</DialogTitle></DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-white/60">Nama Jabatan</Label>
+                    <Input value={positionForm.name} onChange={e => setPositionForm({...positionForm, name: e.target.value})} placeholder="Contoh: Store Manager" className="field-input" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-white/60">Deskripsi</Label>
+                    <Input value={positionForm.description} onChange={e => setPositionForm({...positionForm, description: e.target.value})} placeholder="Penjelasan singkat tugas jabatan" className="field-input" />
+                  </div>
+                </div>
+                <DialogFooter><Button onClick={handleSavePosition} className="w-full bg-primary hover:bg-primary/80">Simpan Jabatan</Button></DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/10 hover:bg-transparent">
+                  <TableHead className="text-white/40">Nama Jabatan</TableHead>
+                  <TableHead className="text-white/40">Deskripsi</TableHead>
+                  <TableHead className="text-right text-white/40">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {jobPositions.map(p => (
+                  <TableRow key={p.id} className="border-white/5 hover:bg-white/5">
+                    <TableCell className="font-bold text-white">{p.name}</TableCell>
+                    <TableCell className="text-white/60 text-sm">{p.description || '-'}</TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button variant="ghost" size="icon" onClick={() => { setEditingPosition(p); setPositionForm({ name: p.name, description: p.description || '' }); setShowAddPosition(true); }} className="hover:bg-white/10"><Edit className="w-4 h-4 text-primary" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeletePosition(p.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          <Card className="glass-panel border-none shadow-lg text-white">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs font-bold text-white/40 uppercase tracking-wider">Pilih Jabatan untuk Lihat Level</Label>
+                  <Select value={selectedPositionId} onValueChange={setSelectedPositionId}>
+                    <SelectTrigger className="field-input h-12 text-lg font-bold border-white/10">
+                      <SelectValue placeholder="Pilih Jabatan...">
+                        {jobPositions.find(p => p.id === selectedPositionId)?.name}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="glass-panel border-white/10 text-white">
+                      {jobPositions.map(p => (
+                        <SelectItem key={p.id} value={p.id} className="hover:bg-white/10">{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {selectedPositionId ? (
+            <Card className="glass-panel border-none shadow-lg text-white">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Level untuk {jobPositions.find(p => p.id === selectedPositionId)?.name}</CardTitle>
+                  <CardDescription className="text-white/40">Definisikan jenjang karir dan syarat promosi khusus jabatan ini.</CardDescription>
+                </div>
+                <Dialog open={showAddLevel} onOpenChange={(v) => { setShowAddLevel(v); if(!v) setEditingLevel(null); }}>
+                  <DialogTrigger render={<Button className="bg-primary hover:bg-primary/80 text-white rounded-xl h-10 gap-2"><Plus className="w-4 h-4"/> Tambah Level</Button>} />
+                  <DialogContent className="glass-panel text-white border-white/20">
+                    <DialogHeader><DialogTitle>{editingLevel ? 'Edit Level' : 'Tambah Level'}</DialogTitle></DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold text-white/60">Nama Level</Label>
+                          <Input value={levelForm.name} onChange={e => setLevelForm({...levelForm, name: e.target.value})} placeholder="Contoh: Senior" className="field-input" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-bold text-white/60">Ranking (Urutan)</Label>
+                          <Input type="number" value={levelForm.rank} onChange={e => setLevelForm({...levelForm, rank: parseInt(e.target.value) || 0})} className="field-input" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold text-white/60">Kriteria Kenaikan Pangkat</Label>
+                        <textarea 
+                          value={levelForm.promotionCriteria} 
+                          onChange={e => setLevelForm({...levelForm, promotionCriteria: e.target.value})} 
+                          placeholder="Sebutkan syarat untuk mencapai level ini (misal: Masa kerja > 1 thn, Nilai KPI > 80)"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 min-h-[100px]"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter><Button onClick={handleSaveLevel} className="w-full bg-primary hover:bg-primary/80">Simpan Level</Button></DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead className="text-white/40 w-16">Rank</TableHead>
+                      <TableHead className="text-white/40">Nama Level</TableHead>
+                      <TableHead className="text-white/40">Kriteria Promosi</TableHead>
+                      <TableHead className="text-right text-white/40">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {jobLevels.filter(l => l.jobPositionId === selectedPositionId).map(l => (
+                      <TableRow key={l.id} className="border-white/5 hover:bg-white/5">
+                        <TableCell><Badge variant="outline" className="text-xs font-mono bg-white/5 text-white/60 border-white/10">{l.rank}</Badge></TableCell>
+                        <TableCell className="font-bold text-white">{l.name}</TableCell>
+                        <TableCell className="text-white/70 text-xs max-w-sm whitespace-pre-line leading-relaxed">
+                          {l.promotionCriteria || <span className="italic text-white/20">Belum ada kriteria</span>}
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button variant="ghost" size="icon" onClick={() => { setEditingLevel(l); setLevelForm({ name: l.name, rank: l.rank, promotionCriteria: l.promotionCriteria || '', description: l.description || '' }); setShowAddLevel(true); }} className="hover:bg-white/10"><Edit className="w-4 h-4 text-primary" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteLevel(l.id)} className="hover:bg-white/10"><Trash2 className="w-4 h-4 text-rose-500" /></Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {jobLevels.filter(l => l.jobPositionId === selectedPositionId).length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-10 text-white/20 italic">Belum ada level untuk jabatan ini.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="p-20 text-center glass-panel border-dashed border-white/10 rounded-3xl">
+              <p className="text-white/20 italic">Pilih jabatan terlebih dahulu untuk mengelola level.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

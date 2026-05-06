@@ -8,14 +8,42 @@
         "name": { "type": "string" },
         "pin": { "type": "string", "description": "4-6 digit entrance pin" },
         "password": { "type": "string", "description": "Individual login password" },
-        "role": { "type": "string", "enum": ["admin", "employee"] },
+        "role": { "type": "string", "enum": ["admin", "employee", "superadmin", "spv"] },
         "shiftId": { "type": "string" },
         "leaveQuota": { "type": "integer", "description": "Number of allowed leave days" },
-        "division": { "type": "string", "enum": ["Depan", "Belakang"] },
+        "division": { "type": "string" },
+        "organization": { "type": "string", "enum": ["Baru", "Non-Executive", "Executive"] },
+        "jobPositionId": { "type": "string" },
+        "jobLevelId": { "type": "string" },
+        "joinDate": { "type": "string", "format": "date" },
+        "isActive": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "pin", "role", "shiftId", "leaveQuota"]
+      "required": ["name", "pin", "role"]
+    },
+    "JobPosition": {
+      "title": "Job Position",
+      "description": "Organizational role or position name.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "JobLevel": {
+      "title": "Job Level",
+      "description": "Seniority or career level with promotion criteria scoped to a position.",
+      "type": "object",
+      "properties": {
+        "jobPositionId": { "type": "string" },
+        "name": { "type": "string" },
+        "rank": { "type": "integer" },
+        "promotionCriteria": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["name", "rank", "jobPositionId"]
     },
     "Shift": {
       "title": "Shift",
@@ -260,6 +288,14 @@
     "/shifts/{shiftId}": {
       "schema": "Shift",
       "description": "Shift records."
+    },
+    "/jobPositions/{id}": {
+      "schema": "JobPosition",
+      "description": "Organizational job positions."
+    },
+    "/jobLevels/{id}": {
+      "schema": "JobLevel",
+      "description": "Organizational job levels and promotion criteria."
     },
     "/attendance/{attendanceId}": {
       "schema": "Attendance",

@@ -18,6 +18,8 @@ service cloud.firestore {
     match /shifts/{id} { allow read, list: if true; allow write: if isValidId(id); }
     match /sections/{id} { allow read, list: if true; allow write: if isValidId(id); }
     match /divisions/{id} { allow read, list: if true; allow write: if isValidId(id); }
+    match /jobPositions/{id} { allow read, list: if true; allow write: if isValidId(id); }
+    match /jobLevels/{id} { allow read, list: if true; allow write: if isValidId(id); }
     match /attendance/{id} { allow read, list: if true; allow write: if isValidId(id); }
     match /manualAttendance/{id} { allow read, list: if true; allow write: if isValidId(id); }
     match /leaveRequests/{id} { allow read, list: if true; allow write: if isValidId(id); }
