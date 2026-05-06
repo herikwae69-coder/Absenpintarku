@@ -336,6 +336,19 @@
     "/bonusOperator/{periodId}": {
       "schema": "BonusOperator",
       "description": "Operator bonus data per period."
+    },
+    "/systemConfig/musicSettings": {
+      "schema": {
+        "title": "Music Settings",
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "songTitle": { "type": "string" },
+          "songArtist": { "type": "string" },
+          "popupText": { "type": "string" }
+        }
+      },
+      "description": "Background music settings for leave requests."
     }
   }
 }

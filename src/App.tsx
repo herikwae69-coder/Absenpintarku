@@ -100,7 +100,8 @@ import {
   ExternalLink,
   Briefcase,
   BarChart3,
-  CalendarDays
+  CalendarDays,
+  Loader2
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
@@ -131,9 +132,11 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
 import JSZip from 'jszip';
+import { GoogleGenAI } from "@google/genai";
 import { Employee, Shift, Attendance, LeaveRequest, Section, Division, ManualAttendance, ActivityLog, JobPosition, JobLevel } from './types';
 import { addMonths, subMonths, lastDayOfMonth } from 'date-fns';
 
@@ -5658,7 +5661,13 @@ function AdminDashboard({
                 <AdminDatabaseStatus />
               </TabsContent>
               <TabsContent value="dashboard" className="mt-0 outline-none">
-                <AdminOverview setActiveTab={setActiveTab} adminName={currentUser?.name?.split(' ')[0] || 'Admin'} role={currentUser?.role || 'employee'} />
+                <AdminOverview 
+                  setActiveTab={setActiveTab} 
+                  adminName={currentUser?.name?.split(' ')[0] || 'Admin'} 
+                  role={currentUser?.role || 'employee'} 
+                  confirm={confirm}
+                  alert={alert}
+                />
               </TabsContent>
             </div>
           </div>
@@ -5670,12 +5679,17 @@ function AdminDashboard({
 
 function AdminMusic() {
   const [musicUrl, setMusicUrl] = useState('');
+  const [songTitle, setSongTitle] = useState('');
+  const [songArtist, setSongArtist] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'systemConfig', 'musicSettings'), (doc) => {
       if (doc.exists()) {
-        setMusicUrl(doc.data().url || '');
+        const data = doc.data();
+        setMusicUrl(data.url || '');
+        setSongTitle(data.songTitle || '');
+        setSongArtist(data.songArtist || '');
       }
       setLoading(false);
     }, (err) => handleFirestoreError(err, OperationType.GET, 'systemConfig/musicSettings'));
@@ -5683,30 +5697,69 @@ function AdminMusic() {
   }, []);
 
   const handleSave = async () => {
-    await setDoc(doc(db, 'systemConfig', 'musicSettings'), { url: musicUrl });
-    alert('Musik URL berhasil disimpan!');
+    await setDoc(doc(db, 'systemConfig', 'musicSettings'), { 
+      url: musicUrl,
+      songTitle,
+      songArtist
+    });
+    alert('Musik & Judul Lagu berhasil disimpan!');
   };
 
   return (
     <Card className="glass-panel border-none p-6 text-white">
       <CardHeader>
         <CardTitle>Pengaturan Musik Request Libur</CardTitle>
-        <CardDescription className="text-white/60">Masukkan URL audio (MP3) untuk background music request libur:</CardDescription>
+        <CardDescription className="text-white/60">Konfigurasi background music dan lirik untuk request libur:</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Input 
-          value={musicUrl} 
-          onChange={(e) => setMusicUrl(e.target.value)} 
-          placeholder="https://example.com/musik.mp3"
-          className="field-input text-white"
-        />
-        <Button onClick={handleSave} className="bg-primary w-full h-12 font-bold">SIMPAN URL MUSIK</Button>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs font-bold text-white/40">Judul Lagu (Untuk Lirik)</Label>
+            <Input 
+              value={songTitle} 
+              onChange={(e) => setSongTitle(e.target.value)} 
+              placeholder="Contoh: Tak Segampang Itu"
+              className="field-input text-white"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-bold text-white/40">Penyanyi</Label>
+            <Input 
+              value={songArtist} 
+              onChange={(e) => setSongArtist(e.target.value)} 
+              placeholder="Contoh: Anggi Marito"
+              className="field-input text-white"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-bold text-white/40">URL Audio (MP3)</Label>
+          <Input 
+            value={musicUrl} 
+            onChange={(e) => setMusicUrl(e.target.value)} 
+            placeholder="https://example.com/musik.mp3"
+            className="field-input text-white"
+          />
+        </div>
+        <Button onClick={handleSave} className="bg-primary w-full h-12 font-bold">SIMPAN PENGATURAN MUSIK</Button>
       </CardContent>
     </Card>
   );
 }
 
-function AdminOverview({ setActiveTab, adminName, role }: { setActiveTab: (tab: string) => void, adminName: string, role: string }) {
+function AdminOverview({ 
+  setActiveTab, 
+  adminName, 
+  role,
+  confirm,
+  alert 
+}: { 
+  setActiveTab: (tab: string) => void, 
+  adminName: string, 
+  role: string,
+  confirm: (msg: string, title?: string) => Promise<boolean>,
+  alert: (msg: string, type?: 'success' | 'error' | 'info') => void
+}) {
   const [stats, setStats] = useState({
     totalEmployees: 0,
     presentToday: 0,
@@ -6062,20 +6115,18 @@ function AdminOverview({ setActiveTab, adminName, role }: { setActiveTab: (tab: 
                         size="sm" 
                         className="text-[10px] text-rose-400 hover:bg-rose-500/10 mt-2 h-7 px-2 font-bold uppercase tracking-tighter"
                         onClick={async () => {
-                          setConfirmInfo({
-                            msg: `Selesaikan & hapus catatan hutang ${debt.employeeName}? Tindakan ini tidak dapat dibatalkan.`,
-                            onConfirm: async () => {
-                              try {
-                                const path = debt.debtType === 'Individu' ? 'potonganKehilangan' : 'potonganKehilanganBersama';
-                                const subPath = debt.debtType === 'Individu' ? 'debts' : 'debtsBersama';
-                                await deleteDoc(doc(db, path, debt.empId, subPath, debt.id));
-                                setAlertInfo({ msg: "Catatan hutang berhasil dihapus.", type: "success" });
-                              } catch (err) {
-                                console.error(err);
-                                setAlertInfo({ msg: "Gagal menghapus catatan hutang.", type: "error" });
-                              }
+                          const ok = await confirm(`Selesaikan & hapus catatan hutang ${debt.employeeName}? Tindakan ini tidak dapat dibatalkan.`, "Konfirmasi Bad Debt");
+                          if (ok) {
+                            try {
+                              const path = debt.debtType === 'Individu' ? 'potonganKehilangan' : 'potonganKehilanganBersama';
+                              const subPath = debt.debtType === 'Individu' ? 'debts' : 'debtsBersama';
+                              await deleteDoc(doc(db, path, debt.empId, subPath, debt.id));
+                              alert("Catatan hutang berhasil dihapus.", "success");
+                            } catch (err) {
+                              console.error(err);
+                              alert("Gagal menghapus catatan hutang.", "error");
                             }
-                          });
+                          }
                         }}
                       >
                         Selesaikan & Hapus
@@ -9642,7 +9693,34 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
   }, []);
   const [showMusicPopup, setShowMusicPopup] = useState(false);
   const [musicPopupText, setMusicPopupText] = useState('Silakan ajukan request libur Anda.');
+  const [songDetails, setSongDetails] = useState<{title: string, artist: string} | null>(null);
+  const [lyrics, setLyrics] = useState<string>('');
+  const [showLyricsUI, setShowLyricsUI] = useState(false);
+  const [fetchingLyrics, setFetchingLyrics] = useState(false);
   const [requestKata, setRequestKata] = useState('');
+
+  const fetchLyrics = async () => {
+    if (!songDetails || !songDetails.title) return;
+    setFetchingLyrics(true);
+    setShowLyricsUI(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY as string });
+      const prompt = `Berikan lirik lengkap untuk lagu "${songDetails.title}" oleh "${songDetails.artist || 'Unknown Painter'}". 
+      Hanya berikan liriknya saja tanpa penjelasan tambahan. Jika lirik tidak ditemukan, katakan "Lirik tidak ditemukan".`;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+      });
+      
+      setLyrics(response.text || 'Lirik tidak tersedia.');
+    } catch (error) {
+      console.error("Error fetching lyrics:", error);
+      setLyrics('Terjadi kesalahan saat mengambil lirik.');
+    } finally {
+      setFetchingLyrics(false);
+    }
+  };
 
   const [formData, setFormData] = useState<{dates: string[], reason: string, sectionId: string}>({ 
     dates: [],
@@ -9667,11 +9745,19 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
       if (doc.exists()) {
         const data = doc.data();
         if (data.url) {
+          if (audioRef.current) {
+            audioRef.current.pause();
+          }
           audioRef.current = new Audio(data.url);
           audioRef.current.loop = true;
         }
         if (data.popupText) {
           setMusicPopupText(data.popupText);
+        }
+        if (data.songTitle) {
+          setSongDetails({ title: data.songTitle, artist: data.songArtist || '' });
+        } else {
+          setSongDetails(null);
         }
       }
     });
@@ -9993,6 +10079,45 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
               <h2 className="text-2xl md:text-3xl font-black text-white mb-4 leading-tight italic decoration-primary underline decoration-4 underline-offset-8">
                 {musicPopupText}
               </h2>
+
+              {songDetails && (
+                <div className="mb-6 space-y-2">
+                  <p className="text-white/60 text-sm font-medium tracking-wide">
+                    Sedang memutar: <span className="text-primary font-bold">{songDetails.title}</span> {songDetails.artist && `oleh ${songDetails.artist}`}
+                  </p>
+                  
+                  {!showLyricsUI ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={fetchLyrics}
+                      className="bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:text-white rounded-full px-4 h-8 text-[10px] uppercase tracking-tighter"
+                    >
+                      Buka Lirik
+                    </Button>
+                  ) : (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      className="mt-4 p-4 bg-black/40 rounded-2xl border border-white/5 text-left max-h-48 overflow-y-auto scrollbar-hide"
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-black text-primary/60 uppercase tracking-widest">Lirik Lagu</span>
+                        <button onClick={() => setShowLyricsUI(false)} className="text-white/20 hover:text-white/40 text-[10px]">Tutup</button>
+                      </div>
+                      {fetchingLyrics ? (
+                        <div className="py-8 flex justify-center">
+                          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                        </div>
+                      ) : (
+                        <p className="text-[11px] leading-relaxed text-white/80 whitespace-pre-line font-medium">
+                          {lyrics}
+                        </p>
+                      )}
+                    </motion.div>
+                  )}
+                </div>
+              )}
               <div className="flex flex-col items-center gap-3 mt-8">
                 <div className="flex gap-1">
                   {[0, 1, 2].map((i) => (
