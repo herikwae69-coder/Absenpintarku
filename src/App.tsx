@@ -9722,6 +9722,12 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
     }
   };
 
+  useEffect(() => {
+    if (songDetails && songDetails.title && !lyrics && !fetchingLyrics && showAdd) {
+      fetchLyrics();
+    }
+  }, [songDetails, showAdd]);
+
   const [formData, setFormData] = useState<{dates: string[], reason: string, sectionId: string}>({ 
     dates: [],
     reason: '',
@@ -10080,44 +10086,6 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                 {musicPopupText}
               </h2>
 
-              {songDetails && (
-                <div className="mb-6 space-y-2">
-                  <p className="text-white/60 text-sm font-medium tracking-wide">
-                    Sedang memutar: <span className="text-primary font-bold">{songDetails.title}</span> {songDetails.artist && `oleh ${songDetails.artist}`}
-                  </p>
-                  
-                  {!showLyricsUI ? (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={fetchLyrics}
-                      className="bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:text-white rounded-full px-4 h-8 text-[10px] uppercase tracking-tighter"
-                    >
-                      Buka Lirik
-                    </Button>
-                  ) : (
-                    <motion.div 
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      className="mt-4 p-4 bg-black/40 rounded-2xl border border-white/5 text-left max-h-48 overflow-y-auto scrollbar-hide"
-                    >
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-black text-primary/60 uppercase tracking-widest">Lirik Lagu</span>
-                        <button onClick={() => setShowLyricsUI(false)} className="text-white/20 hover:text-white/40 text-[10px]">Tutup</button>
-                      </div>
-                      {fetchingLyrics ? (
-                        <div className="py-8 flex justify-center">
-                          <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                        </div>
-                      ) : (
-                        <p className="text-[11px] leading-relaxed text-white/80 whitespace-pre-line font-medium">
-                          {lyrics}
-                        </p>
-                      )}
-                    </motion.div>
-                  )}
-                </div>
-              )}
               <div className="flex flex-col items-center gap-3 mt-8">
                 <div className="flex gap-1">
                   {[0, 1, 2].map((i) => (
@@ -10266,6 +10234,26 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                   <DialogFooter className="mt-4">
                     <Button onClick={handleSubmit} className="w-full bg-primary hover:bg-primary/80 font-bold shadow-lg">Submit Request Libur</Button>
                   </DialogFooter>
+
+                  {songDetails && (
+                    <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Music className="w-3 h-3 text-primary animate-pulse" />
+                          <p className="text-white/40 text-[10px] font-bold uppercase tracking-wider">
+                            Now Playing: <span className="text-white">{songDetails.title}</span> {songDetails.artist && `· ${songDetails.artist}`}
+                          </p>
+                        </div>
+                        {fetchingLyrics && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
+                      </div>
+
+                      <div className="bg-black/20 rounded-xl p-4 border border-white/5 max-h-40 overflow-y-auto custom-scrollbar">
+                        <p className="text-[10px] leading-relaxed text-white/60 whitespace-pre-line text-center italic">
+                          {lyrics || (fetchingLyrics ? "Mengambil lirik..." : "Lirik tidak tersedia.")}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </DialogContent>
               </Dialog>
             </CardHeader>
