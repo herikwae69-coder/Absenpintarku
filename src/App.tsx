@@ -4365,6 +4365,8 @@ function EmployeeView({
   const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
   const [history, setHistory] = useState<Attendance[]>([]);
   const [activeTab, setActiveTab] = useState("absen");
+  const [riwayatStart, setRiwayatStart] = useState("");
+  const [riwayatEnd, setRiwayatEnd] = useState("");
 
   useEffect(() => {
     const q = query(
@@ -5154,28 +5156,21 @@ function EmployeeView({
               <Card className="glass-panel border-none shadow-lg">
                 <CardHeader className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
                   <CardTitle className="text-white">Riwayat Absensi</CardTitle>
-                  <Select
-                    value={selectedPeriod}
-                    onValueChange={setSelectedPeriod}
-                  >
-                    <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white">
-                      <SelectValue placeholder="Pilih Periode">
-                        {periodOptions.find((p) => p.value === selectedPeriod)
-                          ?.label || "Pilih Periode"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="glass-panel border-white/20 text-white">
-                      {periodOptions.map((p) => (
-                        <SelectItem
-                          key={p.value}
-                          value={p.value}
-                          className="hover:bg-white/10"
-                        >
-                          {p.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    <Input
+                      type="date"
+                      value={riwayatStart}
+                      onChange={(e) => setRiwayatStart(e.target.value)}
+                      className="glass-panel border-white/10 text-white flex-1 md:w-[150px]"
+                    />
+                    <span className="text-white/50">-</span>
+                    <Input
+                      type="date"
+                      value={riwayatEnd}
+                      onChange={(e) => setRiwayatEnd(e.target.value)}
+                      className="glass-panel border-white/10 text-white flex-1 md:w-[150px]"
+                    />
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto no-scrollbar">
@@ -5197,13 +5192,13 @@ function EmployeeView({
                       <TableBody>
                         {history
                           .filter((h) => {
-                            const p = periodOptions.find(
-                              (op) => op.value === selectedPeriod,
-                            );
-                            if (!p) return true;
+                            if (!riwayatStart && !riwayatEnd) return true;
+                            if (riwayatStart && !riwayatEnd)
+                              return h.date >= riwayatStart;
+                            if (!riwayatStart && riwayatEnd)
+                              return h.date <= riwayatEnd;
                             return (
-                              h.date >= format(p.start, "yyyy-MM-dd") &&
-                              h.date <= format(p.end, "yyyy-MM-dd")
+                              h.date >= riwayatStart && h.date <= riwayatEnd
                             );
                           })
                           .map((a) => (
@@ -5237,14 +5232,12 @@ function EmployeeView({
                             </TableRow>
                           ))}
                         {history.filter((h) => {
-                          const p = periodOptions.find(
-                            (op) => op.value === selectedPeriod,
-                          );
-                          if (!p) return true;
-                          return (
-                            h.date >= format(p.start, "yyyy-MM-dd") &&
-                            h.date <= format(p.end, "yyyy-MM-dd")
-                          );
+                          if (!riwayatStart && !riwayatEnd) return true;
+                          if (riwayatStart && !riwayatEnd)
+                            return h.date >= riwayatStart;
+                          if (!riwayatStart && riwayatEnd)
+                            return h.date <= riwayatEnd;
+                          return h.date >= riwayatStart && h.date <= riwayatEnd;
                         }).length === 0 && (
                           <TableRow>
                             <TableCell
@@ -8081,8 +8074,6 @@ function AdminDashboard({
 
 function AdminMusic() {
   const [musicUrl, setMusicUrl] = useState("");
-  const [songTitle, setSongTitle] = useState("");
-  const [songArtist, setSongArtist] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -8092,8 +8083,6 @@ function AdminMusic() {
         if (doc.exists()) {
           const data = doc.data();
           setMusicUrl(data.url || "");
-          setSongTitle(data.songTitle || "");
-          setSongArtist(data.songArtist || "");
         }
         setLoading(false);
       },
@@ -8110,10 +8099,8 @@ function AdminMusic() {
   const handleSave = async () => {
     await setDoc(doc(db, "systemConfig", "musicSettings"), {
       url: musicUrl,
-      songTitle,
-      songArtist,
     });
-    alert("Musik & Judul Lagu berhasil disimpan!");
+    alert("Musik berhasil disimpan!");
   };
 
   return (
@@ -8121,32 +8108,10 @@ function AdminMusic() {
       <CardHeader>
         <CardTitle>Pengaturan Musik Request Libur</CardTitle>
         <CardDescription className="text-white/60">
-          Konfigurasi background music dan lirik untuk request libur:
+          Konfigurasi background music untuk request libur:
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-xs font-bold text-white/40">
-              Judul Lagu (Untuk Lirik)
-            </Label>
-            <Input
-              value={songTitle}
-              onChange={(e) => setSongTitle(e.target.value)}
-              placeholder="Contoh: Tak Segampang Itu"
-              className="field-input text-white"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-bold text-white/40">Penyanyi</Label>
-            <Input
-              value={songArtist}
-              onChange={(e) => setSongArtist(e.target.value)}
-              placeholder="Contoh: Anggi Marito"
-              className="field-input text-white"
-            />
-          </div>
-        </div>
         <div className="space-y-2">
           <Label className="text-xs font-bold text-white/40">
             URL Audio (MP3)
