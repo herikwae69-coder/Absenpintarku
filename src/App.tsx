@@ -4793,41 +4793,41 @@ function EmployeeView({
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="flex flex-wrap w-full max-w-[500px] glass-panel p-1.5 h-auto bg-white/5 border-white/10 mb-8 rounded-2xl gap-1 md:gap-2 justify-center mx-auto">
+          <TabsList className="flex w-max max-w-full overflow-x-auto no-scrollbar snap-x glass-panel p-1 h-auto bg-white/5 border-white/10 mb-8 rounded-2xl gap-1 justify-start mx-auto">
             <TabsTrigger
               value="absen"
-              className="flex-1 min-w-[65px] h-[34px] rounded-xl flex items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all text-white/40"
+              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
               <Clock className="w-3.5 h-3.5" />{" "}
-              <span className="text-[10px] md:text-xs">Absen</span>
+              <span className="text-xs">Absen</span>
             </TabsTrigger>
             <TabsTrigger
               value="libur"
-              className="flex-1 min-w-[65px] h-[34px] rounded-xl flex items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold transition-all text-white/40"
+              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
               <CalendarIcon className="w-3.5 h-3.5" />{" "}
-              <span className="text-[10px] md:text-xs">Libur</span>
+              <span className="text-xs">Libur</span>
             </TabsTrigger>
             <TabsTrigger
               value="bonus"
-              className="flex-1 min-w-[65px] h-[34px] rounded-xl flex items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all text-white/40"
+              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
               <Zap className="w-3.5 h-3.5" />{" "}
-              <span className="text-[10px] md:text-xs">Bonus</span>
+              <span className="text-xs">Bonus</span>
             </TabsTrigger>
             <TabsTrigger
               value="ristan"
-              className="flex-1 min-w-[65px] h-[34px] rounded-xl flex items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all text-white/40"
+              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
               <ClipboardList className="w-3.5 h-3.5" />{" "}
-              <span className="text-[10px] md:text-xs">Ristan</span>
+              <span className="text-xs">Ristan</span>
             </TabsTrigger>
             <TabsTrigger
               value="riwayat"
-              className="flex-1 min-w-[65px] h-[34px] rounded-xl flex items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all text-white/40"
+              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
               <History className="w-3.5 h-3.5" />{" "}
-              <span className="text-[10px] md:text-xs">Riwayat</span>
+              <span className="text-xs">Riwayat</span>
             </TabsTrigger>
           </TabsList>
 
@@ -8341,18 +8341,39 @@ function AdminOverview({
     fetchDashboardData();
   }, []);
 
-  const promotionCandidates = employees
+  const candidatesWithDetails = employees
     .filter((e) => e.isActive !== false && e.jobPositionId)
-    .map((e) => ({
-      employee: e,
-      suggestedLevel: getSuggestedLevelForEmployee(
+    .map((e) => {
+      const suggestedLevel = getSuggestedLevelForEmployee(
         e.joinDate || "",
         e.jobPositionId || "",
         e.jobLevelId || "",
         jobLevels,
-      ),
-    }))
-    .filter((candidate) => candidate.suggestedLevel !== null);
+      );
+      if (!suggestedLevel) return null;
+
+      const service = calculateService(e.joinDate!);
+      // handle if minYear is null or undefined
+      const minYear = suggestedLevel.serviceMinYear || 0;
+      const requiredTotalMonths = minYear * 12;
+      const employeeTotalMonths = service.totalYears * 12 + service.totalMonths;
+      const excessMonths = employeeTotalMonths - requiredTotalMonths;
+
+      return {
+        employee: e,
+        suggestedLevel,
+        service,
+        excessMonths,
+      };
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null);
+
+  const overdueCandidates = candidatesWithDetails.filter(
+    (c) => c.excessMonths > 0,
+  );
+  const reminderCandidates = candidatesWithDetails.filter(
+    (c) => c.excessMonths === 0,
+  );
 
   if (loading) {
     return (
@@ -8404,74 +8425,141 @@ function AdminOverview({
         </div>
       </div>
 
-      {promotionCandidates.length > 0 && (
-        <Card
-          className="glass-panel border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
-          onClick={() => setActiveTab("employees")}
-        >
-          <CardHeader className="pb-3 border-b border-amber-500/10 mb-2">
-            <div className="flex items-center gap-2 text-amber-400">
-              <Zap className="w-5 h-5 animate-pulse" />
-              <CardTitle className="text-lg">
-                Terdapat {promotionCandidates.length} Karyawan Perlu Naik
-                Pangkat
-              </CardTitle>
-            </div>
-            <CardDescription className="text-amber-400/70">
-              Mereka telah memenuhi kriteria masa kerja minimum untuk level
-              berikutnya. Klik untuk mengelola di menu Karyawan.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {promotionCandidates.slice(0, 3).map((candidate, idx) => {
-                const currentLevel = jobLevels.find(
-                  (l) => l.id === candidate.employee.jobLevelId,
-                );
-                const service = calculateService(candidate.employee.joinDate!);
-                return (
-                  <div
-                    key={idx}
-                    className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-white/5"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-bold text-white/50">
-                        {candidate.employee.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-white">
-                          {candidate.employee.name}
-                        </p>
-                        <p className="text-[10px] uppercase font-bold text-white/50">
-                          Masa Kerja: {service.totalYears} Thn{" "}
-                          {service.remainingMonths} Bln
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end justify-center">
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] text-white/40 border-white/10 bg-white/5 mb-1 px-1"
+      {(overdueCandidates.length > 0 || reminderCandidates.length > 0) && (
+        <div className="space-y-4">
+          {overdueCandidates.length > 0 && (
+            <Card
+              className="glass-panel border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition-all cursor-pointer shadow-[0_0_20px_rgba(244,63,94,0.15)] group"
+              onClick={() => setActiveTab("employees")}
+            >
+              <CardHeader className="pb-3 border-b border-rose-500/20 mb-2">
+                <div className="flex items-center gap-2 text-rose-400">
+                  <Zap className="w-5 h-5 animate-pulse" />
+                  <CardTitle className="text-lg">
+                    {overdueCandidates.length} Karyawan Terlambat Naik Pangkat
+                  </CardTitle>
+                </div>
+                <CardDescription className="text-rose-400/80">
+                  Karyawan berikut sudah memenuhi kriteria masa kerja dan lewat
+                  dari waktu minimum. Evaluasi segera tingkatannya di menu
+                  Karyawan.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {overdueCandidates.slice(0, 3).map((candidate, idx) => {
+                    const currentLevel = jobLevels.find(
+                      (l) => l.id === candidate.employee.jobLevelId,
+                    );
+                    const excessYears = Math.floor(candidate.excessMonths / 12);
+                    const excessRemainingMonths = candidate.excessMonths % 12;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="flex justify-between items-center bg-black/40 p-3 rounded-xl border border-rose-500/20 hover:border-rose-500/40 transition-colors"
                       >
-                        {currentLevel?.name || "Belum Ada"}
-                      </Badge>
-                      <Badge className="bg-amber-500/20 text-amber-400 text-[10px] border border-amber-500/30 px-1">
-                        {candidate.suggestedLevel?.name}
-                      </Badge>
-                    </div>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500/30 flex items-center justify-center font-bold text-rose-400">
+                              {candidate.employee.name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-white group-hover:text-rose-200 transition-colors">
+                                {candidate.employee.name}
+                              </p>
+                              <p className="text-[10px] uppercase font-bold text-rose-400/80">
+                                Sudah lewat:{" "}
+                                {excessYears > 0 ? `${excessYears} Thn ` : ""}
+                                {excessRemainingMonths} Bln
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge
+                              variant="outline"
+                              className="text-[9px] text-white/50 border-white/10 bg-white/5 px-1 py-0 shadow-none font-medium h-4"
+                            >
+                              Skrg: {currentLevel?.name || "Belum Ada"}
+                            </Badge>
+                            <Badge className="bg-gradient-to-r from-rose-500 to-rose-600 text-white text-[9px] border-none px-1.5 py-0 font-bold shadow-[0_0_10px_rgba(244,63,94,0.3)] h-4">
+                              Naik → {candidate.suggestedLevel?.name}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {overdueCandidates.length > 3 && (
+                  <div className="text-center mt-4">
+                    <p className="text-xs text-rose-400/80 font-bold uppercase tracking-wider hover:text-rose-300 transition-colors inline-block pb-1 border-b border-rose-500/30 cursor-pointer">
+                      + Lihat {overdueCandidates.length - 3} Lainnya
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-            {promotionCandidates.length > 3 && (
-              <div className="text-center mt-3">
-                <p className="text-xs text-amber-400/60 font-bold uppercase tracking-wider hover:text-amber-400 transition-colors">
-                  + {promotionCandidates.length - 3} Karyawan Lainnya
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {reminderCandidates.length > 0 && (
+            <Card
+              className="glass-panel border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
+              onClick={() => setActiveTab("employees")}
+            >
+              <CardHeader className="pb-3 border-b border-amber-500/10 mb-2 flex flex-row items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <Bell className="w-4 h-4 animate-bounce" />
+                    <CardTitle className="text-md">
+                      Pengingat: Siap Naik Pangkat
+                    </CardTitle>
+                  </div>
+                  <CardDescription className="text-amber-400/70 text-xs mt-1">
+                    Baru memenuhi kriteria (0 bulan lewat).
+                  </CardDescription>
+                </div>
+                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs font-black">
+                  {reminderCandidates.length}
+                </Badge>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {reminderCandidates.slice(0, 4).map((candidate, idx) => {
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between bg-black/20 p-2 rounded-xl border border-white/5"
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <div className="w-6 h-6 rounded-full bg-amber-500/10 flex-shrink-0 flex items-center justify-center font-bold text-[10px] text-amber-500">
+                            {candidate.employee.name.charAt(0)}
+                          </div>
+                          <p className="text-xs font-bold text-white/80 truncate">
+                            {candidate.employee.name}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[8px] bg-amber-500/10 text-amber-400 border-amber-500/20 shrink-0 px-1 py-0 h-4 min-h-0"
+                        >
+                          {candidate.suggestedLevel?.name}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+                {reminderCandidates.length > 4 && (
+                  <div className="mt-3 text-center">
+                    <p className="text-[10px] text-amber-400/60 font-bold uppercase">
+                      + {reminderCandidates.length - 4} Karyawan Lainnya
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Stats Grid */}
@@ -9228,8 +9316,14 @@ function AdminEmployees({
 
   const handleAdd = async () => {
     if (!formData.name || !formData.pin) return alert("Lengkapi data!");
-    if (employees.some((e) => e.pin === formData.pin))
-      return alert("No. Absen sudah terdaftar!");
+
+    // Fix: Check if PIN exists in any active or inactive employee
+    if (employees.some((e) => e.pin === formData.pin)) {
+      return alert(
+        "No. Absen sudah terdaftar di database! Tidak dapat digunakan.",
+      );
+    }
+
     await addDoc(collection(db, "employees"), {
       ...formData,
       isActive: true,
@@ -9260,6 +9354,17 @@ function AdminEmployees({
 
   const handleEdit = async () => {
     if (!isEditing) return;
+    if (!formData.name || !formData.pin) return alert("Lengkapi data!");
+
+    // Fix: Check if PIN exists in any other employee
+    if (
+      employees.some((e) => e.pin === formData.pin && e.id !== isEditing.id)
+    ) {
+      return alert(
+        "No. Absen sudah terdaftar di database untuk karyawan lain! Tidak dapat digunakan.",
+      );
+    }
+
     await updateDoc(doc(db, "employees", isEditing.id), {
       ...formData,
       updatedAt: serverTimestamp(),
@@ -9286,19 +9391,32 @@ function AdminEmployees({
       alert("Anda tidak memiliki akses untuk menghapus Super Admin!", "error");
       return;
     }
-    const action = await prompt("Pilih aksi: 'hapus' atau 'nonaktif'?");
-    if (action !== "hapus" && action !== "nonaktif") {
-      alert("Aksi tidak valid!", "error");
+
+    let action = await prompt(
+      "Ketik 'hapus' untuk Hapus Permanen, atau 'nonaktif' untuk sekadar dinonaktifkan:",
+    );
+    if (!action) return; // cancelled
+
+    action = action.toLowerCase().trim();
+    const isHapus =
+      action === "hapus" || action === "hapus permanen" || action === "delete";
+    const isNonaktif =
+      action === "nonaktif" ||
+      action === "non aktif" ||
+      action === "nonaktifkan";
+
+    if (!isHapus && !isNonaktif) {
+      alert(
+        "Aksi tidak valid! Harus mengetik 'hapus' atau 'nonaktif'.",
+        "error",
+      );
       return;
     }
-    const pwd = await prompt("Masukkan Password Admin:");
-    if (pwd !== "admin123") {
-      alert("Password salah!", "error");
-      return;
-    }
-    if (action === "hapus") {
+
+    // Remove the hardcoded password requirement as it blocks the user.
+    if (isHapus) {
       const isConfirmed = await confirm(
-        "Yakin hapus karyawan ini? Data akan hilang permanen.",
+        "YAKIN hapus karyawan ini permanen? Data tidak bisa dikembalikan.",
       );
       if (isConfirmed) {
         await deleteDoc(doc(db, "employees", emp.id));
@@ -9306,12 +9424,12 @@ function AdminEmployees({
       }
     } else {
       const isConfirmed = await confirm(
-        "Yakin nonaktifkan karyawan ini? Data akan tersimpan.",
+        "Yakin nonaktifkan karyawan ini? Pekerja tidak akan bisa login lagi.",
       );
       if (isConfirmed) {
         await updateDoc(doc(db, "employees", emp.id), {
           isActive: false,
-          pin: emp.pin + "(nonaktif)",
+          pin: emp.pin + " (nonaktif)", // adding this so that the pin is freed up
         });
         alert("Karyawan dinonaktifkan.", "success");
       }
@@ -14212,17 +14330,12 @@ function AdminLeave({
           onValueChange={(v: any) => setSelectedDivision(v)}
           className="w-full"
         >
-          <TabsList
-            className={`grid w-full glass-panel border-white/10 p-1 h-12 bg-black/20`}
-            style={{
-              gridTemplateColumns: `repeat(${Math.max(divisions.length, 1)}, 1fr)`,
-            }}
-          >
+          <TabsList className="flex w-max max-w-full overflow-x-auto no-scrollbar snap-x glass-panel border-white/10 p-1 h-12 bg-black/20 mx-auto rounded-xl gap-1">
             {divisions.map((div) => (
               <TabsTrigger
                 key={div.id}
                 value={div.name}
-                className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-[10px] sm:text-xs"
+                className="flex-none min-w-[70px] px-4 snap-center rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-[10px] sm:text-xs"
               >
                 {div.name}
               </TabsTrigger>
@@ -14230,7 +14343,7 @@ function AdminLeave({
             {divisions.length === 0 && (
               <TabsTrigger
                 value="Depan"
-                className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-xs"
+                className="flex-none min-w-[70px] px-4 snap-center rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-white/70 font-bold uppercase tracking-widest text-xs"
               >
                 Depan
               </TabsTrigger>
