@@ -7695,7 +7695,7 @@ function AdminDashboard({
               </Button>
             }
           />
-          <DialogContent className="glass-panel text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl bg-background/95 border-border">
+          <DialogContent className="glass-panel text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-y-0 border-l-0 duration-300 shadow-2xl bg-[#262525] border-border">
             <div className="flex items-center gap-3 mb-10 px-2">
               <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
                 <Settings className="w-5 h-5 text-primary" />
