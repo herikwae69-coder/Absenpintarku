@@ -4823,13 +4823,6 @@ function EmployeeView({
               <ClipboardList className="w-3.5 h-3.5" />{" "}
               <span className="text-xs">Ristan</span>
             </TabsTrigger>
-            <TabsTrigger
-              value="riwayat"
-              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
-            >
-              <History className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Riwayat</span>
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent
@@ -5156,6 +5149,118 @@ function EmployeeView({
                 </div>
               </DialogContent>
             </Dialog>
+
+            <div className="mt-8">
+              <Card className="glass-panel border-none shadow-lg">
+                <CardHeader className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
+                  <CardTitle className="text-white">Riwayat Absensi</CardTitle>
+                  <Select
+                    value={selectedPeriod}
+                    onValueChange={setSelectedPeriod}
+                  >
+                    <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white">
+                      <SelectValue placeholder="Pilih Periode">
+                        {periodOptions.find((p) => p.value === selectedPeriod)
+                          ?.label || "Pilih Periode"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="glass-panel border-white/20 text-white">
+                      {periodOptions.map((p) => (
+                        <SelectItem
+                          key={p.value}
+                          value={p.value}
+                          className="hover:bg-white/10"
+                        >
+                          {p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto no-scrollbar">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
+                          <TableHead className="text-white/40">
+                            Tanggal
+                          </TableHead>
+                          <TableHead className="text-white/40">Masuk</TableHead>
+                          <TableHead className="text-white/40">
+                            Pulang
+                          </TableHead>
+                          <TableHead className="text-white/40">
+                            Status
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {history
+                          .filter((h) => {
+                            const p = periodOptions.find(
+                              (op) => op.value === selectedPeriod,
+                            );
+                            if (!p) return true;
+                            return (
+                              h.date >= format(p.start, "yyyy-MM-dd") &&
+                              h.date <= format(p.end, "yyyy-MM-dd")
+                            );
+                          })
+                          .map((a) => (
+                            <TableRow
+                              key={a.id}
+                              className="border-white/5 hover:bg-white/5"
+                            >
+                              <TableCell className="text-white/70">
+                                {a.date
+                                  ? format(new Date(a.date), "dd MMM yyyy")
+                                  : "-"}
+                              </TableCell>
+                              <TableCell className="text-white/70 font-mono">
+                                {a.checkIn
+                                  ? format(toDateSafe(a.checkIn), "HH:mm")
+                                  : "-"}
+                              </TableCell>
+                              <TableCell className="text-white/70 font-mono">
+                                {a.checkOut
+                                  ? format(toDateSafe(a.checkOut), "HH:mm")
+                                  : "-"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className="border-white/20 text-white/50"
+                                >
+                                  {a.status.toUpperCase()}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        {history.filter((h) => {
+                          const p = periodOptions.find(
+                            (op) => op.value === selectedPeriod,
+                          );
+                          if (!p) return true;
+                          return (
+                            h.date >= format(p.start, "yyyy-MM-dd") &&
+                            h.date <= format(p.end, "yyyy-MM-dd")
+                          );
+                        }).length === 0 && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={4}
+                              className="text-center py-6 text-white/30 italic"
+                            >
+                              Tidak ada data untuk periode ini.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent
@@ -5167,115 +5272,6 @@ function EmployeeView({
               employees={employees}
               sections={sections}
             />
-          </TabsContent>
-
-          <TabsContent
-            value="riwayat"
-            className="mt-0 focus-visible:outline-none focus-visible:ring-0"
-          >
-            <Card className="glass-panel border-none shadow-lg">
-              <CardHeader className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
-                <CardTitle className="text-white">Riwayat Absensi</CardTitle>
-                <Select
-                  value={selectedPeriod}
-                  onValueChange={setSelectedPeriod}
-                >
-                  <SelectTrigger className="w-full md:w-[200px] glass-panel border-white/10 text-white">
-                    <SelectValue placeholder="Pilih Periode">
-                      {periodOptions.find((p) => p.value === selectedPeriod)
-                        ?.label || "Pilih Periode"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="glass-panel border-white/20 text-white">
-                    {periodOptions.map((p) => (
-                      <SelectItem
-                        key={p.value}
-                        value={p.value}
-                        className="hover:bg-white/10"
-                      >
-                        {p.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto no-scrollbar">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
-                        <TableHead className="text-white/40">Tanggal</TableHead>
-                        <TableHead className="text-white/40">Masuk</TableHead>
-                        <TableHead className="text-white/40">Pulang</TableHead>
-                        <TableHead className="text-white/40">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {history
-                        .filter((h) => {
-                          const p = periodOptions.find(
-                            (op) => op.value === selectedPeriod,
-                          );
-                          if (!p) return true;
-                          return (
-                            h.date >= format(p.start, "yyyy-MM-dd") &&
-                            h.date <= format(p.end, "yyyy-MM-dd")
-                          );
-                        })
-                        .map((a) => (
-                          <TableRow
-                            key={a.id}
-                            className="border-white/5 hover:bg-white/5"
-                          >
-                            <TableCell className="text-white/70">
-                              {a.date
-                                ? format(new Date(a.date), "dd MMM yyyy")
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-white/70 font-mono">
-                              {a.checkIn
-                                ? format(toDateSafe(a.checkIn), "HH:mm")
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-white/70 font-mono">
-                              {a.checkOut
-                                ? format(toDateSafe(a.checkOut), "HH:mm")
-                                : "-"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className="border-white/20 text-white/50"
-                              >
-                                {a.status.toUpperCase()}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      {history.filter((h) => {
-                        const p = periodOptions.find(
-                          (op) => op.value === selectedPeriod,
-                        );
-                        if (!p) return true;
-                        return (
-                          h.date >= format(p.start, "yyyy-MM-dd") &&
-                          h.date <= format(p.end, "yyyy-MM-dd")
-                        );
-                      }).length === 0 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={4}
-                            className="text-center py-6 text-white/30 italic"
-                          >
-                            Tidak ada data untuk periode ini.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent
