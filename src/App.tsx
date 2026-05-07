@@ -7695,7 +7695,7 @@ function AdminDashboard({
               </Button>
             }
           />
-          <DialogContent className="text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-white/10 border-y-0 border-l-0 duration-300 shadow-2xl !bg-[#151515] overflow-hidden">
+          <DialogContent className="text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-white/10 border-y-0 border-l-0 duration-300 shadow-2xl !bg-[#000000] overflow-hidden">
             <div className="flex items-center gap-3 mb-10 px-2">
               <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
                 <Settings className="w-5 h-5 text-primary" />
@@ -7723,7 +7723,7 @@ function AdminDashboard({
                             <div
                               className={`w-1 h-4 rounded-full transition-all duration-300 ${isExpanded ? "bg-primary" : "bg-white/10"}`}
                             />
-                            <h3 className="text-[11px] font-black text-white/40 group-hover/btn:text-white/70 uppercase tracking-[0.25em] transition-colors">
+                            <h3 className="text-[10px] font-black text-white/40 group-hover/btn:text-white/70 uppercase tracking-[0.25em] transition-colors">
                               {group.label}
                             </h3>
                           </div>
