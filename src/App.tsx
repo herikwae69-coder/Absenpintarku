@@ -8070,6 +8070,8 @@ function AdminDashboard({
                   role={currentUser?.role || "employee"}
                   confirm={confirm}
                   alert={alert}
+                  employees={employees}
+                  jobLevels={jobLevels}
                 />
               </TabsContent>
             </div>
@@ -8176,12 +8178,16 @@ function AdminOverview({
   role,
   confirm,
   alert,
+  employees,
+  jobLevels,
 }: {
   setActiveTab: (tab: string) => void;
   adminName: string;
   role: string;
   confirm: (msg: string, title?: string) => Promise<boolean>;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
+  employees: Employee[];
+  jobLevels: JobLevel[];
 }) {
   const [stats, setStats] = useState({
     totalEmployees: 0,
@@ -8335,6 +8341,19 @@ function AdminOverview({
     fetchDashboardData();
   }, []);
 
+  const promotionCandidates = employees
+    .filter((e) => e.isActive !== false && e.jobPositionId)
+    .map((e) => ({
+      employee: e,
+      suggestedLevel: getSuggestedLevelForEmployee(
+        e.joinDate || "",
+        e.jobPositionId || "",
+        e.jobLevelId || "",
+        jobLevels,
+      ),
+    }))
+    .filter((candidate) => candidate.suggestedLevel !== null);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
@@ -8384,6 +8403,76 @@ function AdminOverview({
           </div>
         </div>
       </div>
+
+      {promotionCandidates.length > 0 && (
+        <Card
+          className="glass-panel border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
+          onClick={() => setActiveTab("employees")}
+        >
+          <CardHeader className="pb-3 border-b border-amber-500/10 mb-2">
+            <div className="flex items-center gap-2 text-amber-400">
+              <Zap className="w-5 h-5 animate-pulse" />
+              <CardTitle className="text-lg">
+                Terdapat {promotionCandidates.length} Karyawan Perlu Naik
+                Pangkat
+              </CardTitle>
+            </div>
+            <CardDescription className="text-amber-400/70">
+              Mereka telah memenuhi kriteria masa kerja minimum untuk level
+              berikutnya. Klik untuk mengelola di menu Karyawan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {promotionCandidates.slice(0, 3).map((candidate, idx) => {
+                const currentLevel = jobLevels.find(
+                  (l) => l.id === candidate.employee.jobLevelId,
+                );
+                const service = calculateService(candidate.employee.joinDate!);
+                return (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-center bg-black/20 p-3 rounded-xl border border-white/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-bold text-white/50">
+                        {candidate.employee.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-white">
+                          {candidate.employee.name}
+                        </p>
+                        <p className="text-[10px] uppercase font-bold text-white/50">
+                          Masa Kerja: {service.totalYears} Thn{" "}
+                          {service.remainingMonths} Bln
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end justify-center">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-white/40 border-white/10 bg-white/5 mb-1 px-1"
+                      >
+                        {currentLevel?.name || "Belum Ada"}
+                      </Badge>
+                      <Badge className="bg-amber-500/20 text-amber-400 text-[10px] border border-amber-500/30 px-1">
+                        {candidate.suggestedLevel?.name}
+                      </Badge>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {promotionCandidates.length > 3 && (
+              <div className="text-center mt-3">
+                <p className="text-xs text-amber-400/60 font-bold uppercase tracking-wider hover:text-amber-400 transition-colors">
+                  + {promotionCandidates.length - 3} Karyawan Lainnya
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
@@ -8987,10 +9076,10 @@ const getSuggestedLevelForEmployee = (
 
   for (const level of filteredLevels) {
     const minMatch =
-      level.serviceMinYear === undefined ||
+      level.serviceMinYear == null ||
       service.totalYears >= level.serviceMinYear;
     const maxMatch =
-      level.serviceMaxYear === undefined ||
+      level.serviceMaxYear == null ||
       service.totalYears <= level.serviceMaxYear;
 
     if (minMatch && maxMatch) {
@@ -9866,13 +9955,15 @@ function AdminJobConfig({
     name: string;
     rank: number;
     promotionType: "pusat" | "masa_kerja";
-    serviceMinYear?: number;
-    serviceMaxYear?: number;
+    serviceMinYear: number | null;
+    serviceMaxYear: number | null;
     description: string;
   }>({
     name: "",
     rank: 0,
     promotionType: "pusat",
+    serviceMinYear: null,
+    serviceMaxYear: null,
     description: "",
   });
   const [editingLevel, setEditingLevel] = useState<JobLevel | null>(null);
@@ -9910,6 +10001,8 @@ function AdminJobConfig({
       name: "",
       rank: 0,
       promotionType: "pusat",
+      serviceMinYear: null,
+      serviceMaxYear: null,
       description: "",
     });
     setEditingLevel(null);
@@ -10220,15 +10313,18 @@ function AdminJobConfig({
                               </Label>
                               <Input
                                 type="number"
-                                value={levelForm.serviceMinYear ?? ""}
-                                onChange={(e) =>
+                                value={
+                                  levelForm.serviceMinYear === null
+                                    ? ""
+                                    : levelForm.serviceMinYear
+                                }
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value);
                                   setLevelForm({
                                     ...levelForm,
-                                    serviceMinYear: e.target.value
-                                      ? parseInt(e.target.value)
-                                      : undefined,
-                                  })
-                                }
+                                    serviceMinYear: isNaN(val) ? null : val,
+                                  });
+                                }}
                                 className="field-input"
                                 placeholder="Contoh: 0 atau 3"
                               />
@@ -10239,15 +10335,18 @@ function AdminJobConfig({
                               </Label>
                               <Input
                                 type="number"
-                                value={levelForm.serviceMaxYear ?? ""}
-                                onChange={(e) =>
+                                value={
+                                  levelForm.serviceMaxYear === null
+                                    ? ""
+                                    : levelForm.serviceMaxYear
+                                }
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value);
                                   setLevelForm({
                                     ...levelForm,
-                                    serviceMaxYear: e.target.value
-                                      ? parseInt(e.target.value)
-                                      : undefined,
-                                  })
-                                }
+                                    serviceMaxYear: isNaN(val) ? null : val,
+                                  });
+                                }}
                                 className="field-input"
                                 placeholder="Kosongkan jika tanpa batas"
                               />
@@ -10309,12 +10408,12 @@ function AdminJobConfig({
                                 className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px] uppercase font-black"
                               >
                                 Masa Kerja:{" "}
-                                {l.serviceMinYear !== undefined &&
-                                l.serviceMaxYear !== undefined
+                                {l.serviceMinYear != null &&
+                                l.serviceMaxYear != null
                                   ? `${l.serviceMinYear} - ${l.serviceMaxYear} Thun`
-                                  : l.serviceMinYear !== undefined
+                                  : l.serviceMinYear != null
                                     ? `> ${l.serviceMinYear} Thn`
-                                    : l.serviceMaxYear !== undefined
+                                    : l.serviceMaxYear != null
                                       ? `< ${l.serviceMaxYear} Thn`
                                       : "Bebas"}
                               </Badge>
@@ -10343,8 +10442,8 @@ function AdminJobConfig({
                                   name: l.name,
                                   rank: l.rank,
                                   promotionType: l.promotionType || "pusat",
-                                  serviceMinYear: l.serviceMinYear,
-                                  serviceMaxYear: l.serviceMaxYear,
+                                  serviceMinYear: l.serviceMinYear ?? null,
+                                  serviceMaxYear: l.serviceMaxYear ?? null,
                                   description: l.description || "",
                                 });
                                 setShowAddLevel(true);

@@ -38,8 +38,8 @@ export interface JobLevel {
   name: string;
   rank: number; // For promotion order
   promotionType?: 'pusat' | 'masa_kerja';
-  serviceMinYear?: number;
-  serviceMaxYear?: number;
+  serviceMinYear?: number | null;
+  serviceMaxYear?: number | null;
   promotionCriteria?: string;
   description?: string;
 }
