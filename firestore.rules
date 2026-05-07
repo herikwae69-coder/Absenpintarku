@@ -2,6 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Pillar 0: Global Safety Net
+    match /{document=**} { allow read, write: if false; }
+
+    // Test Connection Path
+    match /test/connection { allow read: if true; }
+    
     // Pillar 3: Path Variable Hardening (isValidId)
     function isValidId(id) { 
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$'); 
@@ -69,11 +75,6 @@ service cloud.firestore {
     }
     match /{path=**}/paymentsBersama/{payment} {
         allow read, list: if true;
-    }
-
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
     }
   }
 }

@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,31 +12,9 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API Route untuk mengambil lirik
-  app.post("/api/lyrics", async (req, res) => {
-    try {
-      const { title, artist } = req.body;
-      
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "Gemini API Key tidak terkonfigurasi di server." });
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const prompt = `Berikan lirik lengkap untuk lagu "${title}" oleh "${artist || 'Artis Tidak Diketahui'}". 
-      Hanya berikan liriknya saja tanpa penjelasan tambahan. Jika lirik tidak ditemukan, katakan "Lirik tidak ditemukan".`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-
-      res.json({ lyrics: response.text || 'Lirik tidak tersedia.' });
-    } catch (error: any) {
-      console.error("Gemini Error:", error);
-      res.status(500).json({ error: "Gagal mengambil lirik dari AI." });
-    }
+  // API routes go here
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
   });
 
   // Vite middleware untuk development

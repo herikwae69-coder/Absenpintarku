@@ -3538,8 +3538,8 @@ function EmployeeView({
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex flex-wrap w-full glass-panel p-1.5 h-auto bg-white/5 border-white/10 mb-8 rounded-2xl gap-2 justify-center">
-          <TabsTrigger value="absen" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
+        <TabsList className="flex flex-wrap w-[521px] glass-panel p-1.5 h-[40px] bg-white/5 border-white/10 mb-8 rounded-2xl gap-2 justify-center mx-auto">
+          <TabsTrigger value="absen" className="w-[97px] h-[33px] min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all text-white/40">
             <Clock className="w-4 h-4" /> <span className="text-[10px] md:text-sm">Absen</span>
           </TabsTrigger>
           <TabsTrigger value="libur" className="flex-1 min-w-[60px] rounded-xl flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold transition-all py-3 md:py-3 text-white/40">
@@ -9692,47 +9692,7 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
   }, []);
   const [showMusicPopup, setShowMusicPopup] = useState(false);
   const [musicPopupText, setMusicPopupText] = useState('Silakan ajukan request libur Anda.');
-  const [songDetails, setSongDetails] = useState<{title: string, artist: string} | null>(null);
-  const [lyrics, setLyrics] = useState<string>('');
-  const [showLyricsUI, setShowLyricsUI] = useState(false);
-  const [fetchingLyrics, setFetchingLyrics] = useState(false);
   const [requestKata, setRequestKata] = useState('');
-
-  const fetchLyrics = async () => {
-    if (!songDetails || !songDetails.title) return;
-    setFetchingLyrics(true);
-    try {
-      const response = await fetch('/api/lyrics', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          title: songDetails.title, 
-          artist: songDetails.artist 
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.lyrics) {
-        setLyrics(data.lyrics);
-      } else {
-        setLyrics('Lirik tidak ditemukan.');
-      }
-    } catch (error) {
-      console.error("Error fetching lyrics:", error);
-      setLyrics('Terjadi kesalahan saat mengambil lirik.');
-    } finally {
-      setFetchingLyrics(false);
-    }
-  };
-
-  useEffect(() => {
-    if (songDetails && songDetails.title && !lyrics && !fetchingLyrics && showAdd) {
-      fetchLyrics();
-    }
-  }, [songDetails, showAdd]);
 
   const [formData, setFormData] = useState<{dates: string[], reason: string, sectionId: string}>({ 
     dates: [],
@@ -9765,11 +9725,6 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
         }
         if (data.popupText) {
           setMusicPopupText(data.popupText);
-        }
-        if (data.songTitle) {
-          setSongDetails({ title: data.songTitle, artist: data.songArtist || '' });
-        } else {
-          setSongDetails(null);
         }
       }
     });
@@ -10240,21 +10195,6 @@ function EmployeeLeave({ employee, employees, sections }: { employee: Employee, 
                   <DialogFooter className="mt-4">
                     <Button onClick={handleSubmit} className="w-full bg-primary hover:bg-primary/80 font-bold shadow-lg">Submit Request Libur</Button>
                   </DialogFooter>
-
-                  {songDetails && (
-                    <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
-                      <div className="bg-black/20 rounded-xl p-4 border border-white/5 max-h-40 overflow-y-auto custom-scrollbar relative">
-                        {fetchingLyrics && (
-                          <div className="absolute top-2 right-2">
-                            <Loader2 className="w-3 h-3 text-primary animate-spin" />
-                          </div>
-                        )}
-                        <p className="text-[10px] leading-relaxed text-white/60 whitespace-pre-line text-center italic">
-                          {lyrics || (fetchingLyrics ? "Sedang mengambil lirik..." : "Lirik tidak tersedia.")}
-                        </p>
-                      </div>
-                    </div>
-                  )}
                 </DialogContent>
               </Dialog>
             </CardHeader>
