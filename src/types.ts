@@ -37,6 +37,9 @@ export interface JobLevel {
   jobPositionId: string; // Linked to a specific position
   name: string;
   rank: number; // For promotion order
+  promotionType?: 'pusat' | 'masa_kerja';
+  serviceMinYear?: number;
+  serviceMaxYear?: number;
   promotionCriteria?: string;
   description?: string;
 }
