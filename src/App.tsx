@@ -6347,6 +6347,27 @@ function AdminDatabaseStatus() {
 }
 
 // --- ADMIN: EMPLOYEES ---
+// --- UTILS ---
+const calculateService = (joinDateStr?: string) => {
+  if (!joinDateStr) return { totalYears: 0, totalMonths: 0, label: '-' };
+  const joinDate = new Date(joinDateStr);
+  const now = new Date();
+  
+  let years = now.getFullYear() - joinDate.getFullYear();
+  let months = now.getMonth() - joinDate.getMonth();
+  
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  
+  return { 
+    totalYears: years, 
+    totalMonths: months, 
+    label: years > 0 ? `${years} thn ${months} bln` : `${months} bln` 
+  };
+};
+
 function AdminEmployees({ 
   employees, 
   shifts, 
@@ -6679,15 +6700,47 @@ function AdminEmployees({
 
               <div className="grid gap-2">
                 <Label className="text-white/70 text-xs">Level</Label>
-                <Select value={formData.jobLevelId || 'none'} onValueChange={(val: any) => setFormData({...formData, jobLevelId: val === 'none' ? '' : val})}>
-                  <SelectTrigger className="field-input text-white border-white/10"><SelectValue placeholder="Pilih Level" /></SelectTrigger>
-                  <SelectContent className="glass-panel border-white/10 text-white">
-                    <SelectItem value="none">Tanpa Level</SelectItem>
-                    {jobLevels.filter(l => l.jobPositionId === formData.jobPositionId).map(l => (
-                      <SelectItem key={l.id} value={l.id} className="hover:bg-white/10">{l.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1">
+                  <Select value={formData.jobLevelId || 'none'} onValueChange={(val: any) => setFormData({...formData, jobLevelId: val === 'none' ? '' : val})}>
+                    <SelectTrigger className="field-input text-white border-white/10 flex-1"><SelectValue placeholder="Pilih Level" /></SelectTrigger>
+                    <SelectContent className="glass-panel border-white/10 text-white">
+                      <SelectItem value="none">Tanpa Level</SelectItem>
+                      {jobLevels.filter(l => l.jobPositionId === formData.jobPositionId).map(l => (
+                        <SelectItem key={l.id} value={l.id} className="hover:bg-white/10">{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    type="button"
+                    onClick={() => {
+                      const service = calculateService(formData.joinDate);
+                      const filteredLevels = jobLevels.filter(l => l.jobPositionId === formData.jobPositionId);
+                      let suggestedLevelId = '';
+                      
+                      // Logic based on user's hint
+                      if (service.totalYears < 3) {
+                        suggestedLevelId = filteredLevels.find(l => l.name.includes('C'))?.id || '';
+                      } else if (service.totalYears < 5) {
+                        suggestedLevelId = filteredLevels.find(l => l.name.includes('B'))?.id || '';
+                      } else {
+                        suggestedLevelId = filteredLevels.find(l => l.name.includes('A'))?.id || '';
+                      }
+                      
+                      if (suggestedLevelId) {
+                        setFormData({...formData, jobLevelId: suggestedLevelId});
+                        toast.success(`Disarankan ke Level ${jobLevels.find(l => l.id === suggestedLevelId)?.name}`);
+                      } else {
+                        toast.info("Gunakan Level C (< 3th), B (3-5th), A (> 5th)");
+                      }
+                    }}
+                    className="h-10 w-10 text-primary hover:bg-primary/10 border border-white/10"
+                    title="Auto-suggest based on join date"
+                  >
+                    <Zap className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
 
               <div className="grid gap-2">
@@ -6755,6 +6808,7 @@ function AdminEmployees({
                 <TableHead className="text-white/40 whitespace-nowrap">Jabatan</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">Level</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">Tgl Masuk</TableHead>
+                <TableHead className="text-white/40 whitespace-nowrap">Masa Kerja</TableHead>
                 <TableHead className="text-white/40 whitespace-nowrap">Status</TableHead>
                 <TableHead className="text-right text-white/40 whitespace-nowrap">Aksi</TableHead>
               </TableRow>
@@ -6777,6 +6831,9 @@ function AdminEmployees({
                   </TableCell>
                   <TableCell className="text-white/60 whitespace-nowrap font-mono text-[11px]">
                     {e.joinDate ? format(new Date(e.joinDate), 'dd MMM yyyy') : '-'}
+                  </TableCell>
+                  <TableCell className="text-white/60 whitespace-nowrap font-bold text-xs">
+                    {calculateService(e.joinDate).label}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
                     {e.isActive !== false ? (
