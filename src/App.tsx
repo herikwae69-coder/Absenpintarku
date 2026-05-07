@@ -6688,7 +6688,13 @@ function AdminEmployees({
                     setFormData({...formData, jobPositionId: id, jobLevelId: ''});
                   }}
                 >
-                  <SelectTrigger className="field-input text-white border-white/10"><SelectValue placeholder="Pilih Jabatan" /></SelectTrigger>
+                  <SelectTrigger className="field-input text-white border-white/10">
+                    <SelectValue placeholder="Pilih Jabatan">
+                      {formData.jobPositionId && formData.jobPositionId !== 'none' 
+                        ? (jobPositions.find(p => p.id === formData.jobPositionId)?.name || 'Pilih Jabatan')
+                        : 'Pilih Jabatan'}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent className="glass-panel border-white/10 text-white">
                     <SelectItem value="none">Tanpa Jabatan</SelectItem>
                     {jobPositions.map(p => (
@@ -6702,7 +6708,13 @@ function AdminEmployees({
                 <Label className="text-white/70 text-xs">Level</Label>
                 <div className="flex gap-1">
                   <Select value={formData.jobLevelId || 'none'} onValueChange={(val: any) => setFormData({...formData, jobLevelId: val === 'none' ? '' : val})}>
-                    <SelectTrigger className="field-input text-white border-white/10 flex-1"><SelectValue placeholder="Pilih Level" /></SelectTrigger>
+                    <SelectTrigger className="field-input text-white border-white/10 flex-1">
+                      <SelectValue placeholder="Pilih Level">
+                        {formData.jobLevelId && formData.jobLevelId !== 'none'
+                          ? (jobLevels.find(l => l.id === formData.jobLevelId)?.name || 'Pilih Level')
+                          : 'Pilih Level'}
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent className="glass-panel border-white/10 text-white">
                       <SelectItem value="none">Tanpa Level</SelectItem>
                       {jobLevels.filter(l => l.jobPositionId === formData.jobPositionId).map(l => (
