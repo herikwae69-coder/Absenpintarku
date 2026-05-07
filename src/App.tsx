@@ -6368,6 +6368,25 @@ const calculateService = (joinDateStr?: string) => {
   };
 };
 
+const getSuggestedLevelForEmployee = (joinDate: string, jobPositionId: string, currentLevelId: string, jobLevels: JobLevel[]) => {
+  const service = calculateService(joinDate);
+  const filteredLevels = jobLevels.filter(l => l.jobPositionId === jobPositionId);
+  let suggestedLevel = null;
+  
+  if (service.totalYears < 3) {
+    suggestedLevel = filteredLevels.find(l => l.name.includes('C'));
+  } else if (service.totalYears < 5) {
+    suggestedLevel = filteredLevels.find(l => l.name.includes('B'));
+  } else {
+    suggestedLevel = filteredLevels.find(l => l.name.includes('A'));
+  }
+
+  if (suggestedLevel && suggestedLevel.id !== currentLevelId) {
+    return suggestedLevel;
+  }
+  return null;
+};
+
 function AdminEmployees({ 
   employees, 
   shifts, 
@@ -6587,6 +6606,11 @@ function AdminEmployees({
     setShowAdd(true);
   };
 
+  const promotionCandidates = employees
+    .filter(e => e.isActive !== false && e.jobPositionId)
+    .map(e => ({ employee: e, suggestedLevel: getSuggestedLevelForEmployee(e.joinDate || '', e.jobPositionId || '', e.jobLevelId || '', jobLevels) }))
+    .filter(candidate => candidate.suggestedLevel !== null);
+
   return (
     <Card className="glass-panel border-none shadow-lg w-full">
       <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -6594,6 +6618,16 @@ function AdminEmployees({
           <CardTitle className="text-white">List Karyawan</CardTitle>
           <CardDescription className="text-white/50">Kelola karyawan secara manual atau massal via Excel.</CardDescription>
         </div>
+        
+        {promotionCandidates.length > 0 && (
+          <div className="flex-1 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2 mx-auto md:mx-4 w-full md:w-auto">
+            <Zap className="w-5 h-5 text-amber-500 shrink-0" />
+            <p className="text-xs text-amber-200">
+              <span className="font-bold">Info:</span> Ada {promotionCandidates.length} Karyawan disarankan menyesuaikan level pangkat (Masa Kerja). Edit karyawan untuk melihat rekomendasi.
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
           <Input 
             placeholder="Cari karyawan..." 
