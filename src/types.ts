@@ -17,6 +17,8 @@ export interface Employee {
   password?: string;
   role: 'admin' | 'employee' | 'superadmin' | 'spv';
   isActive?: boolean;
+  deactivationReason?: string;
+  deactivationDate?: string;
   division: string;
   organization?: 'Baru' | 'Non-Executive' | 'Executive';
   jobPositionId?: string; // ID of the job position

@@ -9411,13 +9411,20 @@ function AdminEmployees({
         alert("Karyawan dihapus permanen.", "success");
       }
     } else {
+      const reason = await prompt("Masukkan alasan nonaktif (misal: Resign, dll):", "Resign");
+      if (!reason) return alert("Alasan wajib diisi!");
+      
+      const deactivationDate = format(new Date(), "yyyy-MM-dd");
+
       const isConfirmed = await confirm(
-        "Yakin nonaktifkan karyawan ini? Pekerja tidak akan bisa login lagi.",
+        `Yakin nonaktifkan karyawan ini karena ${reason} per ${deactivationDate}? Pekerja tidak akan bisa login lagi.`,
       );
       if (isConfirmed) {
         await updateDoc(doc(db, "employees", emp.id), {
           isActive: false,
           pin: emp.pin + " (nonaktif)", // adding this so that the pin is freed up
+          deactivationReason: reason,
+          deactivationDate: deactivationDate
         });
         alert("Karyawan dinonaktifkan.", "success");
       }
@@ -9979,9 +9986,16 @@ function AdminEmployees({
                         AKTIF
                       </span>
                     ) : (
-                      <span className="text-[9px] font-black bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-full border border-rose-500/30 tracking-widest uppercase">
-                        NON-AKTIF
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-full border border-rose-500/30 tracking-widest uppercase w-max">
+                          NON-AKTIF
+                        </span>
+                        {(e.deactivationReason || e.deactivationDate) && (
+                          <span className="text-[10px] text-white/50">
+                            {e.deactivationReason} {e.deactivationDate ? `(${e.deactivationDate})` : ""}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
