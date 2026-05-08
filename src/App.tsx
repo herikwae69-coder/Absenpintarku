@@ -46,6 +46,7 @@ import {
   isSameDay,
 } from "date-fns";
 import { id } from "date-fns/locale";
+import * as faceapi from 'face-api.js';
 import { generateBackupZip } from "./lib/backupService";
 import { handleFirestoreError, OperationType } from "./lib/firestoreUtils";
 import * as XLSX from "xlsx";
@@ -1251,6 +1252,20 @@ function CameraDialog({
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
 
+  const [modelsLoaded, setModelsLoaded] = React.useState(false);
+
+  useEffect(() => {
+    async function loadModels() {
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/');
+        setModelsLoaded(true);
+      } catch(e) {
+        console.error("Model loading failed", e);
+      }
+    }
+    loadModels();
+  }, []);
+
   useEffect(() => {
     let stream: MediaStream | null = null;
     if (isOpen) {
@@ -1271,8 +1286,19 @@ function CameraDialog({
     };
   }, [isOpen]);
 
-  const capture = () => {
+  const capture = async () => {
     if (videoRef.current && canvasRef.current) {
+      if (modelsLoaded) {
+        const detection = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions());
+        if (!detection) {
+          alert("Wajah tidak terdeteksi! Silakan pastikan wajah terlihat jelas.");
+          return;
+        }
+      } else {
+        alert("Sistem deteksi wajah sedang memuat...");
+        return;
+      }
+      
       const context = canvasRef.current.getContext("2d");
       if (context) {
         const width = 240;

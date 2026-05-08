@@ -27,6 +27,7 @@
     "dotenv": "^17.2.3",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
+    "face-api.js": "^0.22.2",
     "file-saver": "^2.0.5",
     "firebase": "^12.12.1",
     "jszip": "^3.10.1",
