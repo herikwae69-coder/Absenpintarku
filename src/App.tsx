@@ -13964,7 +13964,54 @@ function AdminLive({
               >
                 Isi Absensi Manual
               </Button>
-              <Dialog open={showLibur} onOpenChange={setShowLibur}>
+              <Dialog open={showManual} onOpenChange={setShowManual}>
+        <DialogContent className="glass-panel border-white/20 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Isi Absensi Manual</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label className="text-white/70 text-xs">Pilih Karyawan</Label>
+              <EmployeeSelector
+                employees={employees}
+                selectedId={selectedEmpForManual?.id || ""}
+                onSelect={(id) => {
+                  const emp = employees.find((e) => e.id === id);
+                  setSelectedEmpForManual(emp || null);
+                }}
+                placeholder="Cari Karyawan (Nama/PIN)..."
+              />
+            </div>
+            <Input
+              placeholder="Jam Masuk (HH:mm)"
+              value={manualData.checkIn}
+              onChange={(e) => setManualData({...manualData, checkIn: e.target.value})}
+              className="glass-panel"
+            />
+            <Input
+              placeholder="Jam Pulang (HH:mm)"
+              value={manualData.checkOut}
+              onChange={(e) => setManualData({...manualData, checkOut: e.target.value})}
+              className="glass-panel"
+            />
+            <Select
+                value={manualData.shiftId}
+                onValueChange={(v) => setManualData({...manualData, shiftId: v})}
+            >
+              <SelectTrigger className="glass-panel">
+                <SelectValue placeholder="Pilih Shift" />
+              </SelectTrigger>
+              <SelectContent className="glass-panel border-white/20 text-white">
+                {shifts.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleSaveManual} className="bg-emerald-600 hover:bg-emerald-700">Simpan</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showLibur} onOpenChange={setShowLibur}>
                 <DialogTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm h-10">
                   <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
                 </DialogTrigger>
