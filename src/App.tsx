@@ -13635,6 +13635,8 @@ function AdminLive({
     null,
   );
   const [showEdit, setShowEdit] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [selectedEmpForManual, setSelectedEmpForManual] = useState<Employee | null>(null);
   const [showLibur, setShowLibur] = useState(false);
   const [liburData, setLiburData] = useState({
     employeeId: "",
@@ -13647,6 +13649,12 @@ function AdminLive({
     checkOut: "",
     status: "present" as Attendance["status"],
     shiftId: "",
+  });
+  const [manualData, setManualData] = useState({
+    checkIn: "",
+    checkOut: "",
+    shiftId: "",
+    status: "present" as Attendance["status"],
   });
 
   useEffect(() => {
@@ -13721,6 +13729,38 @@ function AdminLive({
     await updateDoc(doc(db, "attendance", editingAttendance.id), updatePayload);
     setShowEdit(false);
     setEditingAttendance(null);
+  };
+
+  const handleSaveManual = async () => {
+    if (!selectedEmpForManual) return;
+    if (!manualData.checkIn || !manualData.shiftId) {
+      alert("Jam masuk dan shift wajib diisi!", "error");
+      return;
+    }
+
+    const dateString = format(date, "yyyy-MM-dd");
+
+    const setTime = (timeStr: string) => {
+      const [h, m] = timeStr.split(":").map(Number);
+      const d = parse(dateString, "yyyy-MM-dd", new Date());
+      d.setHours(h, m, 0, 0);
+      return Timestamp.fromDate(d);
+    };
+
+    await addDoc(collection(db, "attendance"), {
+      employeeId: selectedEmpForManual.id,
+      employeeName: selectedEmpForManual.name,
+      date: dateString,
+      shiftId: manualData.shiftId,
+      checkIn: setTime(manualData.checkIn),
+      checkOut: manualData.checkOut ? setTime(manualData.checkOut) : null,
+      status: manualData.status,
+      updatedAt: serverTimestamp(),
+    });
+
+    setShowManual(false);
+    setManualData({ checkIn: "", checkOut: "", shiftId: "", status: "present" });
+    alert("Absensi berhasil ditambahkan.", "success");
   };
 
   const handleSetLibur = async () => {
@@ -14018,9 +14058,10 @@ function AdminLive({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {liveAttendance.map((a) => {
-                  const shift = shifts.find((s) => s.id === a.shiftId);
-                  const statsData = shift
+                {employees.map((e) => {
+                  const a = liveAttendance.find((att) => att.employeeId === e.id);
+                  const shift = a ? shifts.find((s) => s.id === a.shiftId) : null;
+                  const statsData = a && shift
                     ? calculateAttendanceStats(a, shift)
                     : { late: 0, earlyLeave: 0, overtime: 0 };
 
@@ -14031,15 +14072,19 @@ function AdminLive({
                     >
                       <TableCell className="font-semibold text-white whitespace-nowrap">
                         <div className="flex flex-col">
-                          <span>{a.employeeName}</span>
+                          <span>{e.name}</span>
                           <span className="text-[9px] text-white/30 uppercase tracking-tighter">
-                            {a.status === "day-off"
-                              ? "LIBUR"
-                              : a.status === "present"
-                                ? "HADIR"
-                                : a.status === "late"
-                                  ? "TERLAMBAT"
-                                  : a.status}
+                            {a ? (
+                              a.status === "day-off"
+                                ? "LIBUR"
+                                : a.status === "present"
+                                  ? "HADIR"
+                                  : a.status === "late"
+                                    ? "TERLAMBAT"
+                                    : a.status
+                            ) : (
+                              "BELUM ABSEN"
+                            )}
                           </span>
                         </div>
                       </TableCell>
@@ -14047,76 +14092,101 @@ function AdminLive({
                         {shift?.name || "-"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <span className="text-white/70 font-mono">
-                            {a.checkIn
-                              ? format(toDateSafe(a.checkIn), "HH:mm")
-                              : "-"}
-                          </span>
-                          {statsData.late > 0 && (
-                            <span className="text-[9px] text-rose-400 font-bold">
-                              Telat: {formatDuration(statsData.late)}
+                        {a ? (
+                          <div className="flex flex-col">
+                            <span className="text-white/70 font-mono">
+                              {a.checkIn
+                                ? format(toDateSafe(a.checkIn), "HH:mm")
+                                : "-"}
                             </span>
-                          )}
-                        </div>
+                            {statsData.late > 0 && (
+                              <span className="text-[9px] text-rose-400 font-bold">
+                                Telat: {formatDuration(statsData.late)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px] h-6"
+                            onClick={() => {
+                              setSelectedEmpForManual(e);
+                              setShowManual(true);
+                            }}
+                          >
+                            ISI MANUAL
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <div className="flex flex-col text-[10px]">
-                          <span className="text-white/40">
-                            S:{" "}
-                            {a.breakStart
-                              ? format(toDateSafe(a.breakStart), "HH:mm")
-                              : "-"}
-                          </span>
-                          <span className="text-white/40">
-                            E:{" "}
-                            {a.breakEnd
-                              ? format(toDateSafe(a.breakEnd), "HH:mm")
-                              : "-"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <span className="text-white/70 font-mono">
-                            {a.checkOut
-                              ? format(toDateSafe(a.checkOut), "HH:mm")
-                              : "-"}
-                          </span>
-                          {statsData.earlyLeave > 0 && (
-                            <span className="text-[9px] text-rose-400 font-bold">
-                              P.Awal: {formatDuration(statsData.earlyLeave)}
+                        {a ? (
+                          <div className="flex flex-col text-[10px]">
+                            <span className="text-white/40">
+                              S:{" "}
+                              {a.breakStart
+                                ? format(toDateSafe(a.breakStart), "HH:mm")
+                                : "-"}
                             </span>
-                          )}
-                        </div>
+                            <span className="text-white/40">
+                              E:{" "}
+                              {a.breakEnd
+                                ? format(toDateSafe(a.breakEnd), "HH:mm")
+                                : "-"}
+                            </span>
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          {statsData.overtime > 0 && (
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 text-[9px] px-1 h-4"
-                            >
-                              Lembur: {formatDuration(statsData.overtime)}
-                            </Badge>
-                          )}
-                          {statsData.late === 0 && a.checkIn && (
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 text-[9px] px-1 h-4"
-                            >
-                              Tepat Waktu
-                            </Badge>
-                          )}
-                          {a.status === "day-off" && (
-                            <Badge
-                              variant="outline"
-                              className="bg-blue-500/10 border-blue-500/30 text-blue-400 text-[9px] px-1 h-4"
-                            >
-                              LIBUR
-                            </Badge>
-                          )}
-                        </div>
+                        {a ? (
+                          <div className="flex flex-col">
+                            <span className="text-white/70 font-mono">
+                              {a.checkOut
+                                ? format(toDateSafe(a.checkOut), "HH:mm")
+                                : "-"}
+                            </span>
+                            {statsData.earlyLeave > 0 && (
+                              <span className="text-[9px] text-rose-400 font-bold">
+                                P.Awal: {formatDuration(statsData.earlyLeave)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {a ? (
+                          <div className="flex flex-col gap-1">
+                            {statsData.overtime > 0 && (
+                              <Badge
+                                variant="outline"
+                                className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 text-[9px] px-1 h-4"
+                              >
+                                Lembur: {formatDuration(statsData.overtime)}
+                              </Badge>
+                            )}
+                            {statsData.late === 0 && a.checkIn && (
+                              <Badge
+                                variant="outline"
+                                className="bg-emerald-500/10 border-emerald-500/30 text-emerald-400 text-[9px] px-1 h-4"
+                              >
+                                Tepat Waktu
+                              </Badge>
+                            )}
+                            {a.status === "day-off" && (
+                              <Badge
+                                variant="outline"
+                                className="bg-blue-500/10 border-blue-500/30 text-blue-400 text-[9px] px-1 h-4"
+                              >
+                                LIBUR
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                       <TableCell className="text-right space-x-2 whitespace-nowrap">
                         <Button
