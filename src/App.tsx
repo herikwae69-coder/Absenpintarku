@@ -13999,10 +13999,18 @@ function AdminLive({
                 onValueChange={(v) => setManualData({...manualData, shiftId: v})}
             >
               <SelectTrigger className="glass-panel">
-                <SelectValue placeholder="Pilih Shift" />
+                <SelectValue placeholder="Pilih Shift">
+                  {manualData.shiftId
+                    ? shifts.find((s) => s.id === manualData.shiftId)?.name
+                    : "Pilih Shift"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="glass-panel border-white/20 text-white">
-                {shifts.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                {shifts.map(s => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
