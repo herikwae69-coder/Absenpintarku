@@ -13954,6 +13954,16 @@ function AdminLive({
             </Dialog>
 
             <div className="flex flex-wrap gap-2 items-center">
+              <Button
+                variant="outline"
+                className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-sm h-10 px-4"
+                onClick={() => {
+                  setSelectedEmpForManual(null); // Allows picking an employee
+                  setShowManual(true);
+                }}
+              >
+                Isi Absensi Manual
+              </Button>
               <Dialog open={showLibur} onOpenChange={setShowLibur}>
                 <DialogTrigger className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-white/10 rounded-md text-sm font-medium text-white transition-colors hover:bg-white/10 glass-panel shadow-sm h-10">
                   <CalendarIcon className="w-4 h-4 text-blue-400" /> Atur Libur
@@ -14058,7 +14068,9 @@ function AdminLive({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employees.map((e) => {
+                {employees
+                  .filter((e) => liveAttendance.some((a) => a.employeeId === e.id))
+                  .map((e) => {
                   const a = liveAttendance.find((att) => att.employeeId === e.id);
                   const shift = a ? shifts.find((s) => s.id === a.shiftId) : null;
                   const statsData = a && shift
@@ -14067,7 +14079,7 @@ function AdminLive({
 
                   return (
                     <TableRow
-                      key={a.id}
+                      key={e.id}
                       className="border-white/5 hover:bg-white/5"
                     >
                       <TableCell className="font-semibold text-white whitespace-nowrap">
@@ -14189,22 +14201,26 @@ function AdminLive({
                         )}
                       </TableCell>
                       <TableCell className="text-right space-x-2 whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => triggerEdit(a)}
-                          className="hover:bg-white/10 transition-colors"
-                        >
-                          <Edit className="w-4 h-4 text-primary" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(a.id)}
-                          className="hover:bg-white/10 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-rose-500" />
-                        </Button>
+                        {a && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => triggerEdit(a)}
+                              className="hover:bg-white/10 transition-colors"
+                            >
+                              <Edit className="w-4 h-4 text-primary" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(a.id)}
+                              className="hover:bg-white/10 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4 text-rose-500" />
+                            </Button>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
