@@ -73,6 +73,17 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
   const [inputAmount, setInputAmount] = useState('');
   const [inputDesc, setInputDesc] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (empId: string) => {
+      const next = new Set(expandedGroups);
+      if (next.has(empId)) {
+          next.delete(empId);
+      } else {
+          next.add(empId);
+      }
+      setExpandedGroups(next);
+  };
 
   // Grouped entries for the table
   const groupedEntries = React.useMemo(() => {
@@ -84,12 +95,25 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
       groups[entry.empId].total += entry.amount;
       groups[entry.empId].items.push(entry);
     });
-    return Object.values(groups).sort((a, b) => {
+    
+    let result = Object.values(groups);
+
+    // Apply search filter if searchTerm has content
+    if (searchTerm) {
+        const lowerSearch = searchTerm.toLowerCase();
+        result = result.filter(group => {
+            const emp = employees.find(e => e.id === group.empId);
+            return emp && (emp.name.toLowerCase().includes(lowerSearch) || 
+                           emp.pin.includes(searchTerm));
+        });
+    }
+
+    return result.sort((a, b) => {
         const empA = employees.find(e => e.id === a.empId);
         const empB = employees.find(e => e.id === b.empId);
         return (empA?.name || '').localeCompare(empB?.name || '');
     });
-  }, [entries, employees]);
+  }, [entries, employees, searchTerm]);
 
   // Unlock Dialog
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
@@ -427,7 +451,7 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
         </DialogContent>
       </Dialog>
 
-      <Card className="glass-panel border-none bg-black/40">
+      <Card className="glass-panel border-none bg-black/40 w-[350px]">
         <CardContent className="p-6 space-y-6">
           <div className="flex flex-col md:flex-row gap-4 items-end">
             <div className="flex-1 w-full relative group">
@@ -522,11 +546,14 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
                   return (
                     <React.Fragment key={group.empId}>
                         {/* Summary Row */}
-                        <TableRow className="border-white/5 bg-white/[0.01]">
+                        <TableRow 
+                            className="border-white/5 bg-white/[0.01] cursor-pointer hover:bg-white/[0.05]"
+                            onClick={() => toggleGroup(group.empId)}
+                        >
                             <TableCell className="font-mono text-white/60">{emp?.pin}</TableCell>
                             <TableCell className="font-bold text-white uppercase">{emp?.name}</TableCell>
                             <TableCell className="text-white/40 italic text-xs">
-                                Akumulasi ({group.items.length} item)
+                                {expandedGroups.has(group.empId) ? 'Klik untuk sembunyikan detail' : 'Klik untuk lihat detail'} ({group.items.length} item)
                             </TableCell>
                             <TableCell className="text-right font-black text-fuchsia-400 text-lg">
                                 {new Intl.NumberFormat('id-ID').format(group.total)}
@@ -535,7 +562,7 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
                         </TableRow>
                         
                         {/* Detail Rows */}
-                        {group.items.map((item) => (
+                        {expandedGroups.has(group.empId) && group.items.map((item) => (
                           <TableRow key={item.id} className="border-white/5 hover:bg-white/[0.05] bg-black/20">
                             <TableCell className="py-2"></TableCell>
                             <TableCell className="py-2"></TableCell>

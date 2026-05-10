@@ -15863,7 +15863,8 @@ function EmployeeLeave({
         </div>
 
         {/* Sidebar info */}
-        <div className="space-y-6">
+        <details className="space-y-6" open>
+          <summary className="text-white text-md font-bold cursor-pointer hover:text-emerald-400">Sidebar Info</summary>
           <Card className="glass-panel border-none shadow-xl bg-primary/5">
             <CardHeader>
               <CardTitle className="text-white text-md">
@@ -15933,7 +15934,7 @@ function EmployeeLeave({
               </p>
             </CardContent>
           </Card>
-        </div>
+        </details>
       </div>
     </div>
   );
