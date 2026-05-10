@@ -2128,6 +2128,40 @@ function AdminBonusMaster({
     }
   };
 
+  const handleSaveSingleDate = async (dateStr: string, value: number) => {
+    if (isLocked) {
+      toast.error("Periode dikunci");
+      return;
+    }
+    setSaving(true);
+    try {
+      const docRef = doc(db, "bonusMasterConfig", selectedPeriod);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          [`dailyHighestReceipt.${dateStr}`]: value,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(docRef, {
+          dailyHighestReceipt: { [dateStr]: value },
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      toast.success("Data nota tertinggi berhasil disimpan");
+    } catch (error) {
+      handleFirestoreError(
+        error,
+        OperationType.WRITE,
+        `bonusMasterConfig/${selectedPeriod}`,
+      );
+      toast.error("Gagal menyimpan data");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggleLock = async () => {
     if (isLocked) {
       setShowUnlockDialog(true);
@@ -2390,6 +2424,7 @@ function AdminBonusMaster({
                           </div>
                         </TableCell>
                         <TableCell>
+                          <div className="flex gap-2 items-center">
                           <div className="relative max-w-[300px]">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 text-xs font-bold">
                               Rp
@@ -2406,6 +2441,14 @@ function AdminBonusMaster({
                               placeholder="0"
                             />
                           </div>
+                          <Button 
+                            onClick={() => handleSaveSingleDate(dateStr, value)}
+                            disabled={saving || isLocked}
+                            className="bg-emerald-600 hover:bg-emerald-500 h-11"
+                          >
+                            Simpan
+                          </Button>
+                        </div>
                         </TableCell>
                         <TableCell className="text-right pr-6">
                           {value > 0 ? (

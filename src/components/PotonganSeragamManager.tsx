@@ -50,6 +50,19 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
   const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || '';
   const setSelectedPeriod = setActivePeriodId || (() => {});
+  
+  useEffect(() => {
+    if (!activePeriodId && periodOptions.length > 0) {
+      const now = new Date();
+      const runningPeriod = periodOptions.find(p => now >= p.start && now <= p.end);
+      const newestPeriod = periodOptions[0];
+      const targetPeriod = runningPeriod || newestPeriod;
+      if (targetPeriod) {
+        setSelectedPeriod(targetPeriod.value);
+      }
+    }
+  }, [periodOptions, activePeriodId, setSelectedPeriod]);
+
   const currentPeriod = periodOptions.find(p => p.value === selectedPeriod);
 
   const [entries, setEntries] = useState<any[]>([]);

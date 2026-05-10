@@ -77,16 +77,21 @@ export default function AdminAuditDanExport({
         snap.docs.forEach(d => { data[d.id] = d.data(); });
         setControls(data);
         
-        // Find first non-hidden period to default to if none selected
+        // Find period to default to if none selected
         if (!selectedPeriod) {
-            const firstActive = Object.entries(data)
-                .filter(([_, ctrl]) => !ctrl.hidden)
-                .map(([id, ctrl]) => ({ id, start: ctrl.startDate ? new Date(ctrl.startDate) : new Date(0) }))
-                .sort((a, b) => b.start.getTime() - a.start.getTime())[0];
+            const now = new Date();
+            const activePeriods = Object.entries(data)
+                .filter(([_, ctrl]) => !ctrl.hidden && ctrl.startDate && ctrl.endDate)
+                .map(([id, ctrl]) => ({ id, start: new Date(ctrl.startDate), end: new Date(ctrl.endDate) }));
+                
+            const runningPeriod = activePeriods.find(p => now >= p.start && now <= p.end);
+            const newestPeriod = activePeriods.sort((a,b) => b.start.getTime() - a.start.getTime())[0];
             
-            if (firstActive) {
-                setInternalPeriod(firstActive.id);
-                setActivePeriodId(firstActive.id);
+            const targetPeriod = runningPeriod || newestPeriod;
+            
+            if (targetPeriod) {
+                setInternalPeriod(targetPeriod.id);
+                setActivePeriodId(targetPeriod.id);
             }
         }
       }, (error) => {

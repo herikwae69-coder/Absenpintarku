@@ -153,10 +153,12 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
   useEffect(() => {
      if (periodOptions.length > 0) {
         if (!selectedPeriodId || !periodOptions.find(p => p.value === selectedPeriodId)) {
-            setSelectedPeriodId(periodOptions[0].value);
+            const now = new Date();
+            const runningPeriod = periodOptions.find(p => now >= p.start && now <= p.end);
+            setSelectedPeriodId(runningPeriod ? runningPeriod.value : periodOptions[0].value);
         }
      }
-  }, [periodOptions, selectedPeriodId]);
+  }, [periodOptions]);
 
   useEffect(() => {
     if (!selectedPeriodId) return;
