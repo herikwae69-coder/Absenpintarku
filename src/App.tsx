@@ -2382,7 +2382,7 @@ function AdminBonusMaster({
         </DialogContent>
       </Dialog>
 
-      <Card className="glass-panel border-none shadow-2xl bg-black/40 overflow-hidden">
+      <Card className="glass-panel border-none shadow-2xl bg-[#151f2e] overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="p-20 text-center text-white/20 animate-pulse font-black uppercase tracking-widest">
@@ -2411,7 +2411,7 @@ function AdminBonusMaster({
                     return (
                       <TableRow
                         key={dateStr}
-                        className="border-white/5 hover:bg-white/5 transition-colors group"
+                        className="border-white/5 hover:bg-white/5 transition-colors group bg-[#101524]"
                       >
                         <TableCell className="pl-6 py-4">
                           <div className="flex flex-col">
@@ -2437,14 +2437,14 @@ function AdminBonusMaster({
                               onChange={(e) =>
                                 handleInputChange(dateStr, e.target.value)
                               }
-                              className="bg-white/5 border-white/10 text-white pl-11 h-11 rounded-xl font-bold focus:ring-emerald-500/50"
+                              className="bg-black border-[#0095ff] text-white pl-11 h-11 rounded-xl font-bold focus:ring-[#0095ff]/50"
                               placeholder="0"
                             />
                           </div>
                           <Button 
                             onClick={() => handleSaveSingleDate(dateStr, value)}
                             disabled={saving || isLocked}
-                            className="bg-emerald-600 hover:bg-emerald-500 h-11"
+                            className="bg-black text-white border border-[#0095ff] hover:bg-black/90 h-11"
                           >
                             Simpan
                           </Button>
