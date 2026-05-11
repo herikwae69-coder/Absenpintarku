@@ -4605,7 +4605,8 @@ function EmployeeView({
         }
 
         try {
-          await addDoc(collection(db, "attendance"), {
+          const attendanceDocRef = doc(db, "attendance", `${employee.id}_${today}`);
+          await setDoc(attendanceDocRef, {
             employeeId: employee.id,
             employeeName: employee.name,
             shiftId: selectedShiftId,
@@ -16457,7 +16458,15 @@ function AdminReports({
       q,
       (snap) =>
         setAttendances(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Attendance),
+          snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }) as Attendance)
+            .filter(
+              (a, index, self) =>
+                index ===
+                self.findIndex(
+                  (t) => t.date === a.date && t.employeeId === a.employeeId,
+                ),
+            ),
         ),
       (err) =>
         handleFirestoreError(err, OperationType.LIST, "attendance_reports"),
