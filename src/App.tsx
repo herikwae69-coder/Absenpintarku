@@ -1,3 +1,4 @@
+import { AdminShiftPeriode } from "./components/AdminShiftPeriode";
 import "leaflet/dist/leaflet.css";
 import React, { useState, useEffect, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
@@ -7694,6 +7695,11 @@ function AdminDashboard({
           label: "Jadwal Libur",
           icon: <CalendarIcon className="w-4 h-4 text-primary" />,
         },
+        {
+          value: "shift-periode",
+          label: "Shift Periode",
+          icon: <CalendarIcon className="w-4 h-4 text-emerald-400" />,
+        },
       ],
     },
     {
@@ -8091,6 +8097,16 @@ function AdminDashboard({
                   divisions={divisions}
                   confirm={confirm}
                   prompt={prompt}
+                  alert={alert}
+                />
+              </TabsContent>
+              <TabsContent value="shift-periode" className="mt-0 outline-none">
+                <AdminShiftPeriode 
+                  employees={employees}
+                  divisions={divisions}
+                  shifts={shifts}
+                  db={db}
+                  confirm={confirm}
                   alert={alert}
                 />
               </TabsContent>
