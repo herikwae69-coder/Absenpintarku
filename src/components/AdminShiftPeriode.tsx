@@ -206,11 +206,6 @@ export function AdminShiftPeriode({
       dates.forEach(d => {
         const dateStr = format(d, "dd-MMM");
         const dateFmtFull = format(d, "yyyy-MM-dd");
-        if (!groupsToValidate.includes(group)) {
-            row[dateStr] = "-";
-            return;
-        }
-
         // Cek Minggu atau Hari Libur Nasional
         const isSunday = d.getDay() === 0;
         const isHolidayObj = hd.isHoliday(d);
@@ -220,8 +215,18 @@ export function AdminShiftPeriode({
         // Di sini kita cek apakah ada request libur (approved) yang tanggalnya cocok, atau jika system attendance-nya "day-off"
         const hasApprovedLeave = empLeaves.some(lr => lr.dates && lr.dates.includes(dateFmtFull));
         
-        if (isSunday || isNationalHoliday || hasApprovedLeave) {
+        if (isSunday || isNationalHoliday) {
+            row[dateStr] = "National Holiday";
+            return;
+        }
+        
+        if (hasApprovedLeave) {
             row[dateStr] = dayoffShiftName;
+            return;
+        }
+
+        if (!groupsToValidate.includes(group)) {
+            row[dateStr] = "-";
             return;
         }
 
