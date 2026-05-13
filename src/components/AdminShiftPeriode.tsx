@@ -99,12 +99,23 @@ export function AdminShiftPeriode({
   const [inputB, setInputB] = useState("");
   const [inputC, setInputC] = useState("");
 
+  const getSuggestion = (inputVal: string) => {
+    if (!inputVal || inputVal.trim().length < 3) return null;
+    const search = inputVal.toLowerCase().trim();
+    let emp = filteredEmployees.find((e: any) => 
+        e.name.toLowerCase() === search || e.pin === search
+    );
+    if (!emp) {
+        emp = filteredEmployees.find((e: any) => 
+            e.name.toLowerCase().includes(search) || e.pin.includes(search)
+        );
+    }
+    return emp || null;
+  };
+
   const handleAddMember = (group: string, inputVal: string) => {
     if (!inputVal.trim()) return;
-    const emp = filteredEmployees.find((e: any) => 
-        e.name.toLowerCase() === inputVal.toLowerCase().trim() || 
-        e.pin === inputVal.trim()
-    );
+    const emp = getSuggestion(inputVal);
     if (emp) {
         setEmployeeGroup((prev) => ({ ...prev, [emp.id]: group }));
         if (group === "A") setInputA("");
@@ -369,15 +380,22 @@ export function AdminShiftPeriode({
             {/* GROUP A */}
             <div className="flex flex-col p-4 rounded-xl bg-black/20 border border-white/5 space-y-3">
                <h4 className="font-bold text-rose-400">Grup A</h4>
-               <Input 
-                   placeholder="Ketik Nama / No Absen lalu Enter" 
-                   className="field-input h-9 text-xs"
-                   value={inputA}
-                   onChange={e => setInputA(e.target.value)}
-                   onKeyDown={e => {
-                       if(e.key === "Enter") handleAddMember("A", inputA);
-                   }}
-               />
+               <div>
+                 <Input 
+                     placeholder="Ketik Nama / No Absen lalu Enter" 
+                     className="field-input h-9 text-xs"
+                     value={inputA}
+                     onChange={e => setInputA(e.target.value)}
+                     onKeyDown={e => {
+                         if(e.key === "Enter") handleAddMember("A", inputA);
+                     }}
+                 />
+                 {inputA.trim().length >= 3 && (
+                     <div className="text-[10px] text-white/50 mt-1 ml-1">
+                         {getSuggestion(inputA) ? <><span className="text-emerald-400">Tekan Enter:</span> {getSuggestion(inputA)?.name}</> : "Karyawan tidak ditemukan"}
+                     </div>
+                 )}
+               </div>
                <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
                  {filteredEmployees.filter((e: any) => employeeGroup[e.id] === "A").map((e: any) => (
                     <div key={e.id} className="flex items-center justify-between bg-black/40 rounded px-2 py-1 border border-white/5">
@@ -396,15 +414,22 @@ export function AdminShiftPeriode({
             {/* GROUP B */}
             <div className="flex flex-col p-4 rounded-xl bg-black/20 border border-white/5 space-y-3">
                <h4 className="font-bold text-blue-400">Grup B</h4>
-               <Input 
-                   placeholder="Ketik Nama / No Absen lalu Enter" 
-                   className="field-input h-9 text-xs"
-                   value={inputB}
-                   onChange={e => setInputB(e.target.value)}
-                   onKeyDown={e => {
-                       if(e.key === "Enter") handleAddMember("B", inputB);
-                   }}
-               />
+               <div>
+                 <Input 
+                     placeholder="Ketik Nama / No Absen lalu Enter" 
+                     className="field-input h-9 text-xs"
+                     value={inputB}
+                     onChange={e => setInputB(e.target.value)}
+                     onKeyDown={e => {
+                         if(e.key === "Enter") handleAddMember("B", inputB);
+                     }}
+                 />
+                 {inputB.trim().length >= 3 && (
+                     <div className="text-[10px] text-white/50 mt-1 ml-1">
+                         {getSuggestion(inputB) ? <><span className="text-emerald-400">Tekan Enter:</span> {getSuggestion(inputB)?.name}</> : "Karyawan tidak ditemukan"}
+                     </div>
+                 )}
+               </div>
                <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
                  {filteredEmployees.filter((e: any) => employeeGroup[e.id] === "B").map((e: any) => (
                     <div key={e.id} className="flex items-center justify-between bg-black/40 rounded px-2 py-1 border border-white/5">
@@ -424,15 +449,22 @@ export function AdminShiftPeriode({
             {numGroups === "3" && (
                 <div className="flex flex-col p-4 rounded-xl bg-black/20 border border-white/5 space-y-3">
                    <h4 className="font-bold text-emerald-400">Grup C</h4>
-                   <Input 
-                       placeholder="Ketik Nama / No Absen lalu Enter" 
-                       className="field-input h-9 text-xs"
-                       value={inputC}
-                       onChange={e => setInputC(e.target.value)}
-                       onKeyDown={e => {
-                           if(e.key === "Enter") handleAddMember("C", inputC);
-                       }}
-                   />
+                   <div>
+                     <Input 
+                         placeholder="Ketik Nama / No Absen lalu Enter" 
+                         className="field-input h-9 text-xs"
+                         value={inputC}
+                         onChange={e => setInputC(e.target.value)}
+                         onKeyDown={e => {
+                             if(e.key === "Enter") handleAddMember("C", inputC);
+                         }}
+                     />
+                     {inputC.trim().length >= 3 && (
+                         <div className="text-[10px] text-white/50 mt-1 ml-1">
+                             {getSuggestion(inputC) ? <><span className="text-emerald-400">Tekan Enter:</span> {getSuggestion(inputC)?.name}</> : "Karyawan tidak ditemukan"}
+                         </div>
+                     )}
+                   </div>
                    <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
                      {filteredEmployees.filter((e: any) => employeeGroup[e.id] === "C").map((e: any) => (
                         <div key={e.id} className="flex items-center justify-between bg-black/40 rounded px-2 py-1 border border-white/5">
