@@ -247,7 +247,9 @@ export function AdminShiftPeriode({
             <Label className="text-white/70">Periode</Label>
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
               <SelectTrigger className="field-input">
-                <SelectValue placeholder="Pilih Periode" />
+                <SelectValue placeholder="Pilih Periode">
+                  {periodOptions.find(p => p.value === selectedPeriod)?.label || "Pilih Periode"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {periodOptions.map((p: any) => (
@@ -311,7 +313,11 @@ export function AdminShiftPeriode({
                             </TableCell>
                             <TableCell>
                                 <Select value={rotations[idx]?.A || ""} onValueChange={(v) => handleRotChange(idx, "A", v)}>
-                                    <SelectTrigger className="h-8 text-xs bg-black/40 border-none field-input"><SelectValue placeholder="Pilih Shift"/></SelectTrigger>
+                                    <SelectTrigger className="h-8 text-xs bg-black/40 border-none field-input">
+                                        <SelectValue placeholder="Pilih Shift">
+                                            {rotations[idx]?.A || "Pilih Shift"}
+                                        </SelectValue>
+                                    </SelectTrigger>
                                     <SelectContent>
                                         {shifts.map((s:any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                                     </SelectContent>
@@ -319,7 +325,11 @@ export function AdminShiftPeriode({
                             </TableCell>
                             <TableCell>
                                 <Select value={rotations[idx]?.B || ""} onValueChange={(v) => handleRotChange(idx, "B", v)}>
-                                    <SelectTrigger className="h-8 text-xs bg-black/40 border-none field-input"><SelectValue placeholder="Pilih Shift"/></SelectTrigger>
+                                    <SelectTrigger className="h-8 text-xs bg-black/40 border-none field-input">
+                                        <SelectValue placeholder="Pilih Shift">
+                                            {rotations[idx]?.B || "Pilih Shift"}
+                                        </SelectValue>
+                                    </SelectTrigger>
                                     <SelectContent>
                                         {shifts.map((s:any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                                     </SelectContent>
@@ -328,7 +338,11 @@ export function AdminShiftPeriode({
                             {numGroups === "3" && (
                             <TableCell>
                                 <Select value={rotations[idx]?.C || ""} onValueChange={(v) => handleRotChange(idx, "C", v)}>
-                                    <SelectTrigger className="h-8 text-xs bg-black/40 border-none field-input"><SelectValue placeholder="Pilih Shift"/></SelectTrigger>
+                                    <SelectTrigger className="h-8 text-xs bg-black/40 border-none field-input">
+                                        <SelectValue placeholder="Pilih Shift">
+                                            {rotations[idx]?.C || "Pilih Shift"}
+                                        </SelectValue>
+                                    </SelectTrigger>
                                     <SelectContent>
                                         {shifts.map((s:any) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
                                     </SelectContent>
