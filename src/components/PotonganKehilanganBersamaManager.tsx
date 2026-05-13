@@ -781,7 +781,7 @@ export function PotonganKehilanganBersamaManager({ employees, activePeriodId, is
                         </div>
                     </div>
 
-                    <div className="overflow-y-auto flex-grow no-scrollbar">
+                    <div className="overflow-y-auto flex-grow custom-scrollbar">
                         <Table>
                             <TableHeader>
                                 <TableRow className="border-white/10 hover:bg-transparent">

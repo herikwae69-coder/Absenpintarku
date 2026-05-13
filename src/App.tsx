@@ -4243,7 +4243,7 @@ function AdminBonusOperator({
                         autoFocus
                       />
                     </div>
-                    <div className="max-h-[300px] overflow-y-auto no-scrollbar">
+                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
                       {filteredEmployees.length === 0 ? (
                         <div className="p-4 text-center text-white/40 text-sm">
                           Tidak ditemukan
@@ -7580,15 +7580,10 @@ function AdminDashboard({
           label: "Laporan",
           icon: <Eye className="w-4 h-4" />,
         },
-        {
-          value: "backup",
-          label: "Backup Data",
-          icon: <Download className="w-4 h-4" />,
-        },
       ],
     },
     {
-      label: "Bonus & Reward",
+      label: "Bonus & Penambahan",
       items: [
         {
           value: "bonus-master",
@@ -7642,12 +7637,22 @@ function AdminDashboard({
       items: [
         {
           value: "potongan",
-          label: "Potongan Kehilangan (Restan 100%)",
+          label: (
+            <span className="flex flex-col items-start leading-tight">
+              <span>Potongan Kehilangan</span>
+              <span>(Restan 100%)</span>
+            </span>
+          ),
           icon: <DollarSign className="w-4 h-4" />,
         },
         {
           value: "potongan-bersama",
-          label: "Potongan Kehilangan (Restan Bersama)",
+          label: (
+            <span className="flex flex-col items-start leading-tight">
+              <span>Potongan Kehilangan</span>
+              <span>(Restan Bersama)</span>
+            </span>
+          ),
           icon: <DollarSign className="w-4 h-4" />,
         },
         {
@@ -7771,7 +7776,7 @@ function AdminDashboard({
               </Button>
             }
           />
-          <DialogContent className="text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[280px] rounded-none p-6 m-0 border-r border-white/10 border-y-0 border-l-0 duration-300 shadow-2xl !bg-[#000000] overflow-hidden">
+          <DialogContent className="text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[350px] rounded-none p-6 m-0 border-r border-white/10 border-y-0 border-l-0 duration-300 shadow-2xl !bg-[#000000] overflow-hidden">
             <div className="flex items-center gap-3 mb-10 px-2">
               <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
                 <Settings className="w-5 h-5 text-primary" />
@@ -7780,7 +7785,7 @@ function AdminDashboard({
                 Menu Admin
               </span>
             </div>
-            <nav className="flex-1 overflow-y-auto pr-2 no-scrollbar scroll-smooth">
+            <nav className="flex-1 overflow-y-auto pr-2 custom-scrollbar scroll-smooth">
               <TabsList className="flex flex-col h-auto bg-transparent w-full gap-4 items-stretch p-0">
                 {menuGroups
                   .filter(
@@ -7878,7 +7883,7 @@ function AdminDashboard({
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 relative flex flex-col min-w-0 bg-background/50 overflow-y-auto no-scrollbar">
+      <main className="flex-1 relative flex flex-col min-w-0 bg-background/50 overflow-y-auto custom-scrollbar">
         <div className="absolute inset-0 bg-gradient-to-br from-background to-secondary/30 pointer-events-none" />
 
         {/* Content Area */}
@@ -8109,9 +8114,6 @@ function AdminDashboard({
                   confirm={confirm}
                   alert={alert}
                 />
-              </TabsContent>
-              <TabsContent value="backup" className="mt-0 outline-none">
-                <AdminBackup employees={employees} />
               </TabsContent>
               <TabsContent value="audit" className="mt-0 outline-none">
                 <AdminAuditDanExport
@@ -12996,7 +12998,7 @@ function AdminPeriods({
                         </Button>
                       }
                     />
-                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-[450px] overflow-y-auto no-scrollbar">
+                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-[450px] overflow-y-auto custom-scrollbar">
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 mb-1">
                           <Clock className="w-4 h-4 text-amber-400" />
@@ -13586,7 +13588,7 @@ function AdminActivityLog({
           {format(toDateSafe(viewDate), "dd MMMM yyyy")}
         </DialogTitle>
       </DialogHeader>
-      <div className="flex-1 overflow-y-auto no-scrollbar py-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar py-4">
         <Table>
           <TableHeader>
             <TableRow className="border-white/10 hover:bg-transparent">
