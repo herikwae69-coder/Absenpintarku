@@ -957,27 +957,29 @@ function LoginView({
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="w-28 h-28 mx-auto mb-6 relative group"
+            className="w-32 h-32 mx-auto mb-8 relative group"
           >
-            {/* Outer glow */}
-            <div className="absolute inset-0 bg-primary/40 blur-[30px] rounded-full scale-110 animate-pulse" />
+            {/* Outer glow offset */}
+            <div className="absolute inset-0 bg-[#0A1128]/40 blur-[40px] rounded-full scale-125 animate-pulse" />
 
-            {/* Cool glassy badge for JG1 */}
-            <div className="w-full h-full bg-linear-to-br from-card via-card to-secondary rounded-[2rem] border border-border shadow-2xl flex items-center justify-center relative overflow-hidden transition-transform duration-500 group-hover:scale-110 group-hover:-translate-y-2">
-              {/* Glass reflection */}
-              <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent rounded-t-[2rem]" />
-              {/* Bottom colored accent light */}
-              <div className="absolute -bottom-4 -right-4 w-16 h-16 bg-primary blur-2xl rounded-full opacity-60" />
+            {/* Exclusive Glassmorphism Badge */}
+            <div className="w-full h-full bg-gradient-to-br from-[#0A1128]/80 to-[#050814]/90 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.8)] flex items-center justify-center relative overflow-hidden transition-all duration-700 ease-out group-hover:scale-105 group-hover:-translate-y-2 group-hover:border-[#D4AF37]/30 group-hover:shadow-[0_40px_80px_rgba(212,175,55,0.15)]">
+              
+              {/* Glass reflection (Top) */}
+              <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent opacity-40 rounded-t-[2.5rem]" />
+              
+              {/* Subtle Champagne/Gold glow inside */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-[#D4AF37]/10 blur-[30px] rounded-full opacity-0 transition-opacity duration-700 group-hover:opacity-100" />
 
-              <div className="relative z-10 flex items-baseline drop-shadow-2xl">
-                <span className="text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/60">
-                  JG
+              {/* Logo Typography - Nestled in the center with ample whitespace */}
+              <div className="relative z-10 flex items-end drop-shadow-2xl">
+                {/* JG in Modern Serif / High-End Minimalist */}
+                <span className="text-5xl font-serif font-light tracking-widest text-[#F8F9FA]">
+                  J<span className="tracking-tight ml-[-4px]">G</span>
                 </span>
-                <span className="relative text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-amber-400 to-orange-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)] ml-0.5">
-                  <Crown
-                    className="absolute -top-5 left-1/2 -translate-x-1/2 w-6 h-6 text-amber-500 fill-amber-500/80 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]"
-                    strokeWidth={2.5}
-                  />
+                
+                {/* 1 in Metallic Gold (Champagne) as a size-matched partner to JG */}
+                <span className="relative text-5xl font-serif font-medium tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-[#F3E5AB] via-[#D4AF37] to-[#AA8000] drop-shadow-[0_0_12px_rgba(212,175,55,0.3)] ml-0">
                   1
                 </span>
               </div>
