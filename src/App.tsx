@@ -969,6 +969,24 @@ function LoginView({
   const [adminErrMsg, setAdminErrMsg] = useState("");
   const [adminShake, setAdminShake] = useState(false);
 
+  useEffect(() => {
+    if (empErrMsg) {
+      const timer = setTimeout(() => {
+        setEmpErrMsg("");
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [empErrMsg]);
+
+  useEffect(() => {
+    if (adminErrMsg) {
+      const timer = setTimeout(() => {
+        setAdminErrMsg("");
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [adminErrMsg]);
+
   const getFunnyMessage = (count: number) => {
     if (count === 1) return "Kamu lupa password kamu ya? Kalo kenangan kita masih ingat kan?";
     if (count === 2) return "Tuh kan salah lagi, mungkin passwordmu tgl jadian kita kali";
@@ -1211,19 +1229,31 @@ function LoginView({
                             <AnimatePresence>
                               {empErrMsg && (
                                 <motion.div
-                                  initial={{ opacity: 0, y: -10, height: 0 }}
-                                  animate={{ opacity: 1, y: 0, height: "auto" }}
-                                  exit={{ opacity: 0, y: -10, height: 0 }}
-                                  className="absolute -bottom-8 left-0 right-0 text-center"
+                                  initial={{ opacity: 0, height: 0, y: -10 }}
+                                  animate={{ opacity: 1, height: "auto", y: 0 }}
+                                  exit={{ opacity: 0, height: 0, y: -10 }}
+                                  className="pt-4 overflow-hidden"
                                 >
-                                  <span className="text-xs font-semibold text-rose-400 drop-shadow-md">
-                                    {empErrMsg}
-                                  </span>
+                                  <motion.div
+                                    drag
+                                    dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                                    dragElastic={0.9}
+                                    onDragEnd={(e, { offset }) => {
+                                      if (Math.abs(offset.x) > 50 || Math.abs(offset.y) > 50) {
+                                        setEmpErrMsg("");
+                                      }
+                                    }}
+                                    className="bg-rose-500/10 border border-rose-500/20 backdrop-blur-md px-4 py-3 rounded-xl shadow-lg cursor-grab active:cursor-grabbing text-center mx-auto"
+                                  >
+                                    <span className="text-xs font-semibold text-rose-200 block drop-shadow-md leading-relaxed">
+                                      {empErrMsg}
+                                    </span>
+                                  </motion.div>
                                 </motion.div>
                               )}
                             </AnimatePresence>
                           </motion.div>
-                          <div className="flex justify-end px-1 mt-6">
+                          <div className="flex justify-end px-1 mt-2">
                             <button
                               type="button"
                               onClick={() =>
@@ -1390,19 +1420,31 @@ function LoginView({
                               <AnimatePresence>
                                 {adminErrMsg && (
                                   <motion.div
-                                    initial={{ opacity: 0, y: -10, height: 0 }}
-                                    animate={{ opacity: 1, y: 0, height: "auto" }}
-                                    exit={{ opacity: 0, y: -10, height: 0 }}
-                                    className="absolute -bottom-8 left-0 right-0 text-center"
+                                    initial={{ opacity: 0, height: 0, y: -10 }}
+                                    animate={{ opacity: 1, height: "auto", y: 0 }}
+                                    exit={{ opacity: 0, height: 0, y: -10 }}
+                                    className="pt-4 overflow-hidden"
                                   >
-                                    <span className="text-xs font-semibold text-rose-400 drop-shadow-md">
-                                      {adminErrMsg}
-                                    </span>
+                                    <motion.div
+                                      drag
+                                      dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                                      dragElastic={0.9}
+                                      onDragEnd={(e, { offset }) => {
+                                        if (Math.abs(offset.x) > 50 || Math.abs(offset.y) > 50) {
+                                          setAdminErrMsg("");
+                                        }
+                                      }}
+                                      className="bg-rose-500/10 border border-rose-500/20 backdrop-blur-md px-4 py-3 rounded-xl shadow-lg cursor-grab active:cursor-grabbing text-center mx-auto"
+                                    >
+                                      <span className="text-xs font-semibold text-rose-200 block drop-shadow-md leading-relaxed">
+                                        {adminErrMsg}
+                                      </span>
+                                    </motion.div>
                                   </motion.div>
                                 )}
                               </AnimatePresence>
                             </motion.div>
-                            <div className="flex justify-end px-1 mt-6">
+                            <div className="flex justify-end px-1 mt-2">
                               <button
                                 type="button"
                                 onClick={() =>
