@@ -4582,14 +4582,40 @@ function EmployeeView({
     try {
       // Log to activityLogs for historical record
       try {
-        await addDoc(collection(db, "activityLogs"), {
-          employeeId: employee.id,
-          employeeName: employee.name,
-          action,
-          timestamp: serverTimestamp(),
-          location: location || pendingAction?.location || "",
-          photoUrl: photoData || "",
-        });
+        const time = new Date();
+        const recentLogQuery = query(
+          collection(db, "activityLogs"),
+          where("employeeId", "==", employee.id),
+          where("action", "==", action),
+          orderBy("timestamp", "desc"),
+          limit(1)
+        );
+        const recentLogSnap = await getDocs(recentLogQuery);
+        
+        let shouldLog = true;
+        
+        if (!recentLogSnap.empty) {
+            const lastLog = recentLogSnap.docs[0].data();
+            const lastTime = lastLog.timestamp.toDate();
+            if (time.getTime() - lastTime.getTime() < 60000) {
+               shouldLog = false;
+               // If new has photo and old didn't, update old
+               if (photoData && !lastLog.photoUrl) {
+                   await updateDoc(recentLogSnap.docs[0].ref, { photoUrl: photoData });
+               }
+            }
+        }
+        
+        if (shouldLog) {
+          await addDoc(collection(db, "activityLogs"), {
+            employeeId: employee.id,
+            employeeName: employee.name,
+            action,
+            timestamp: serverTimestamp(),
+            location: location || pendingAction?.location || "",
+            photoUrl: photoData || "",
+          });
+        }
       } catch (err) {
         handleFirestoreError(err, OperationType.CREATE, "activityLogs");
       }
@@ -9261,6 +9287,11 @@ function AdminEmployees({
 }) {
   const [isEditing, setIsEditing] = useState<Employee | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false); // NEW
+  const [showReactivateDialog, setShowReactivateDialog] = useState(false); // NEW
+  const [deactivateReason, setDeactivateReason] = useState(""); // NEW
+  const [deactivateDate, setDeactivateDate] = useState(format(new Date(), "yyyy-MM-dd")); // NEW
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null); // NEW
   const [searchTerm, setSearchTerm] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [formData, setFormData] = useState({
@@ -9598,6 +9629,96 @@ function AdminEmployees({
             </span>
             <Switch checked={showInactive} onCheckedChange={setShowInactive} />
           </div>
+
+          <Dialog
+            open={showDeactivateDialog}
+            onOpenChange={(val) => {
+              setShowDeactivateDialog(val);
+              if (!val) {
+                setSelectedEmployee(null);
+                setDeactivateReason("");
+              }
+            }}
+          >
+            <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[400px]">
+              <DialogHeader>
+                <DialogTitle>Nonaktifkan Karyawan</DialogTitle>
+                <DialogDescription>
+                  Masukkan alasan dan tanggal efektif nonaktif.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label>Alasan</Label>
+                  <Input
+                    value={deactivateReason}
+                    onChange={(e) => setDeactivateReason(e.target.value)}
+                    placeholder="Masukan alasan..."
+                    className="field-input"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Tgl Mulai Nonaktif</Label>
+                  <Input
+                    type="date"
+                    value={deactivateDate}
+                    onChange={(e) => setDeactivateDate(e.target.value)}
+                    className="field-input text-white"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowDeactivateDialog(false)}>Batal</Button>
+                <Button onClick={async () => {
+                      if (!selectedEmployee || !deactivateReason || !deactivateDate) return alert("Lengkapi data!");
+                      await updateDoc(doc(db, "employees", selectedEmployee.id), {
+                          isActive: false,                
+                          pin: selectedEmployee.pin.includes("(nonaktif)") ? selectedEmployee.pin : selectedEmployee.pin + " (nonaktif)",
+                          deactivationReason: deactivateReason,
+                          deactivationDate: deactivateDate,
+                          updatedAt: serverTimestamp(),
+                      });
+                      alert("Karyawan dinonaktifkan.", "success");
+                      setShowDeactivateDialog(false);
+                      setDeactivateReason("");
+                      setSelectedEmployee(null);
+                }} className="bg-rose-600 hover:bg-rose-500">Konfirmasi Nonaktif</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={showReactivateDialog}
+            onOpenChange={(val) => {
+              setShowReactivateDialog(val);
+              if (!val) setSelectedEmployee(null);
+            }}
+          >
+            <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[400px]">
+              <DialogHeader>
+                <DialogTitle>Aktifkan Kembali Karyawan</DialogTitle>
+                <DialogDescription>
+                  Apakah Anda yakin ingin mengaktifkan kembali {selectedEmployee?.name}?
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowReactivateDialog(false)}>Batal</Button>
+                <Button onClick={async () => {
+                      if (!selectedEmployee) return;
+                      await updateDoc(doc(db, "employees", selectedEmployee.id), {
+                          isActive: true,                
+                          pin: selectedEmployee.pin.replace(" (nonaktif)", ""),
+                          deactivationReason: "",
+                          deactivationDate: "",
+                          updatedAt: serverTimestamp(),
+                      });
+                      alert("Karyawan berhasil diaktifkan kembali.", "success");
+                      setShowReactivateDialog(false);
+                      setSelectedEmployee(null);
+                }} className="bg-emerald-600 hover:bg-emerald-500">Aktifkan Kembali</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog
             open={showAdd}
@@ -10071,19 +10192,49 @@ function AdminEmployees({
                     >
                       <Edit className="w-4 h-4 text-primary" />
                     </Button>
-                    {e.role === "superadmin" &&
-                    currentUser?.role !== "superadmin" ? (
-                      <span className="text-[9px] text-white/20 italic px-2">
-                        Protected
-                      </span>
+                    
+                    {e.isActive === false ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedEmployee(e);
+                          setShowReactivateDialog(true);
+                        }}
+                        className="hover:bg-white/10"
+                      >
+                        <UnlockIcon className="w-4 h-4 text-emerald-500" />
+                      </Button>
                     ) : (
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleEmployeeDelete(e)}
+                        onClick={() => {
+                          setSelectedEmployee(e);
+                          setShowDeactivateDialog(true);
+                        }}
                         className="hover:bg-white/10"
                       >
-                        <Trash2 className="w-4 h-4 text-rose-500" />
+                        <LockIcon className="w-4 h-4 text-rose-500" />
+                      </Button>
+                    )}
+
+                    {!(e.role === "superadmin" && currentUser?.role !== "superadmin") && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={async () => {
+                          const isConfirmed = await confirm(
+                            "YAKIN hapus karyawan ini permanen? Data tidak bisa dikembalikan.",
+                          );
+                          if (isConfirmed) {
+                            await deleteDoc(doc(db, "employees", e.id));
+                            alert("Karyawan dihapus permanen.", "success");
+                          }
+                        }}
+                        className="hover:bg-white/10"
+                      >
+                        <Trash2 className="w-4 h-4 text-slate-500" />
                       </Button>
                     )}
                   </TableCell>
