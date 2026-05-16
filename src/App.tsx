@@ -8976,30 +8976,30 @@ function AdminOverview({
             </CardDescription>
           </CardHeader>
           <CardContent className="px-0">
-            <div className="space-y-4">
+            <div className="h-64 overflow-y-auto pr-2 space-y-2">
               {recentActivity.length > 0 ? (
                 recentActivity.map((act) => (
                   <div
                     key={act.id}
-                    className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/[0.08] transition-colors"
+                    className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/[0.08] transition-colors"
                   >
-                    <div className="w-10 h-10 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center border border-white/10">
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center border border-white/10 overflow-hidden">
                       {act.photoUrl ? (
                         <img
                           src={act.photoUrl}
                           alt="Selfie"
-                          className="w-full h-full object-cover rounded-full"
+                          className="w-full h-full object-cover"
                         />
                       ) : (
-                        <User className="w-5 h-5 text-white/40" />
+                        <User className="w-4 h-4 text-white/40" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-white truncate">
+                      <p className="text-xs font-bold text-white truncate">
                         {act.employeeName}
                       </p>
-                      <p className="text-[10px] text-white/40 font-medium">
-                        {act.type} • {act.time}
+                      <p className="text-[10px] text-white/50">
+                        {act.action} • {act.timestamp ? new Date(act.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
                       </p>
                     </div>
                     <div
