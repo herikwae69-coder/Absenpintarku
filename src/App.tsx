@@ -554,7 +554,7 @@ export default function App() {
     };
   }, []);
 
-  const handleLogin = (employee: Employee, credential: string) => {
+  const handleLogin = (employee: Employee, credential: string): boolean => {
     try {
       // Default password is 123456 if not set
       const userPassword = employee.password || "123456";
@@ -565,23 +565,25 @@ export default function App() {
         setView("employee");
         localStorage.setItem("jg1_user", JSON.stringify(employee));
         localStorage.setItem("jg1_isAdmin", "false");
+        return true;
       } else {
-        customAlert("Password Salah!", "error");
+        return false;
       }
     } catch (e) {
       console.error("Login error:", e);
       customAlert("Terjadi kesalahan saat login.", "error");
+      return false;
     }
   };
 
-  const handleAdminAuth = (employee: Employee, credential: string) => {
+  const handleAdminAuth = (employee: Employee, credential: string): boolean => {
     if (
       employee.role !== "admin" &&
       employee.role !== "superadmin" &&
       employee.role !== "spv"
     ) {
       customAlert("Maaf kamu bukan admin!", "error");
-      return;
+      return false;
     }
     const userPassword = employee.password || "123456";
     if (userPassword === credential) {
@@ -590,8 +592,9 @@ export default function App() {
       setView("admin");
       localStorage.setItem("jg1_user", JSON.stringify(employee));
       localStorage.setItem("jg1_isAdmin", "true");
+      return true;
     } else {
-      customAlert("Password Admin Salah!", "error");
+      return false;
     }
   };
 
@@ -765,6 +768,7 @@ export default function App() {
                 transition={{ duration: 0.3, ease: "easeInOut" }}
               >
                 <LoginView
+                  jobPositions={jobPositions}
                   employees={employees}
                   onLogin={handleLogin}
                   onAdminAuth={handleAdminAuth}
@@ -941,10 +945,12 @@ function LoginView({
   theme,
   toggleTheme,
   alert,
+  jobPositions = [],
 }: {
   employees: Employee[];
-  onLogin: (e: Employee, pin: string) => void;
-  onAdminAuth: (e: Employee, pwd: string) => void;
+  jobPositions: JobPosition[];
+  onLogin: (e: Employee, pin: string) => boolean;
+  onAdminAuth: (e: Employee, pwd: string) => boolean;
   theme: "light" | "dark";
   toggleTheme: () => void;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
@@ -954,6 +960,67 @@ function LoginView({
   const [adminAbsenId, setAdminAbsenId] = useState("");
   const [adminPass, setAdminPass] = useState("");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+
+  const [empFailCount, setEmpFailCount] = useState(0);
+  const [empErrMsg, setEmpErrMsg] = useState("");
+  const [empShake, setEmpShake] = useState(false);
+
+  const [adminFailCount, setAdminFailCount] = useState(0);
+  const [adminErrMsg, setAdminErrMsg] = useState("");
+  const [adminShake, setAdminShake] = useState(false);
+
+  const getFunnyMessage = (count: number) => {
+    if (count === 1) return "Kamu lupa password kamu ya? Kalo kenangan kita masih ingat kan?";
+    if (count === 2) return "Tuh kan salah lagi, mungkin passwordmu tgl jadian kita kali";
+    return "Tuh kan kamu lupa beneran, apa sih yg kamu ingat tuhh";
+  };
+
+  const handleEmpLogin = (e: Employee, p: string) => {
+    const success = onLogin(e, p);
+    if (!success) {
+      setEmpFailCount((c) => {
+        const newCount = c + 1;
+        setEmpErrMsg(getFunnyMessage(newCount));
+        return newCount;
+      });
+      setEmpShake(true);
+      setTimeout(() => setEmpShake(false), 500);
+      setPin("");
+    } else {
+      setEmpFailCount(0);
+      setEmpErrMsg("");
+    }
+  };
+
+  const handleAdminLogin = (e: Employee, p: string) => {
+    const success = onAdminAuth(e, p);
+    if (!success) {
+      setAdminFailCount((c) => {
+        const newCount = c + 1;
+        setAdminErrMsg(getFunnyMessage(newCount));
+        return newCount;
+      });
+      setAdminShake(true);
+      setTimeout(() => setAdminShake(false), 500);
+      setAdminPass("");
+    } else {
+      setAdminFailCount(0);
+      setAdminErrMsg("");
+    }
+  };
+
+  // Reset errors when selection changes
+  useEffect(() => {
+    setEmpFailCount(0);
+    setEmpErrMsg("");
+    setPin("");
+  }, [absenId]);
+
+  useEffect(() => {
+    setAdminFailCount(0);
+    setAdminErrMsg("");
+    setAdminPass("");
+  }, [adminAbsenId]);
 
   const selectedEmployee = employees.find(
     (e) => String(e.pin || "").trim() === absenId.trim(),
@@ -1098,7 +1165,7 @@ function LoginView({
                             {selectedEmployee.name}
                           </span>
                           <span className="text-[10px] text-white/40 uppercase tracking-tighter">
-                            {jobPositions.find(p => p.id === selectedEmployee.jobPositionId)?.name || "-"}
+                            {jobPositions?.find(p => p.id === selectedEmployee.jobPositionId)?.name || "-"}
                           </span>
                         </motion.div>
                       )}
@@ -1113,7 +1180,11 @@ function LoginView({
                           transition={{ duration: 0.4, ease: "easeOut", delay: 0.1 }}
                           className="space-y-3 overflow-hidden pt-6 -mt-6 pb-2"
                         >
-                          <div className="relative mt-6 mb-2">
+                          <motion.div 
+                            className="relative mt-6 mb-2"
+                            animate={empShake ? { x: [-10, 10, -10, 10, 0] } : {}}
+                            transition={{ duration: 0.4 }}
+                          >
                             <Input
                               type="password"
                               id="employeePasswordInput"
@@ -1122,23 +1193,37 @@ function LoginView({
                               onChange={(e) => setPin(e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" && selectedEmployee && pin) {
-                                  onLogin(selectedEmployee, pin);
+                                  handleEmpLogin(selectedEmployee, pin);
                                 }
                               }}
-                              className="peer h-14 text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white focus:outline-none focus:ring-0"
+                              className={`peer h-14 text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all text-white focus:outline-none focus:ring-0 ${empErrMsg ? 'border-rose-500/50 focus:border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'border-white/5 focus:border-primary/50'}`}
                             />
                             <label
                               htmlFor="employeePasswordInput"
                               className={`absolute left-0 right-0 text-center pointer-events-none transition-all duration-300 ${
                                 pin
-                                  ? '-top-6 text-[10px] font-bold uppercase tracking-wider text-primary/70'
+                                  ? `-top-6 text-[10px] font-bold uppercase tracking-wider ${empErrMsg ? 'text-rose-500' : 'text-primary/70'}`
                                   : 'top-1/2 -translate-y-1/2 text-sm font-semibold text-white/50 peer-focus:-top-6 peer-focus:-translate-y-0 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:tracking-wider peer-focus:text-primary/70'
                               }`}
                             >
                               Password
                             </label>
-                          </div>
-                          <div className="flex justify-end px-1">
+                            <AnimatePresence>
+                              {empErrMsg && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -10, height: 0 }}
+                                  animate={{ opacity: 1, y: 0, height: "auto" }}
+                                  exit={{ opacity: 0, y: -10, height: 0 }}
+                                  className="absolute -bottom-8 left-0 right-0 text-center"
+                                >
+                                  <span className="text-xs font-semibold text-rose-400 drop-shadow-md">
+                                    {empErrMsg}
+                                  </span>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
+                          <div className="flex justify-end px-1 mt-6">
                             <button
                               type="button"
                               onClick={() =>
@@ -1160,7 +1245,7 @@ function LoginView({
                     <Button
                       disabled={!selectedEmployee || !pin}
                       onClick={() =>
-                        selectedEmployee && onLogin(selectedEmployee, pin)
+                        selectedEmployee && handleEmpLogin(selectedEmployee, pin)
                       }
                       className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-30 border-none"
                     >
@@ -1269,12 +1354,16 @@ function LoginView({
                           selectedAdmin.role === "superadmin" ||
                           selectedAdmin.role === "spv") && (
                           <motion.div
+                            className="space-y-3 overflow-hidden pt-6 -mt-6 pb-2"
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="space-y-3 overflow-hidden pt-6 -mt-6 pb-2"
                           >
-                            <div className="relative mt-6 mb-2">
+                            <motion.div 
+                              className="relative mt-6 mb-2"
+                              animate={adminShake ? { x: [-10, 10, -10, 10, 0] } : {}}
+                              transition={{ duration: 0.4 }}
+                            >
                               <Input
                                 type="password"
                                 id="adminPasswordInput"
@@ -1283,23 +1372,37 @@ function LoginView({
                                 onChange={(e) => setAdminPass(e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter" && selectedAdmin && adminPass) {
-                                    onAdminAuth(selectedAdmin, adminPass);
+                                    handleAdminLogin(selectedAdmin, adminPass);
                                   }
                                 }}
-                                className="peer h-14 text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-blue-500/50 text-white focus:outline-none focus:ring-0"
+                                className={`peer h-14 text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all text-white focus:outline-none focus:ring-0 ${adminErrMsg ? 'border-rose-500/50 focus:border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.2)]' : 'border-white/5 focus:border-blue-500/50'}`}
                               />
                               <label
                                 htmlFor="adminPasswordInput"
                                 className={`absolute left-0 right-0 text-center pointer-events-none transition-all duration-300 ${
                                   adminPass
-                                    ? '-top-6 text-[10px] font-bold uppercase tracking-wider text-blue-400'
+                                    ? `-top-6 text-[10px] font-bold uppercase tracking-wider ${adminErrMsg ? 'text-rose-500' : 'text-blue-400'}`
                                     : 'top-1/2 -translate-y-1/2 text-sm font-semibold text-white/50 peer-focus:-top-6 peer-focus:-translate-y-0 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:tracking-wider peer-focus:text-blue-400'
                                 }`}
                               >
                                 Password Admin
                               </label>
-                            </div>
-                            <div className="flex justify-end px-1">
+                              <AnimatePresence>
+                                {adminErrMsg && (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: -10, height: 0 }}
+                                    animate={{ opacity: 1, y: 0, height: "auto" }}
+                                    exit={{ opacity: 0, y: -10, height: 0 }}
+                                    className="absolute -bottom-8 left-0 right-0 text-center"
+                                  >
+                                    <span className="text-xs font-semibold text-rose-400 drop-shadow-md">
+                                      {adminErrMsg}
+                                    </span>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </motion.div>
+                            <div className="flex justify-end px-1 mt-6">
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1323,7 +1426,7 @@ function LoginView({
                         !selectedAdmin || selectedAdmin.role === "employee" || !adminPass
                       }
                       onClick={() =>
-                        selectedAdmin && onAdminAuth(selectedAdmin, adminPass)
+                        selectedAdmin && handleAdminLogin(selectedAdmin, adminPass)
                       }
                       className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white border-none font-bold text-lg rounded-2xl shadow-xl shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-30"
                     >
