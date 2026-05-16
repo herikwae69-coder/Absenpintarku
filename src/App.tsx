@@ -754,50 +754,76 @@ export default function App() {
       <div className="min-h-screen relative font-sans selection:bg-primary/20">
         <div className="mesh-bg" />
         <div className="relative z-10 min-h-screen">
-          {view === "login" && (
-            <LoginView
-              employees={employees}
-              onLogin={handleLogin}
-              onAdminAuth={handleAdminAuth}
-              theme={theme}
-              toggleTheme={toggleTheme}
-              alert={customAlert}
-            />
-          )}
-          {view === "employee" && currentUser && (
-            <EmployeeView
-              employee={currentUser}
-              employees={employees}
-              shifts={shifts}
-              sections={sections}
-              divisions={divisions}
-              onLogout={handleLogout}
-              theme={theme}
-              toggleTheme={toggleTheme}
-              confirm={customConfirm}
-              prompt={customPrompt}
-              alert={customAlert}
-            />
-          )}
-          {view === "admin" && isAdmin && (
-            <AdminDashboard
-              employees={employees}
-              shifts={shifts}
-              sections={sections}
-              divisions={divisions}
-              jobPositions={jobPositions}
-              jobLevels={jobLevels}
-              onLogout={handleLogout}
-              currentUser={currentUser}
-              theme={theme}
-              toggleTheme={toggleTheme}
-              confirm={customConfirm}
-              prompt={customPrompt}
-              alert={customAlert}
-              activePeriodId={activePeriodId}
-              setActivePeriodId={setActivePeriodId}
-            />
-          )}
+          <AnimatePresence mode="wait">
+            {view === "login" && (
+              <motion.div
+                key="login"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <LoginView
+                  employees={employees}
+                  onLogin={handleLogin}
+                  onAdminAuth={handleAdminAuth}
+                  theme={theme}
+                  toggleTheme={toggleTheme}
+                  alert={customAlert}
+                />
+              </motion.div>
+            )}
+            {view === "employee" && currentUser && (
+              <motion.div
+                key="employee"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <EmployeeView
+                  employee={currentUser}
+                  employees={employees}
+                  shifts={shifts}
+                  sections={sections}
+                  divisions={divisions}
+                  onLogout={handleLogout}
+                  theme={theme}
+                  toggleTheme={toggleTheme}
+                  confirm={customConfirm}
+                  prompt={customPrompt}
+                  alert={customAlert}
+                />
+              </motion.div>
+            )}
+            {view === "admin" && isAdmin && (
+              <motion.div
+                key="admin"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <AdminDashboard
+                  employees={employees}
+                  shifts={shifts}
+                  sections={sections}
+                  divisions={divisions}
+                  jobPositions={jobPositions}
+                  jobLevels={jobLevels}
+                  onLogout={handleLogout}
+                  currentUser={currentUser}
+                  theme={theme}
+                  toggleTheme={toggleTheme}
+                  confirm={customConfirm}
+                  prompt={customPrompt}
+                  alert={customAlert}
+                  activePeriodId={activePeriodId}
+                  setActivePeriodId={setActivePeriodId}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Custom Global Dialog */}
@@ -1016,228 +1042,274 @@ function LoginView({
           </motion.div>
         </div>
 
-        <Card className="glass-panel border border-border shadow-2xl overflow-hidden backdrop-blur-3xl bg-card/60">
-          <div className="h-1 w-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
-          <CardHeader className="pb-4 pt-8 text-center">
-            <CardTitle className="text-foreground text-xl font-bold tracking-tight">
-              {showAdminLogin ? "Akses Administrator" : "Login Karyawan"}
-            </CardTitle>
-            <CardDescription className="text-muted-foreground text-xs">
-              {showAdminLogin
-                ? "Silakan masukkan password admin"
-                : "Masukkan No. Absen Anda"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 px-8 pb-8">
+        <div style={{ perspective: 1200 }} className="w-full">
+          <AnimatePresence mode="wait">
             {!showAdminLogin ? (
-              <>
-                <div className="space-y-3">
-                  <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                    No. Absen
-                  </Label>
-                  <Input
-                    type="text"
-                    placeholder="Masukkan No. Absen..."
-                    value={absenId}
-                    onChange={(e) => setAbsenId(e.target.value)}
-                    className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white font-bold"
-                  />
-                </div>
-
-                {selectedEmployee && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-2xl bg-primary/10 border border-primary/20 flex flex-col items-center gap-1"
-                  >
-                    <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">
-                      Karyawan Terdeteksi
-                    </span>
-                    <span className="text-lg font-black text-white">
-                      {selectedEmployee.name}
-                    </span>
-                    <span className="text-[10px] text-white/40 uppercase tracking-tighter">
-                      {selectedEmployee.division}
-                    </span>
-                  </motion.div>
-                )}
-
-                {selectedEmployee && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    className="space-y-3 overflow-hidden"
-                  >
-                    <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                      Password
-                    </Label>
-                    <Input
-                      type="password"
-                      placeholder="••••••••"
-                      value={pin}
-                      onChange={(e) => setPin(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && selectedEmployee && pin) {
-                          onLogin(selectedEmployee, pin);
-                        }
-                      }}
-                      className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
-                    />
-                    <div className="flex items-center justify-between px-1">
-                      <p className="text-[9px] text-white/20 italic">
-                        Default password: 123456
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          alert(
-                            "Lupa password? Silakan hubungi Admin Anda untuk melakukan reset password melalui panel Admin.",
-                            "info",
-                          )
-                        }
-                        className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer"
-                      >
-                        Lupa Password?
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="space-y-3">
-                  <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                    No. Absen Admin
-                  </Label>
-                  <Input
-                    type="text"
-                    placeholder="Masukkan No. Absen..."
-                    value={adminAbsenId}
-                    onChange={(e) => setAdminAbsenId(e.target.value)}
-                    className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white font-bold"
-                  />
-                </div>
-
-                {selectedAdmin &&
-                (selectedAdmin.role === "admin" ||
-                  selectedAdmin.role === "superadmin" ||
-                  selectedAdmin.role === "spv") ? (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex flex-col items-center gap-1"
-                  >
-                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">
-                      {selectedAdmin.role === "superadmin"
-                        ? "Super Admin"
-                        : selectedAdmin.role === "spv"
-                          ? "Supervisor"
-                          : "Admin"}{" "}
-                      Terdeteksi
-                    </span>
-                    <span className="text-lg font-black text-white">
-                      {selectedAdmin.name}
-                    </span>
-                  </motion.div>
-                ) : adminAbsenId &&
-                  selectedAdmin &&
-                  selectedAdmin.role !== "admin" &&
-                  selectedAdmin.role !== "superadmin" &&
-                  selectedAdmin.role !== "spv" ? (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex flex-col items-center gap-1 text-center"
-                  >
-                    <AlertCircle className="w-6 h-6 text-rose-400 mb-1" />
-                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">
-                      Akses Ditolak
-                    </span>
-                    <span className="text-sm font-semibold text-white/80">
-                      Maaf, Anda bukan Admin/Supervisor.
-                    </span>
-                  </motion.div>
-                ) : null}
-
-                {selectedAdmin &&
-                  (selectedAdmin.role === "admin" ||
-                    selectedAdmin.role === "superadmin" ||
-                    selectedAdmin.role === "spv") && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      className="space-y-3 overflow-hidden"
-                    >
+              <motion.div
+                key="employee"
+                initial={{ rotateY: -90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                exit={{ rotateY: 90, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <Card className="glass-panel border border-border shadow-2xl overflow-hidden backdrop-blur-3xl bg-card/60">
+                  <div className="h-1 w-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
+                  <CardHeader className="pb-4 pt-8 text-center">
+                    <CardTitle className="text-foreground text-xl font-bold tracking-tight">
+                      Login Karyawan
+                    </CardTitle>
+                    <CardDescription className="text-muted-foreground text-xs">
+                      Masukkan No. Absen Anda
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6 px-8 pb-8">
+                    <div className="space-y-3">
                       <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                        Password Admin
+                        No. Absen
                       </Label>
                       <Input
-                        type="password"
-                        placeholder="••••••••"
-                        value={adminPass}
-                        onChange={(e) => setAdminPass(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && selectedAdmin && adminPass) {
-                            onAdminAuth(selectedAdmin, adminPass);
-                          }
-                        }}
-                        className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
+                        type="text"
+                        placeholder="Masukkan No. Absen..."
+                        value={absenId}
+                        onChange={(e) => setAbsenId(e.target.value)}
+                        className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white font-bold"
                       />
-                      <div className="flex justify-end px-1">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            alert(
-                              `Lupa password Admin?\n\nSilakan minta bantuan pemilik sistem atau developer untuk mengatur ulang password di Master Database.`,
-                              "info",
-                            )
-                          }
-                          className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer"
-                        >
-                          Lupa Password Admin?
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-              </>
-            )}
-          </CardContent>
-          <CardFooter className="flex-col gap-4 px-8 pb-10">
-            {!showAdminLogin ? (
-              <Button
-                disabled={!selectedEmployee || !pin}
-                onClick={() =>
-                  selectedEmployee && onLogin(selectedEmployee, pin)
-                }
-                className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-30 border-none"
-              >
-                MASUK SEKARANG
-              </Button>
-            ) : (
-              <Button
-                disabled={
-                  !selectedAdmin || selectedAdmin.role !== "admin" || !adminPass
-                }
-                onClick={() =>
-                  selectedAdmin && onAdminAuth(selectedAdmin, adminPass)
-                }
-                className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white border-none font-bold text-lg rounded-2xl shadow-xl shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-30"
-              >
-                KONFIRMASI ADMIN
-              </Button>
-            )}
+                    </div>
 
-            <Button
-              variant="ghost"
-              onClick={() => setShowAdminLogin(!showAdminLogin)}
-              className="text-white/30 hover:bg-white/5 hover:text-white text-[10px] font-bold uppercase tracking-widest rounded-full px-6 transition-all"
-            >
-              {showAdminLogin
-                ? "Bukan Admin? Kembali"
-                : "Masuk Mode Administrator"}
-            </Button>
-          </CardFooter>
-        </Card>
+                    <AnimatePresence>
+                      {selectedEmployee && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, height: 0, scale: 0.9 }}
+                          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                          className="p-4 rounded-2xl bg-primary/10 border border-primary/20 flex flex-col items-center gap-1 overflow-hidden"
+                        >
+                          <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">
+                            Karyawan Terdeteksi
+                          </span>
+                          <span className="text-lg font-black text-white">
+                            {selectedEmployee.name}
+                          </span>
+                          <span className="text-[10px] text-white/40 uppercase tracking-tighter">
+                            {selectedEmployee.division}
+                          </span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                      {selectedEmployee && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-3 overflow-hidden"
+                        >
+                          <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
+                            Password
+                          </Label>
+                          <Input
+                            type="password"
+                            placeholder="••••••••"
+                            value={pin}
+                            onChange={(e) => setPin(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && selectedEmployee && pin) {
+                                onLogin(selectedEmployee, pin);
+                              }
+                            }}
+                            className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
+                          />
+                          <div className="flex items-center justify-between px-1">
+                            <p className="text-[9px] text-white/20 italic">
+                              Default password: 123456
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                alert(
+                                  "Lupa password? Silakan hubungi Admin Anda untuk melakukan reset password melalui panel Admin.",
+                                  "info",
+                                )
+                              }
+                              className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer"
+                            >
+                              Lupa Password?
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </CardContent>
+                  <CardFooter className="flex-col gap-4 px-8 pb-10">
+                    <Button
+                      disabled={!selectedEmployee || !pin}
+                      onClick={() =>
+                        selectedEmployee && onLogin(selectedEmployee, pin)
+                      }
+                      className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-bold text-lg rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-30 border-none"
+                    >
+                      MASUK SEKARANG
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      onClick={() => setShowAdminLogin(true)}
+                      className="text-white/30 hover:bg-white/5 hover:text-white text-[10px] font-bold uppercase tracking-widest rounded-full px-6 transition-all mt-2"
+                    >
+                      Masuk Mode Administrator
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="admin"
+                initial={{ rotateY: -90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                exit={{ rotateY: 90, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <Card className="glass-panel border border-border shadow-2xl overflow-hidden backdrop-blur-3xl bg-card/60">
+                  <div className="h-1 w-full bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50" />
+                  <CardHeader className="pb-4 pt-8 text-center">
+                    <CardTitle className="text-foreground text-xl font-bold tracking-tight">
+                      Akses Administrator
+                    </CardTitle>
+                    <CardDescription className="text-muted-foreground text-xs">
+                      Silakan masukkan password admin
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6 px-8 pb-8">
+                    <div className="space-y-3">
+                      <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
+                        No. Absen Admin
+                      </Label>
+                      <Input
+                        type="text"
+                        placeholder="Masukkan No. Absen..."
+                        value={adminAbsenId}
+                        onChange={(e) => setAdminAbsenId(e.target.value)}
+                        className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-blue-500/50 text-white font-bold"
+                      />
+                    </div>
+
+                    <AnimatePresence>
+                      {selectedAdmin &&
+                      (selectedAdmin.role === "admin" ||
+                        selectedAdmin.role === "superadmin" ||
+                        selectedAdmin.role === "spv") ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10, height: 0 }}
+                          className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex flex-col items-center gap-1 overflow-hidden"
+                        >
+                          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">
+                            {selectedAdmin.role === "superadmin"
+                              ? "Super Admin"
+                              : selectedAdmin.role === "spv"
+                                ? "Supervisor"
+                                : "Admin"}{" "}
+                            Terdeteksi
+                          </span>
+                          <span className="text-lg font-black text-white">
+                            {selectedAdmin.name}
+                          </span>
+                        </motion.div>
+                      ) : adminAbsenId &&
+                        selectedAdmin &&
+                        selectedAdmin.role !== "admin" &&
+                        selectedAdmin.role !== "superadmin" &&
+                        selectedAdmin.role !== "spv" ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10, height: 0 }}
+                          className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex flex-col items-center gap-1 text-center overflow-hidden"
+                        >
+                          <AlertCircle className="w-6 h-6 text-rose-400 mb-1" />
+                          <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">
+                            Akses Ditolak
+                          </span>
+                          <span className="text-sm font-semibold text-white/80">
+                            Maaf, Anda bukan Admin/Supervisor.
+                          </span>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+
+                    <AnimatePresence>
+                      {selectedAdmin &&
+                        (selectedAdmin.role === "admin" ||
+                          selectedAdmin.role === "superadmin" ||
+                          selectedAdmin.role === "spv") && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="space-y-3 overflow-hidden"
+                          >
+                            <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
+                              Password Admin
+                            </Label>
+                            <Input
+                              type="password"
+                              placeholder="••••••••"
+                              value={adminPass}
+                              onChange={(e) => setAdminPass(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && selectedAdmin && adminPass) {
+                                  onAdminAuth(selectedAdmin, adminPass);
+                                }
+                              }}
+                              className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-blue-500/50"
+                            />
+                            <div className="flex justify-end px-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  alert(
+                                    `Lupa password Admin?\n\nSilakan minta bantuan pemilik sistem atau developer untuk mengatur ulang password di Master Database.`,
+                                    "info",
+                                  )
+                                }
+                                className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer"
+                              >
+                                Lupa Password Admin?
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                    </AnimatePresence>
+                  </CardContent>
+                  <CardFooter className="flex-col gap-4 px-8 pb-10">
+                    <Button
+                      disabled={
+                        !selectedAdmin || selectedAdmin.role === "employee" || !adminPass
+                      }
+                      onClick={() =>
+                        selectedAdmin && onAdminAuth(selectedAdmin, adminPass)
+                      }
+                      className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white border-none font-bold text-lg rounded-2xl shadow-xl shadow-blue-500/20 transition-all active:scale-[0.98] disabled:opacity-30"
+                    >
+                      KONFIRMASI ADMIN
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      onClick={() => setShowAdminLogin(false)}
+                      className="text-white/30 hover:bg-white/5 hover:text-white text-[10px] font-bold uppercase tracking-widest rounded-full px-6 transition-all mt-2"
+                    >
+                      Bukan Admin? Kembali
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </motion.div>
     </div>
   );
