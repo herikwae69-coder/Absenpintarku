@@ -8398,12 +8398,12 @@ function AdminOverview({
         });
 
         // 4. Recent Activity (10 rows)
-        const recentAttQuery = query(
-          attRef,
+        const recentActivityQuery = query(
+          collection(db, "activityLogs"),
           orderBy("timestamp", "desc"),
           limit(10),
         );
-        const recentAttSnap = await getDocs(recentAttQuery);
+        const recentAttSnap = await getDocs(recentActivityQuery);
         const activities = recentAttSnap.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
