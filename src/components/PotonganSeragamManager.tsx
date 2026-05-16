@@ -451,7 +451,7 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
         </DialogContent>
       </Dialog>
 
-      <Card className="glass-panel border-none bg-black/40 w-[350px]">
+      <Card className="glass-panel border-none bg-black/40 w-full">
         <CardContent className="p-6 space-y-6">
           <div className="flex flex-col md:flex-row gap-4 items-end">
             <div className="flex-1 w-full relative group">
