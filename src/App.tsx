@@ -9670,6 +9670,11 @@ function AdminEmployees({
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowDeactivateDialog(false)}>Batal</Button>
                 <Button onClick={async () => {
+                      const pwd = await prompt("Masukkan Password Admin untuk melanjutkan:");
+                      if (pwd !== "admin123") {
+                        alert("Password salah!", "error");
+                        return;
+                      }
                       if (!selectedEmployee || !deactivateReason || !deactivateDate) return alert("Lengkapi data!");
                       await updateDoc(doc(db, "employees", selectedEmployee.id), {
                           isActive: false,                
@@ -9704,6 +9709,11 @@ function AdminEmployees({
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowReactivateDialog(false)}>Batal</Button>
                 <Button onClick={async () => {
+                      const pwd = await prompt("Masukkan Password Admin untuk melanjutkan:");
+                      if (pwd !== "admin123") {
+                        alert("Password salah!", "error");
+                        return;
+                      }
                       if (!selectedEmployee) return;
                       await updateDoc(doc(db, "employees", selectedEmployee.id), {
                           isActive: true,                
@@ -10224,6 +10234,11 @@ function AdminEmployees({
                         variant="ghost"
                         size="icon"
                         onClick={async () => {
+                          const pwd = await prompt("Masukkan Password Admin untuk melanjutkan:");
+                          if (pwd !== "admin123") {
+                            alert("Password salah!", "error");
+                            return;
+                          }
                           const isConfirmed = await confirm(
                             "YAKIN hapus karyawan ini permanen? Data tidak bisa dikembalikan.",
                           );
