@@ -118,6 +118,7 @@ import {
   CalendarDays,
   Loader2,
   Bell,
+  Save,
 } from "lucide-react";
 import {
   Card,
@@ -565,7 +566,7 @@ export default function App() {
         localStorage.setItem("jg1_user", JSON.stringify(employee));
         localStorage.setItem("jg1_isAdmin", "false");
       } else {
-        customAlert("Password Salah! (Default: 123456)", "error");
+        customAlert("Password Salah!", "error");
       }
     } catch (e) {
       console.error("Login error:", e);
@@ -1047,10 +1048,10 @@ function LoginView({
             {!showAdminLogin ? (
               <motion.div
                 key="employee"
-                initial={{ rotateY: -90, opacity: 0 }}
-                animate={{ rotateY: 0, opacity: 1 }}
-                exit={{ rotateY: 90, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
+                initial={{ opacity: 0, y: -100, scale: 0.95, filter: "blur(10px)" }}
+                animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -100, scale: 0.95, filter: "blur(10px)" }}
+                transition={{ duration: 0.5, type: "spring", bounce: 0.15 }}
               >
                 <Card className="glass-panel border border-border shadow-2xl overflow-hidden backdrop-blur-3xl bg-card/60">
                   <div className="h-1 w-full bg-gradient-to-r from-transparent via-primary to-transparent opacity-50" />
@@ -1063,36 +1064,41 @@ function LoginView({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6 px-8 pb-8">
-                    <div className="space-y-3">
-                      <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                        No. Absen
-                      </Label>
+                    <div className="relative mt-6 mb-2">
                       <Input
                         type="text"
-                        placeholder="Masukkan No. Absen..."
+                        id="absenInput"
+                        placeholder=" "
                         value={absenId}
                         onChange={(e) => setAbsenId(e.target.value)}
-                        className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white font-bold"
+                        className="peer h-14 text-center rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white font-bold text-lg focus:outline-none focus:ring-0"
                       />
+                      <label
+                        htmlFor="absenInput"
+                        className={`absolute left-0 right-0 text-center pointer-events-none transition-all duration-300 ${
+                          absenId
+                            ? '-top-6 text-[10px] font-bold uppercase tracking-wider text-primary/70'
+                            : 'top-1/2 -translate-y-1/2 text-sm font-semibold text-white/50 peer-focus:-top-6 peer-focus:-translate-y-0 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:tracking-wider peer-focus:text-primary/70'
+                        }`}
+                      >
+                        No. Absen
+                      </label>
                     </div>
 
                     <AnimatePresence>
                       {selectedEmployee && (
                         <motion.div
-                          initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, height: 0, scale: 0.9 }}
-                          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                          initial={{ opacity: 0, filter: "blur(10px)", y: 20 }}
+                          animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
+                          exit={{ opacity: 0, height: 0, filter: "blur(10px)", scale: 0.9 }}
+                          transition={{ duration: 0.4, ease: "easeOut" }}
                           className="p-4 rounded-2xl bg-primary/10 border border-primary/20 flex flex-col items-center gap-1 overflow-hidden"
                         >
-                          <span className="text-[10px] font-bold text-primary/60 uppercase tracking-widest">
-                            Karyawan Terdeteksi
-                          </span>
                           <span className="text-lg font-black text-white">
                             {selectedEmployee.name}
                           </span>
                           <span className="text-[10px] text-white/40 uppercase tracking-tighter">
-                            {selectedEmployee.division}
+                            {jobPositions.find(p => p.id === selectedEmployee.jobPositionId)?.name || "-"}
                           </span>
                         </motion.div>
                       )}
@@ -1101,30 +1107,38 @@ function LoginView({
                     <AnimatePresence>
                       {selectedEmployee && (
                         <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="space-y-3 overflow-hidden"
+                          initial={{ opacity: 0, height: 0, filter: "blur(10px)", y: 20 }}
+                          animate={{ opacity: 1, height: "auto", filter: "blur(0px)", y: 0 }}
+                          exit={{ opacity: 0, height: 0, filter: "blur(10px)" }}
+                          transition={{ duration: 0.4, ease: "easeOut", delay: 0.1 }}
+                          className="space-y-3 overflow-hidden pt-6 -mt-6 pb-2"
                         >
-                          <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                            Password
-                          </Label>
-                          <Input
-                            type="password"
-                            placeholder="••••••••"
-                            value={pin}
-                            onChange={(e) => setPin(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && selectedEmployee && pin) {
-                                onLogin(selectedEmployee, pin);
-                              }
-                            }}
-                            className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50"
-                          />
-                          <div className="flex items-center justify-between px-1">
-                            <p className="text-[9px] text-white/20 italic">
-                              Default password: 123456
-                            </p>
+                          <div className="relative mt-6 mb-2">
+                            <Input
+                              type="password"
+                              id="employeePasswordInput"
+                              placeholder=" "
+                              value={pin}
+                              onChange={(e) => setPin(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && selectedEmployee && pin) {
+                                  onLogin(selectedEmployee, pin);
+                                }
+                              }}
+                              className="peer h-14 text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-primary/50 text-white focus:outline-none focus:ring-0"
+                            />
+                            <label
+                              htmlFor="employeePasswordInput"
+                              className={`absolute left-0 right-0 text-center pointer-events-none transition-all duration-300 ${
+                                pin
+                                  ? '-top-6 text-[10px] font-bold uppercase tracking-wider text-primary/70'
+                                  : 'top-1/2 -translate-y-1/2 text-sm font-semibold text-white/50 peer-focus:-top-6 peer-focus:-translate-y-0 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:tracking-wider peer-focus:text-primary/70'
+                              }`}
+                            >
+                              Password
+                            </label>
+                          </div>
+                          <div className="flex justify-end px-1">
                             <button
                               type="button"
                               onClick={() =>
@@ -1166,33 +1180,42 @@ function LoginView({
             ) : (
               <motion.div
                 key="admin"
-                initial={{ rotateY: -90, opacity: 0 }}
-                animate={{ rotateY: 0, opacity: 1 }}
-                exit={{ rotateY: 90, opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
+                initial={{ opacity: 0, y: 100, scale: 0.95, filter: "blur(10px)" }}
+                animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: 100, scale: 0.95, filter: "blur(10px)" }}
+                transition={{ duration: 0.5, type: "spring", bounce: 0.15 }}
               >
-                <Card className="glass-panel border border-border shadow-2xl overflow-hidden backdrop-blur-3xl bg-card/60">
-                  <div className="h-1 w-full bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50" />
-                  <CardHeader className="pb-4 pt-8 text-center">
-                    <CardTitle className="text-foreground text-xl font-bold tracking-tight">
+                <Card className="rounded-[24px] border border-blue-500/30 shadow-[0_8px_32px_0_rgba(59,130,246,0.2)] overflow-hidden backdrop-blur-2xl bg-[#0f172a]/80 text-white relative">
+                  <div className="absolute inset-0 bg-blue-500/5 pointer-events-none" />
+                  <div className="h-1 w-full bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-50 relative z-10" />
+                  <CardHeader className="pb-4 pt-8 text-center relative z-10">
+                    <CardTitle className="text-white text-xl font-bold tracking-tight">
                       Akses Administrator
                     </CardTitle>
-                    <CardDescription className="text-muted-foreground text-xs">
+                    <CardDescription className="text-blue-200/60 text-xs">
                       Silakan masukkan password admin
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6 px-8 pb-8">
-                    <div className="space-y-3">
-                      <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                        No. Absen Admin
-                      </Label>
+                  <CardContent className="space-y-6 px-8 pb-8 relative z-10">
+                    <div className="relative mt-6 mb-2">
                       <Input
                         type="text"
-                        placeholder="Masukkan No. Absen..."
+                        id="adminAbsenInput"
+                        placeholder=" "
                         value={adminAbsenId}
                         onChange={(e) => setAdminAbsenId(e.target.value)}
-                        className="h-14 field-input rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-blue-500/50 text-white font-bold"
+                        className="peer h-14 text-center rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-blue-500/50 text-white font-bold text-lg focus:outline-none focus:ring-0"
                       />
+                      <label
+                        htmlFor="adminAbsenInput"
+                        className={`absolute left-0 right-0 text-center pointer-events-none transition-all duration-300 ${
+                          adminAbsenId
+                            ? '-top-6 text-[10px] font-bold uppercase tracking-wider text-blue-400'
+                            : 'top-1/2 -translate-y-1/2 text-sm font-semibold text-white/50 peer-focus:-top-6 peer-focus:-translate-y-0 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:tracking-wider peer-focus:text-blue-400'
+                        }`}
+                      >
+                        No. Absen Admin
+                      </label>
                     </div>
 
                     <AnimatePresence>
@@ -1249,23 +1272,33 @@ function LoginView({
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="space-y-3 overflow-hidden"
+                            className="space-y-3 overflow-hidden pt-6 -mt-6 pb-2"
                           >
-                            <Label className="text-white/50 text-[10px] font-bold uppercase tracking-wider ml-1">
-                              Password Admin
-                            </Label>
-                            <Input
-                              type="password"
-                              placeholder="••••••••"
-                              value={adminPass}
-                              onChange={(e) => setAdminPass(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && selectedAdmin && adminPass) {
-                                  onAdminAuth(selectedAdmin, adminPass);
-                                }
-                              }}
-                              className="h-14 field-input text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-blue-500/50"
-                            />
+                            <div className="relative mt-6 mb-2">
+                              <Input
+                                type="password"
+                                id="adminPasswordInput"
+                                placeholder=" "
+                                value={adminPass}
+                                onChange={(e) => setAdminPass(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && selectedAdmin && adminPass) {
+                                    onAdminAuth(selectedAdmin, adminPass);
+                                  }
+                                }}
+                                className="peer h-14 text-center tracking-[0.5em] text-xl font-black rounded-2xl bg-white/5 focus:bg-white/10 transition-all border-white/5 focus:border-blue-500/50 text-white focus:outline-none focus:ring-0"
+                              />
+                              <label
+                                htmlFor="adminPasswordInput"
+                                className={`absolute left-0 right-0 text-center pointer-events-none transition-all duration-300 ${
+                                  adminPass
+                                    ? '-top-6 text-[10px] font-bold uppercase tracking-wider text-blue-400'
+                                    : 'top-1/2 -translate-y-1/2 text-sm font-semibold text-white/50 peer-focus:-top-6 peer-focus:-translate-y-0 peer-focus:text-[10px] peer-focus:font-bold peer-focus:uppercase peer-focus:tracking-wider peer-focus:text-blue-400'
+                                }`}
+                              >
+                                Password Admin
+                              </label>
+                            </div>
                             <div className="flex justify-end px-1">
                               <button
                                 type="button"
@@ -1284,7 +1317,7 @@ function LoginView({
                         )}
                     </AnimatePresence>
                   </CardContent>
-                  <CardFooter className="flex-col gap-4 px-8 pb-10">
+                  <CardFooter className="flex-col gap-4 px-8 pb-10 relative z-10">
                     <Button
                       disabled={
                         !selectedAdmin || selectedAdmin.role === "employee" || !adminPass
@@ -2500,8 +2533,8 @@ function AdminBonusMaster({
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2 items-center">
-                          <div className="relative max-w-[300px]">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 text-xs font-bold">
+                          <div className="relative min-w-[100px] flex-1 max-w-[200px]">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 text-xs font-bold">
                               Rp
                             </span>
                             <Input
@@ -2512,16 +2545,18 @@ function AdminBonusMaster({
                               onChange={(e) =>
                                 handleInputChange(dateStr, e.target.value)
                               }
-                              className="bg-black border-[#0095ff] text-white pl-11 h-11 rounded-xl font-bold focus:ring-[#0095ff]/50"
+                              className="bg-black border-[#0095ff] text-white pl-9 pr-2 h-11 rounded-xl font-bold focus:ring-[#0095ff]/50 w-full"
                               placeholder="0"
                             />
                           </div>
                           <Button 
+                            size="icon"
                             onClick={() => handleSaveSingleDate(dateStr, value)}
                             disabled={saving || isLocked}
-                            className="bg-black text-white border border-[#0095ff] hover:bg-black/90 h-11"
+                            className="bg-black text-white border border-[#0095ff] hover:bg-black/90 h-11 w-11 flex-shrink-0"
+                            title="Simpan"
                           >
-                            Simpan
+                            <Save className="w-5 h-5 text-[#0095ff]" />
                           </Button>
                         </div>
                         </TableCell>
