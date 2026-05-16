@@ -892,9 +892,9 @@ export default function App() {
         <Toaster position="top-center" expand={true} richColors />
 
         {/* Watermark */}
-        <div className="fixed bottom-4 right-8 z-50 text-[10px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2">
+        <div className="fixed bottom-4 right-8 z-50 text-[8px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2 justify-end">
           <div className="w-8 h-[1px] bg-white/10" />
-          App by Heri.k | versi 1.2.1 | 2026
+          App by Heri.k | versi 2.2.3 | 2026
         </div>
       </div>
     </DialogContext.Provider>
@@ -15781,7 +15781,7 @@ function EmployeeLeave({
                         <Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">
                           Libur Ke-{index + 1}
                         </Label>
-                        <div className="flex gap-2">
+                        <div className="relative">
                           <Input
                             type="date"
                             value={d}
@@ -15790,23 +15790,23 @@ function EmployeeLeave({
                               newDates[index] = e.target.value;
                               setFormData({ ...formData, dates: newDates });
                             }}
-                            className="field-input text-xs w-full"
+                            className="field-input text-xs w-full pr-10"
                           />
-                          {d && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              onClick={() => {
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full w-10 text-white/50 hover:text-white"
+                            onClick={() => {
+                              if (d) {
                                 const newDates = [...formData.dates];
                                 newDates[index] = "";
                                 setFormData({ ...formData, dates: newDates });
-                              }}
-                              className="shrink-0 glass-panel border-white/10 text-rose-400 hover:text-rose-300 w-10 h-10"
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          )}
+                              }
+                            }}
+                          >
+                             {d ? <Trash2 className="h-4 w-4" /> : <CalendarIcon className="h-4 w-4" />}
+                          </Button>
                         </div>
                       </div>
                     ))}
