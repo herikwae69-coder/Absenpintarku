@@ -781,10 +781,10 @@ export default function App() {
             {view === "employee" && currentUser && (
               <motion.div
                 key="employee"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
               >
                 <EmployeeView
                   employee={currentUser}
@@ -804,10 +804,10 @@ export default function App() {
             {view === "admin" && isAdmin && (
               <motion.div
                 key="admin"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
               >
                 <AdminDashboard
                   employees={employees}
@@ -8186,34 +8186,52 @@ function AdminDashboard({
 
             <div className="focus-visible:outline-none min-h-[500px]">
               <TabsContent value="employees" className="mt-0 outline-none">
-                <AdminEmployees
-                  employees={employees}
-                  shifts={shifts}
-                  sections={sections}
-                  divisions={divisions}
-                  jobPositions={jobPositions}
-                  jobLevels={jobLevels}
-                  currentUser={currentUser}
-                  confirm={confirm}
-                  prompt={prompt}
-                  alert={alert}
-                />
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <AdminEmployees
+                    employees={employees}
+                    shifts={shifts}
+                    sections={sections}
+                    divisions={divisions}
+                    jobPositions={jobPositions}
+                    jobLevels={jobLevels}
+                    currentUser={currentUser}
+                    confirm={confirm}
+                    prompt={prompt}
+                    alert={alert}
+                  />
+                </motion.div>
               </TabsContent>
               <TabsContent value="shifts" className="mt-0 outline-none">
-                <AdminShifts
-                  shifts={shifts}
-                  confirm={confirm}
-                  prompt={prompt}
-                  alert={alert}
-                />
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <AdminShifts
+                    shifts={shifts}
+                    confirm={confirm}
+                    prompt={prompt}
+                    alert={alert}
+                  />
+                </motion.div>
               </TabsContent>
               <TabsContent value="divisions" className="mt-0 outline-none">
-                <AdminDivisions
-                  divisions={divisions}
-                  confirm={confirm}
-                  prompt={prompt}
-                  alert={alert}
-                />
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <AdminDivisions
+                    divisions={divisions}
+                    confirm={confirm}
+                    prompt={prompt}
+                    alert={alert}
+                  />
+                </motion.div>
               </TabsContent>
               <TabsContent value="sections" className="mt-0 outline-none">
                 <AdminSections
