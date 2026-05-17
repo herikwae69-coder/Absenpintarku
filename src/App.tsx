@@ -7798,12 +7798,10 @@ function AdminDashboard({
     currentUser?.role === "spv" ? "live" : "dashboard",
   );
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    { Ringkasan: true },
-  );
+  const [expandedGroup, setExpandedGroup] = useState<string | null>("Ringkasan");
 
   const toggleGroup = (label: string) => {
-    setExpandedGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+    setExpandedGroup((prev) => (prev === label ? null : label));
   };
 
   const rawMenuGroups = [
@@ -8073,7 +8071,7 @@ function AdminDashboard({
                       !g.superAdminOnly || currentUser?.role === "superadmin",
                   )
                   .map((group) => {
-                    const isExpanded = expandedGroups[group.label];
+                    const isExpanded = expandedGroup === group.label;
                     return (
                       <div key={group.label} className="space-y-2">
                         <button
@@ -8095,10 +8093,16 @@ function AdminDashboard({
                           </div>
                         </button>
 
-                        <div
-                          className={`space-y-1.5 overflow-hidden transition-all duration-300 ${isExpanded ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}
-                        >
-                          <div className="ml-4 border-l-2 border-white/5 pl-3 space-y-1">
+                        <AnimatePresence initial={false}>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="ml-4 border-l-2 border-white/5 pl-3 space-y-1 pt-1">
                             {group.items.map((item) => (
                               <TabsTrigger
                                 key={item.value}
@@ -8123,8 +8127,10 @@ function AdminDashboard({
                               </TabsTrigger>
                             ))}
                           </div>
-                        </div>
-                      </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                     );
                   })}
               </TabsList>
@@ -16991,7 +16997,7 @@ function AdminReports({
       const newTime = parse(
         newTimeStr,
         "HH:mm",
-        attendance.date ? new Date(attendance.date) : new Date(),
+        attendance.date ? toDateSafe(attendance.date) : new Date(),
       );
       await updateDoc(doc(db, "attendance", id), {
         [field]: newTime,
@@ -17033,12 +17039,14 @@ function AdminReports({
               <Input
                 type="date"
                 value={format(dateRange.start, "yyyy-MM-dd")}
-                onChange={(e) =>
-                  setDateRange({
-                    ...dateRange,
-                    start: new Date(e.target.value),
-                  })
-                }
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setDateRange({
+                      ...dateRange,
+                      start: new Date(e.target.value),
+                    });
+                  }
+                }}
                 className="field-input w-40"
               />
             </div>
@@ -17049,9 +17057,11 @@ function AdminReports({
               <Input
                 type="date"
                 value={format(dateRange.end, "yyyy-MM-dd")}
-                onChange={(e) =>
-                  setDateRange({ ...dateRange, end: new Date(e.target.value) })
-                }
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setDateRange({ ...dateRange, end: new Date(e.target.value) });
+                  }
+                }}
                 className="field-input w-40"
               />
             </div>
@@ -17090,7 +17100,7 @@ function AdminReports({
                       className="border-white/5 hover:bg-white/5"
                     >
                       <TableCell className="text-xs font-medium text-white/60 whitespace-nowrap">
-                        {a.date ? format(new Date(a.date), "dd MMM yyyy") : "-"}
+                        {a.date ? format(toDateSafe(a.date), "dd MMM yyyy") : "-"}
                       </TableCell>
                       <TableCell className="font-semibold text-white whitespace-nowrap">
                         {a.employeeName}
