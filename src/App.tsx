@@ -4835,10 +4835,14 @@ function EmployeeView({
       // Log to activityLogs for historical record
       try {
         const time = new Date();
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        
         const recentLogQuery = query(
           collection(db, "activityLogs"),
           where("employeeId", "==", employee.id),
           where("action", "==", action),
+          where("timestamp", ">=", Timestamp.fromDate(startOfToday)),
           orderBy("timestamp", "desc"),
           limit(1)
         );
@@ -4847,14 +4851,10 @@ function EmployeeView({
         let shouldLog = true;
         
         if (!recentLogSnap.empty) {
-            const lastLog = recentLogSnap.docs[0].data();
-            const lastTime = lastLog.timestamp.toDate();
-            if (time.getTime() - lastTime.getTime() < 60000) {
-               shouldLog = false;
-               // If new has photo and old didn't, update old
-               if (photoData && !lastLog.photoUrl) {
-                   await updateDoc(recentLogSnap.docs[0].ref, { photoUrl: photoData });
-               }
+            shouldLog = false;
+            // If new has photo and old didn't, update old
+            if (photoData && !recentLogSnap.docs[0].data().photoUrl) {
+                await updateDoc(recentLogSnap.docs[0].ref, { photoUrl: photoData });
             }
         }
         
