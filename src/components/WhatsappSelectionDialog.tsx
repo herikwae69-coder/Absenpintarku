@@ -23,7 +23,7 @@ export function WhatsappSelectionDialog({
   currentUser: Employee | null;
 }) {
   const handleChat = (admin: SuperAdmin) => {
-    const message = encodeURIComponent(`Hallo kak ${admin.name}, aku ${currentUser?.name || "karyawan"} lupa password login Jenggo 1 app ku. Minta tolong dong di atur ulang password saya. Terima kasih kakak admin yg guanteng dan cuantikk.. `);
+    const message = encodeURIComponent(`Hallo kak ${admin.name}, aku ${currentUser?.name || "karyawan"} (No Absen: ${currentUser?.pin || "-"}) lupa password login Jenggo 1 app ku. Minta tolong dong di atur ulang password saya. Terima kasih kakak admin yg guanteng dan cuantikk.. `);
     window.open(`https://wa.me/${admin.whatsappNumber.replace(/\D/g, "")}?text=${message}`, "_blank");
     onClose();
   };
