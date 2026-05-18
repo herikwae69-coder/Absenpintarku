@@ -778,8 +778,11 @@ export default function App() {
             <p className="text-sm text-gray-300 leading-relaxed text-left mb-4">
                 Dikarenakan tidak ada endors yg masuk, app kebanggaan jg1 ini masih menggunakan database gratis dari google.com, dan hari ini sudah mencapai batas operasional harian gratis. Mohom kembali lagi besok yaa.. Tapi tenang saja babang heri masih punya solusi agar semua tetap terkendali, wait on proses ya boskuhh
             </p>
-            <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+            <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
                <span className="text-xs text-white/40 italic">#SupportBabangHeri</span>
+               <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                 Coba Muat Ulang
+               </Button>
             </div>
         </div>
       </div>
