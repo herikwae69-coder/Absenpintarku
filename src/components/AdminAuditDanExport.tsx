@@ -72,32 +72,35 @@ export default function AdminAuditDanExport({
     }, [selectedPeriod, employees.length]);
 
     useEffect(() => {
-      const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
-        const data: Record<string, any> = {};
-        snap.docs.forEach(d => { data[d.id] = d.data(); });
-        setControls(data);
-        
-        // Find period to default to if none selected
-        if (!selectedPeriod) {
-            const now = new Date();
-            const activePeriods = Object.entries(data)
-                .filter(([_, ctrl]) => !ctrl.hidden && ctrl.startDate && ctrl.endDate)
-                .map(([id, ctrl]) => ({ id, start: new Date(ctrl.startDate), end: new Date(ctrl.endDate) }));
+        const fetchControls = async () => {
+            try {
+                const snap = await getDocs(collection(db, 'periodControls'));
+                const data: Record<string, any> = {};
+                snap.docs.forEach(d => { data[d.id] = d.data(); });
+                setControls(data);
                 
-            const runningPeriod = activePeriods.find(p => now >= p.start && now <= p.end);
-            const newestPeriod = activePeriods.sort((a,b) => b.start.getTime() - a.start.getTime())[0];
-            
-            const targetPeriod = runningPeriod || newestPeriod;
-            
-            if (targetPeriod) {
-                setInternalPeriod(targetPeriod.id);
-                setActivePeriodId(targetPeriod.id);
+                // Find period to default to if none selected
+                if (!selectedPeriod) {
+                    const now = new Date();
+                    const activePeriods = Object.entries(data)
+                        .filter(([_, ctrl]) => !ctrl.hidden && ctrl.startDate && ctrl.endDate)
+                        .map(([id, ctrl]) => ({ id, start: new Date(ctrl.startDate), end: new Date(ctrl.endDate) }));
+                        
+                    const runningPeriod = activePeriods.find(p => now >= p.start && now <= p.end);
+                    const newestPeriod = activePeriods.sort((a,b) => b.start.getTime() - a.start.getTime())[0];
+                    
+                    const targetPeriod = runningPeriod || newestPeriod;
+                    
+                    if (targetPeriod) {
+                        setInternalPeriod(targetPeriod.id);
+                        setActivePeriodId(targetPeriod.id);
+                    }
+                }
+            } catch (error) {
+                console.error("Audit periods fetch error:", error);
             }
-        }
-      }, (error) => {
-          console.error("Audit periods snapshot error:", error);
-      });
-      return unsub;
+        };
+        fetchControls();
     }, [selectedPeriod]);
 
     const fetchAuditData = async () => {

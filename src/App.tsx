@@ -13,6 +13,7 @@ L.Marker.prototype.options.icon = L.icon({
   shadowSize: [41, 41],
 });
 import { db, auth } from "./lib/firebase";
+import { getCachedData, setCachedData } from "./lib/cache";
 import {
   collection,
   query,
@@ -97,6 +98,7 @@ import {
   MessageSquare,
   Layers,
   Search,
+  RefreshCw,
   ClipboardCheck,
   Zap,
   MapPin,
@@ -132,7 +134,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/tabs";
 import {
   Table,
   TableBody,
@@ -458,12 +460,109 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [view, setView] = useState<"login" | "employee" | "admin">("login");
   const [loading, setLoading] = useState(true);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [activePeriodId, setActivePeriodId] = useState<string>("");
   const [superAdmins, setSuperAdmins] = useState<SuperAdmin[]>([]);
   const [showWaSelection, setShowWaSelection] = useState(false);
 
-  // Initialize Listeners
+  // Initialize Data Fetching
+  const fetchInitialData = async (forceRefresh: boolean = false) => {
+    try {
+      setLoading(true);
+
+      // Try to get from cache, unless forced refresh
+      if (!forceRefresh) {
+          const cached = getCachedData<{
+            employees: Employee[],
+            shifts: Shift[],
+            sections: Section[],
+            divisions: Division[],
+            jobPositions: JobPosition[],
+            jobLevels: JobLevel[],
+            superAdmins: SuperAdmin[]
+          }>("initialData");
+          
+          if (cached) {
+              setEmployees(cached.employees);
+              setShifts(cached.shifts);
+              setSections(cached.sections);
+              setDivisions(cached.divisions);
+              setJobPositions(cached.jobPositions);
+              setJobLevels(cached.jobLevels);
+              setSuperAdmins(cached.superAdmins);
+              setLoading(false);
+              return;
+          }
+      }
+
+      const [empSnap, shiftSnap, secSnap, divSnap, posSnap, lvlSnap, saSnap] = await Promise.all([
+        getDocs(collection(db, "employees")),
+        getDocs(collection(db, "shifts")),
+        getDocs(collection(db, "sections")),
+        getDocs(collection(db, "divisions")),
+        getDocs(collection(db, "jobPositions")),
+        getDocs(collection(db, "jobLevels")),
+        getDocs(collection(db, "superAdmins")),
+      ]);
+
+      const employees = empSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Employee);
+      const shifts = shiftSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Shift);
+      const sections = secSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Section);
+      const divisions = divSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Division);
+      const jobPositions = posSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as JobPosition);
+      const superAdmins = saSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as SuperAdmin);
+      
+      const levels = lvlSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as JobLevel);
+      const sortedLevels = levels.sort((a, b) => a.rank - b.rank);
+      
+      setEmployees(employees);
+      setShifts(shifts);
+      setSections(sections);
+      setDivisions(divisions);
+      setJobPositions(jobPositions);
+      setJobLevels(sortedLevels);
+      setSuperAdmins(superAdmins);
+      
+      setCachedData("initialData", {
+          employees, shifts, sections, divisions, jobPositions, jobLevels: sortedLevels, superAdmins
+      });
+      
+      setLoading(false);
+    } catch (err: any) {
+      if (err?.message?.includes("Quota") || err?.message?.includes("quota")) {
+         const cached = getCachedData<{
+            employees: Employee[],
+            shifts: Shift[],
+            sections: Section[],
+            divisions: Division[],
+            jobPositions: JobPosition[],
+            jobLevels: JobLevel[],
+            superAdmins: SuperAdmin[]
+         }>("initialData");
+         
+         if (cached) {
+            setEmployees(cached.employees);
+            setShifts(cached.shifts);
+            setSections(cached.sections);
+            setDivisions(cached.divisions);
+            setJobPositions(cached.jobPositions);
+            setJobLevels(cached.jobLevels);
+            setSuperAdmins(cached.superAdmins);
+            setLoading(false);
+            console.log("Quota exceeded, loading data from cache.");
+            return;
+         } else {
+            console.error("Quota exceeded and no cache available.");
+            setLoading(false);
+            setQuotaExceeded(true);
+            return;
+         }
+      }
+      handleFirestoreError(err, OperationType.LIST, "initialLoad");
+    }
+  };
+
   useEffect(() => {
     // Check for persisted login
     const persistedUser = localStorage.getItem("jg1_user");
@@ -486,90 +585,8 @@ export default function App() {
       }
     }
 
-    // Start listeners immediately
-    const unsubEmployees = onSnapshot(
-      collection(db, "employees"),
-      (snapshot) => {
-        setEmployees(
-          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Employee),
-        );
-        setLoading(false);
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, "employees"),
-    );
-
-    const unsubShifts = onSnapshot(
-      collection(db, "shifts"),
-      (snapshot) => {
-        setShifts(
-          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Shift),
-        );
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, "shifts"),
-    );
-
-    const unsubSections = onSnapshot(
-      collection(db, "sections"),
-      (snapshot) => {
-        setSections(
-          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Section),
-        );
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, "sections"),
-    );
-
-    const unsubDivisions = onSnapshot(
-      collection(db, "divisions"),
-      (snapshot) => {
-        setDivisions(
-          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Division),
-        );
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, "divisions"),
-    );
-
-    const unsubJobPositions = onSnapshot(
-      collection(db, "jobPositions"),
-      (snapshot) => {
-        setJobPositions(
-          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as JobPosition),
-        );
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, "jobPositions"),
-    );
-
-    const unsubJobLevels = onSnapshot(
-      collection(db, "jobLevels"),
-      (snapshot) => {
-        const levels = snapshot.docs.map(
-          (d) => ({ id: d.id, ...d.data() }) as JobLevel,
-        );
-        setJobLevels(levels.sort((a, b) => a.rank - b.rank));
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, "jobLevels"),
-    );
-
-    return () => {
-      unsubEmployees();
-      unsubShifts();
-      unsubSections();
-      unsubDivisions();
-      unsubJobPositions();
-      unsubJobLevels();
-    };
-  }, []);
-
-  useEffect(() => {
-    const unsubSuperAdmins = onSnapshot(
-      collection(db, "superAdmins"),
-      (snapshot) => {
-        setSuperAdmins(
-          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as SuperAdmin),
-        );
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, "superAdmins"),
-    );
-    return unsubSuperAdmins;
+    // Start data fetch
+    fetchInitialData();
   }, []);
 
   const handleLogin = (employee: Employee, credential: string): boolean => {
@@ -745,6 +762,30 @@ export default function App() {
     }
   };
 
+  if (quotaExceeded) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50 p-6 text-center">
+        <div className="mesh-bg" />
+        <motion.div
+           animate={{ scale: [1, 1.1, 1] }}
+           transition={{ repeat: Infinity, duration: 2 }}
+           className="mb-6"
+        >
+          <ClipboardList className="w-16 h-16 text-rose-500/80 mx-auto" />
+        </motion.div>
+        <div className="glass-panel p-8 max-w-lg shadow-xl relative overflow-hidden ring-1 ring-white/10">
+            <h2 className="text-xl font-bold text-white mb-4">Yah, Limit Database Tercapai 😅</h2>
+            <p className="text-sm text-gray-300 leading-relaxed text-left mb-4">
+                Dikarenakan tidak ada endors yg masuk, app kebanggaan jg1 ini masih menggunakan database gratis dari google.com, dan hari ini sudah mencapai batas operasional harian gratis. Mohom kembali lagi besok yaa.. Tapi tenang saja babang heri masih punya solusi agar semua tetap terkendali, wait on proses ya boskuhh
+            </p>
+            <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+               <span className="text-xs text-white/40 italic">#SupportBabangHeri</span>
+            </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading)
     return (
       <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50">
@@ -786,6 +827,7 @@ export default function App() {
                 transition={{ duration: 0.3, ease: "easeInOut" }}
               >
                 <LoginView
+                  fetchInitialData={fetchInitialData}
                   jobPositions={jobPositions}
                   employees={employees}
                   onLogin={handleLogin}
@@ -970,6 +1012,7 @@ function LoginView({
   showWaSelection,
   superAdmins,
   jobPositions = [],
+  fetchInitialData,
 }: {
   employees: Employee[];
   jobPositions: JobPosition[];
@@ -981,6 +1024,7 @@ function LoginView({
   setWaSelection: (show: boolean) => void;
   showWaSelection: boolean;
   superAdmins: SuperAdmin[];
+  fetchInitialData: (force?: boolean) => void;
 }) {
   const [absenId, setAbsenId] = useState("");
   const [pin, setPin] = useState("");
@@ -1087,6 +1131,13 @@ function LoginView({
         toggleTheme={toggleTheme}
         className="fixed top-4 right-4 z-50"
       />
+      <button
+        onClick={() => fetchInitialData(true)}
+        className="fixed top-4 left-4 z-50 p-2 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+        title="Refresh Data"
+      >
+        <RefreshCw size={20} className="text-primary" />
+      </button>
       {/* Decorative atmospheric elements */}
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/10 dark:bg-primary/20 blur-[120px] rounded-full animate-pulse" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-500/5 dark:bg-blue-500/10 blur-[100px] rounded-full" />
@@ -14870,14 +14921,19 @@ function AdminLeave({
   );
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
-      const data: Record<string, any> = {};
-      snap.forEach((d) => {
-        data[d.id] = d.data();
-      });
-      setControls(data);
-    });
-    return unsub;
+    const fetchControls = async () => {
+      try {
+        const snap = await getDocs(collection(db, "periodControls"));
+        const data: Record<string, any> = {};
+        snap.forEach((d) => {
+          data[d.id] = d.data();
+        });
+        setControls(data);
+      } catch (err) {
+        console.error("Error fetching periodControls:", err);
+      }
+    };
+    fetchControls();
   }, []);
 
   useEffect(() => {
@@ -15227,14 +15283,19 @@ function EmployeeLeave({
   const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
-      const data: Record<string, any> = {};
-      snap.forEach((d) => {
-        data[d.id] = d.data();
-      });
-      setControls(data);
-    });
-    return unsub;
+    const fetchControls = async () => {
+      try {
+        const snap = await getDocs(collection(db, "periodControls"));
+        const data: Record<string, any> = {};
+        snap.forEach((d) => {
+          data[d.id] = d.data();
+        });
+        setControls(data);
+      } catch (err) {
+        console.error("Error fetching periodControls:", err);
+      }
+    };
+    fetchControls();
   }, []);
   const [showMusicPopup, setShowMusicPopup] = useState(false);
   const [musicPopupText, setMusicPopupText] = useState(
@@ -15256,20 +15317,15 @@ function EmployeeLeave({
   const isPostPopupRef = React.useRef(false);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
-      if (doc.exists()) {
-        setRequestKata(doc.data().text || "");
-      }
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const unsub = onSnapshot(
-      doc(db, "systemConfig", "musicSettings"),
-      (doc) => {
-        if (doc.exists()) {
-          const data = doc.data();
+    const fetchConfig = async () => {
+      try {
+        const docReq = await getDoc(doc(db, "systemConfig", "requestKata"));
+        if (docReq.exists()) {
+          setRequestKata(docReq.data().text || "");
+        }
+        const docMusic = await getDoc(doc(db, "systemConfig", "musicSettings"));
+        if (docMusic.exists()) {
+          const data = docMusic.data();
           if (data.url) {
             if (audioRef.current) {
               audioRef.current.pause();
@@ -15281,9 +15337,11 @@ function EmployeeLeave({
             setMusicPopupText(data.popupText);
           }
         }
-      },
-    );
-    return unsub;
+      } catch(err) {
+        console.error("Error fetching configs:", err);
+      }
+    };
+    fetchConfig();
   }, []);
 
   const playMusic = () => {
@@ -15360,13 +15418,15 @@ function EmployeeLeave({
 
   useEffect(() => {
     if (!selectedPeriod) return;
-    const unsub = onSnapshot(
-      doc(db, "periodControls", selectedPeriod),
-      (snap) => {
+    const fetchPeriod = async () => {
+      try {
+        const snap = await getDoc(doc(db, "periodControls", selectedPeriod));
         setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
-      },
-    );
-    return unsub;
+      } catch (err) {
+        console.error("Error fetching period control:", err);
+      }
+    };
+    fetchPeriod();
   }, [selectedPeriod]);
 
   useEffect(() => {
@@ -15408,11 +15468,17 @@ function EmployeeLeave({
 
   const [allQuotas, setAllQuotas] = useState<any[]>([]);
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
-      setAllQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
-  }, []);
+    const fetchQuotas = async () => {
+      try {
+        const q = query(collection(db, "periodQuotas"), where("employeeId", "==", employee.id));
+        const snap = await getDocs(q);
+        setAllQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Error fetching employee quotas:", err);
+      }
+    };
+    fetchQuotas();
+  }, [employee.id]);
 
   const currentRequests = requests.filter((r) => r.period === selectedPeriod);
   const currentAllRequests = allRequests.filter(

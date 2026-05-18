@@ -1,0 +1,107 @@
+765:  if (loading)
+766-    return (
+767-      <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50">
+768-        <div className="mesh-bg" />
+769-        <motion.div
+770-          animate={{ scale: [1, 1.1, 1] }}
+771-          transition={{ repeat: Infinity, duration: 2 }}
+772-          className="mb-4"
+773-        >
+774-          <ClipboardList className="w-12 h-12 text-primary/40" />
+775-        </motion.div>
+776-        <p className="animate-pulse">Memuat data absensi...</p>
+777-        {authError && (
+778-          <p className="mt-4 text-rose-400 text-sm max-w-xs text-center px-4">
+779-            {authError}
+780-          </p>
+781-        )}
+782-      </div>
+783-    );
+784-
+785-  return (
+786-    <DialogContext.Provider
+787-      value={{
+788-        alert: customAlert,
+789-        confirm: customConfirm,
+790-        prompt: customPrompt,
+--
+7702:  if (loading) return <div>Memuat...</div>;
+7703-
+7704-  return (
+7705-    <div className="glass-panel p-6 space-y-6">
+7706-      <h3 className="text-xl font-bold text-white">Atur Lokasi Kantor</h3>
+7707-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+7708-        <div>
+7709-          <Label className="text-white/50">Latitude</Label>
+7710-          <Input
+7711-            type="number"
+7712-            step="any"
+7713-            value={config.lat}
+7714-            onChange={(e) =>
+7715-              setConfig({ ...config, lat: parseFloat(e.target.value) })
+7716-            }
+7717-            className="text-white"
+7718-          />
+7719-        </div>
+7720-        <div>
+7721-          <Label className="text-white/50">Longitude</Label>
+7722-          <Input
+7723-            type="number"
+7724-            step="any"
+7725-            value={config.lng}
+7726-            onChange={(e) =>
+7727-              setConfig({ ...config, lng: parseFloat(e.target.value) })
+--
+8795:  if (loading) {
+8796-    return (
+8797-      <div className="flex flex-col items-center justify-center py-20 gap-3">
+8798-        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+8799-        <p className="text-xs text-white/40 uppercase tracking-widest font-black">
+8800-          Memuat Dashboard...
+8801-        </p>
+8802-      </div>
+8803-    );
+8804-  }
+8805-
+8806-  return (
+8807-    <div className="space-y-8 pb-10">
+8808-      {/* Welcome Section */}
+8809-      <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border border-white/10 p-8 md:p-10">
+8810-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-[100px] rounded-full -mr-20 -mt-20 anim-pulse-slow" />
+8811-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+8812-          <div className="space-y-2">
+8813-            <div className="flex items-center gap-2 mb-2">
+8814-              <span className="px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-[10px] font-black text-primary uppercase tracking-widest">
+8815-                Administrator
+8816-              </span>
+8817-              <div className="w-1 h-1 rounded-full bg-white/20" />
+8818-              <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">
+8819-                {format(new Date(), "yyyy")} Edition
+8820-              </span>
+--
+13243:  if (loading)
+13244-    return (
+13245-      <div className="text-white p-10 text-center">
+13246-        Memuat pengaturan periode...
+13247-      </div>
+13248-    );
+13249-
+13250-  return (
+13251-    <Card className="glass-panel border-none shadow-lg">
+13252-      <CardHeader className="flex flex-row items-center justify-between">
+13253-        <div>
+13254-          <CardTitle className="text-white">
+13255-            Pengaturan Batas Waktu Request
+13256-          </CardTitle>
+13257-          <CardDescription className="text-white/50">
+13258-            Atur kapan karyawan boleh melakukan request libur untuk setiap
+13259-            periode.
+13260-          </CardDescription>
+13261-        </div>
+13262-        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+13263-          <DialogTrigger
+13264-            render={
+13265-              <Button className="bg-primary hover:bg-primary/80 flex gap-2">
+13266-                <Plus className="w-4 h-4" /> Tambah Periode Manual
+13267-              </Button>
+13268-            }

@@ -31,25 +31,31 @@ export function AdminShiftPeriode({
   const [periodOptions, setPeriodOptions] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState("");
 
+  const fetchPeriods = async () => {
+    try {
+      const q = query(collection(db, "periodControls"));
+      const snap = await getDocs(q);
+      const opts = snap.docs.map(doc => {
+          const data = doc.data();
+          return {
+              label: data.name,
+              value: doc.id,
+              start: data.startDate ? new Date(data.startDate) : new Date(),
+              end: data.endDate ? new Date(data.endDate) : new Date(),
+              ...data
+          };
+      }).filter((p: any) => !!p.label).sort((a,b) => b.start.getTime() - a.start.getTime()); // fallback
+      setPeriodOptions(opts);
+      if (opts.length > 0 && !selectedPeriod) {
+          setSelectedPeriod(opts[0].value);
+      }
+    } catch(err) {
+      console.error("Error fetching periods:", err);
+    }
+  };
+
   useEffect(() => {
-    const q = query(collection(db, "periodControls"));
-    const unsub = onSnapshot(q, (snap) => {
-        const opts = snap.docs.map(doc => {
-            const data = doc.data();
-            return {
-                label: data.name,
-                value: doc.id,
-                start: data.startDate ? new Date(data.startDate) : new Date(),
-                end: data.endDate ? new Date(data.endDate) : new Date(),
-                ...data
-            };
-        }).filter((p: any) => !!p.label).sort((a,b) => b.start.getTime() - a.start.getTime()); // fallback
-        setPeriodOptions(opts);
-        if (opts.length > 0 && !selectedPeriod) {
-            setSelectedPeriod(opts[0].value);
-        }
-    });
-    return unsub;
+    fetchPeriods();
   }, [db]);
 
   const [selectedDivision, setSelectedDivision] = useState(divisions?.[0]?.name || "");

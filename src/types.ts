@@ -15,17 +15,20 @@ export interface Shift {
   name: string;
   startTime: string;
   endTime: string;
+  [key: string]: any;
 }
 
 export interface Section {
   id: string;
   name: string;
   division: string;
+  [key: string]: any;
 }
 
 export interface Division {
   id: string;
   name: string;
+  [key: string]: any;
 }
 
 export interface Attendance {
@@ -39,6 +42,7 @@ export interface Attendance {
   status: string;
   shiftId: string;
   updatedAt: any;
+  [key: string]: any;
 }
 
 export interface LeaveRequest {
@@ -48,6 +52,7 @@ export interface LeaveRequest {
   type: string;
   reason: string;
   status: string;
+  [key: string]: any;
 }
 
 export interface ManualAttendance {
@@ -56,6 +61,7 @@ export interface ManualAttendance {
   date: string;
   checkIn: string;
   checkOut: string;
+  [key: string]: any;
 }
 
 export interface ActivityLog {
@@ -64,21 +70,33 @@ export interface ActivityLog {
   action: string;
   timestamp: any;
   photoUrl?: string;
+  [key: string]: any;
 }
 
 export interface JobPosition {
   id: string;
   name: string;
+  [key: string]: any;
 }
 
 export interface JobLevel {
   id: string;
   rank: number;
   name: string;
+  [key: string]: any;
 }
 
 export interface SuperAdmin {
   id: string;
   name: string;
   whatsappNumber: string;
+  [key: string]: any;
+}
+
+export interface PeriodControl {
+  id: string;
+  name: string;
+  startDate: any;
+  endDate: any;
+  [key: string]: any;
 }

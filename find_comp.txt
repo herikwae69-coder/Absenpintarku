@@ -1,0 +1,4413 @@
+295-
+296-    carryover = Math.max(0, effective - used);
+297-  }
+298-  return finalQuota;
+299-};
+300-
+301-const toDateSafe = (val: any): Date => {
+302-  if (!val) return new Date();
+303-  if (typeof val.toDate === "function") {
+304-    const d = val.toDate();
+305-    return isNaN(d.getTime()) ? new Date() : d;
+306-  }
+307-  if (val instanceof Date) {
+308-    return isNaN(val.getTime()) ? new Date() : val;
+309-  }
+310-  if (typeof val === "object" && "seconds" in val) {
+311-    return new Date(val.seconds * 1000);
+312-  }
+313-  const parsed = new Date(val);
+314-  return isNaN(parsed.getTime()) ? new Date() : parsed;
+315-};
+316-
+317-const calculateMinutesDiff = (scheduledStr: string, actual: any) => {
+318-  if (!actual) return 0;
+319-  const actualDate = toDateSafe(actual);
+320-  const [h, m] = scheduledStr.split(":").map(Number);
+321-  const scheduledDate =
+322-    actualDate instanceof Date ? new Date(actualDate.getTime()) : new Date();
+323-  scheduledDate.setHours(h, m, 0, 0);
+324-  return Math.floor((actualDate.getTime() - scheduledDate.getTime()) / 60000);
+325-};
+326-
+327-const minsToHHMM = (mins: number) => {
+328-  const absoluteMins = Math.round(Math.abs(mins));
+329-  const h = Math.floor(absoluteMins / 60);
+330-  const m = absoluteMins % 60;
+331-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+332-};
+333-
+334-const minsToDecimal = (mins: number) => {
+335:  return (Math.abs(mins) / 60).toFixed(2);
+336-};
+337-
+338-const calculateAttendanceStats = (attendance: any, shift: any) => {
+339-  if (!attendance.checkIn || !shift)
+340-    return { late: 0, earlyLeave: 0, overtime: 0 };
+--
+399-
+400-const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
+401-  return Object.entries(firestoreControls)
+402-    .filter(
+403-      ([id, data]) =>
+404-        !data.hidden && data.name && data.startDate && data.endDate,
+405-    )
+406-    .map(([id, data]) => ({
+407-      label: data.name,
+408-      value: id,
+409-      start: new Date(data.startDate),
+410-      end: new Date(data.endDate),
+411-    }))
+412-    .sort((a, b) => b.start.getTime() - a.start.getTime()); // Newest first
+413-};
+414-
+415-// Admin Authentication is now handle via Employee roles
+416-import { useAutoLogout } from "./hooks/useAutoLogout";
+417-
+418-import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+419-
+420-// --- CONTEXT ---
+421-const DialogContext = React.createContext<{
+422-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+423-  confirm: (msg: string, title?: string) => Promise<boolean>;
+424-  prompt: (
+425-    msg: string,
+426-    defaultVal?: string,
+427-    title?: string,
+428-  ) => Promise<string | null>;
+429-} | null>(null);
+430-
+431-export function useDialog() {
+432-  const context = React.useContext(DialogContext);
+433-  if (!context) throw new Error("useDialog must be used within DialogProvider");
+434-  return context;
+435-}
+436-
+437-export default function App() {
+438-  const [theme, setTheme] = useState<"light" | "dark">(() => {
+439:    return (localStorage.getItem("theme") as "light" | "dark") || "dark";
+440-  });
+441-
+442-  useEffect(() => {
+443-    const root = window.document.documentElement;
+444-    root.classList.remove("light", "dark");
+--
+615-      return false;
+616-    }
+617-    const userPassword = employee.password || "123456";
+618-    if (userPassword === credential) {
+619-      setCurrentUser(employee); // Optionally record who logged in as admin
+620-      setIsAdmin(true);
+621-      setView("admin");
+622-      localStorage.setItem("jg1_user", JSON.stringify(employee));
+623-      localStorage.setItem("jg1_isAdmin", "true");
+624-      return true;
+625-    } else {
+626-      return false;
+627-    }
+628-  };
+629-
+630-  const handleLogout = () => {
+631-    setCurrentUser(null);
+632-    setIsAdmin(false);
+633-    setView("login");
+634-    localStorage.removeItem("jg1_user");
+635-    localStorage.removeItem("jg1_isAdmin");
+636-  };
+637-
+638-  useAutoLogout(currentUser, handleLogout);
+639-
+640-  useEffect(() => {
+641-    if (!currentUser?.id) return;
+642-
+643-    const updatePresence = async () => {
+644-      try {
+645-        await updateDoc(doc(db, "employees", currentUser.id), {
+646-          lastSeen: serverTimestamp(),
+647-        });
+648-      } catch (err) {
+649-        console.error("Heartbeat error:", err);
+650-      }
+651-    };
+652-
+653-    updatePresence();
+654-    const interval = setInterval(updatePresence, 60000); // 1 minute
+655:    return () => clearInterval(interval);
+656-  }, [currentUser?.id]);
+657-
+658-  const today = format(new Date(), "yyyy-MM-dd");
+659-
+660-  // Custom Dialog State
+--
+720-          message,
+721-          defaultValue,
+722-          resolve,
+723-        });
+724-      });
+725-    },
+726-    [],
+727-  );
+728-
+729-  useEffect(() => {
+730-    window.alert = (msg) => {
+731-      if (typeof msg === "string" || typeof msg === "number") {
+732-        customAlert(String(msg));
+733-      }
+734-    };
+735-  }, [customAlert]);
+736-
+737-  const [promptInput, setPromptInput] = useState("");
+738-
+739-  const handleDialogConfirm = () => {
+740-    if (dialogConfig) {
+741-      if (dialogConfig.type === "prompt") {
+742-        dialogConfig.resolve(promptInput);
+743-      } else {
+744-        dialogConfig.resolve(true);
+745-      }
+746-      setDialogConfig(null);
+747-      setPromptInput("");
+748-    }
+749-  };
+750-
+751-  const handleDialogCancel = () => {
+752-    if (dialogConfig) {
+753-      dialogConfig.resolve(dialogConfig.type === "prompt" ? null : false);
+754-      setDialogConfig(null);
+755-      setPromptInput("");
+756-    }
+757-  };
+758-
+759-  if (loading)
+760:    return (
+761-      <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50">
+762-        <div className="mesh-bg" />
+763-        <motion.div
+764-          animate={{ scale: [1, 1.1, 1] }}
+765-          transition={{ repeat: Infinity, duration: 2 }}
+766-          className="mb-4"
+767-        >
+768-          <ClipboardList className="w-12 h-12 text-primary/40" />
+769-        </motion.div>
+770-        <p className="animate-pulse">Memuat data absensi...</p>
+771-        {authError && (
+772-          <p className="mt-4 text-rose-400 text-sm max-w-xs text-center px-4">
+773-            {authError}
+774-          </p>
+775-        )}
+776-      </div>
+777-    );
+778-
+779:  return (
+780-    <DialogContext.Provider
+781-      value={{
+782-        alert: customAlert,
+783-        confirm: customConfirm,
+784-        prompt: customPrompt,
+--
+905-
+906-            <DialogFooter className="flex flex-row gap-3 mt-6 relative z-10">
+907-              <Button
+908-                variant="outline"
+909-                onClick={handleDialogCancel}
+910-                className="h-11 text-sm font-bold flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white rounded-xl"
+911-              >
+912-                BATAL
+913-              </Button>
+914-              <Button
+915-                onClick={handleDialogConfirm}
+916-                className="h-11 text-sm font-bold flex-1 shadow-lg shadow-primary/25 rounded-xl bg-primary hover:bg-primary/90"
+917-              >
+918-                OKE
+919-              </Button>
+920-            </DialogFooter>
+921-          </DialogContent>
+922-        </Dialog>
+923-
+924-        <Toaster position="top-center" expand={true} richColors />
+925-
+926-        {/* Watermark */}
+927-        <div className="fixed bottom-4 right-8 z-50 text-[8px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2 justify-end">
+928-          <div className="w-8 h-[1px] bg-white/10" />
+929-          App by Heri.k | versi 2.2.3 | 2026
+930-        </div>
+931-      </div>
+932-    </DialogContext.Provider>
+933-  );
+934-}
+935-
+936-function ThemeToggle({
+937-  theme,
+938-  toggleTheme,
+939-  className,
+940-}: {
+941-  theme: "light" | "dark";
+942-  toggleTheme: () => void;
+943-  className?: string;
+944-}) {
+945:  return (
+946-    <Button
+947-      variant="outline"
+948-      size="icon"
+949-      onClick={toggleTheme}
+950-      className={`rounded-full w-10 h-10 border-border glass-panel hover:bg-accent text-foreground shadow-md transition-all duration-300 ${className || ""}`}
+--
+975-  onLogin,
+976-  onAdminAuth,
+977-  theme,
+978-  toggleTheme,
+979-  alert,
+980-  setWaSelection,
+981-  showWaSelection,
+982-  superAdmins,
+983-  jobPositions = [],
+984-}: {
+985-  employees: Employee[];
+986-  jobPositions: JobPosition[];
+987-  onLogin: (e: Employee, pin: string) => boolean;
+988-  onAdminAuth: (e: Employee, pwd: string) => boolean;
+989-  theme: "light" | "dark";
+990-  toggleTheme: () => void;
+991-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+992-  setWaSelection: (show: boolean) => void;
+993-  showWaSelection: boolean;
+994-  superAdmins: SuperAdmin[];
+995-}) {
+996-  const [absenId, setAbsenId] = useState("");
+997-  const [pin, setPin] = useState("");
+998-  const [adminAbsenId, setAdminAbsenId] = useState("");
+999-  const [adminPass, setAdminPass] = useState("");
+1000-  const [showAdminLogin, setShowAdminLogin] = useState(false);
+1001-
+1002-  const [empFailCount, setEmpFailCount] = useState(0);
+1003-  const [empErrMsg, setEmpErrMsg] = useState("");
+1004-  const [empShake, setEmpShake] = useState(false);
+1005-
+1006-  const [adminFailCount, setAdminFailCount] = useState(0);
+1007-  const [adminErrMsg, setAdminErrMsg] = useState("");
+1008-  const [adminShake, setAdminShake] = useState(false);
+1009-
+1010-  useEffect(() => {
+1011-    if (empErrMsg) {
+1012-      const timer = setTimeout(() => {
+1013-        setEmpErrMsg("");
+1014-      }, 7000);
+1015:      return () => clearTimeout(timer);
+1016-    }
+1017-  }, [empErrMsg]);
+1018-
+1019-  useEffect(() => {
+1020-    if (adminErrMsg) {
+1021-      const timer = setTimeout(() => {
+1022-        setAdminErrMsg("");
+1023-      }, 7000);
+1024:      return () => clearTimeout(timer);
+1025-    }
+1026-  }, [adminErrMsg]);
+1027-
+1028-  const getFunnyMessage = (count: number) => {
+1029-    if (count === 1) return "Kamu lupa password kamu ya? Kalo kenangan kita masih ingat kan?";
+--
+1048-    }
+1049-  };
+1050-
+1051-  const handleAdminLogin = (e: Employee, p: string) => {
+1052-    const success = onAdminAuth(e, p);
+1053-    if (!success) {
+1054-      setAdminFailCount((c) => {
+1055-        const newCount = c + 1;
+1056-        setAdminErrMsg(getFunnyMessage(newCount));
+1057-        return newCount;
+1058-      });
+1059-      setAdminShake(true);
+1060-      setTimeout(() => setAdminShake(false), 500);
+1061-      setAdminPass("");
+1062-    } else {
+1063-      setAdminFailCount(0);
+1064-      setAdminErrMsg("");
+1065-    }
+1066-  };
+1067-
+1068-  // Reset errors when selection changes
+1069-  useEffect(() => {
+1070-    setEmpFailCount(0);
+1071-    setEmpErrMsg("");
+1072-    setPin("");
+1073-  }, [absenId]);
+1074-
+1075-  useEffect(() => {
+1076-    setAdminFailCount(0);
+1077-    setAdminErrMsg("");
+1078-    setAdminPass("");
+1079-  }, [adminAbsenId]);
+1080-
+1081-  const selectedEmployee = employees.find(
+1082-    (e) => String(e.pin || "").trim() === absenId.trim(),
+1083-  );
+1084-  const selectedAdmin = employees.find(
+1085-    (e) => String(e.pin || "").trim() === adminAbsenId.trim(),
+1086-  );
+1087-
+1088:  return (
+1089-    <div className="min-h-screen flex flex-col items-center justify-center py-10 px-4 overflow-x-hidden overflow-y-auto relative">
+1090-      <WhatsappSelectionDialog
+1091-        isOpen={showWaSelection}
+1092-        onClose={() => setWaSelection(false)}
+1093-        superAdmins={superAdmins}
+--
+1543-  onCapture,
+1544-  isOpen,
+1545-  onClose,
+1546-}: {
+1547-  onCapture: (blob: string) => void;
+1548-  isOpen: boolean;
+1549-  onClose: () => void;
+1550-}) {
+1551-  const videoRef = React.useRef<HTMLVideoElement>(null);
+1552-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+1553-
+1554-  const [modelsLoaded, setModelsLoaded] = React.useState(false);
+1555-
+1556-  useEffect(() => {
+1557-    async function loadModels() {
+1558-      try {
+1559-        await faceapi.nets.tinyFaceDetector.loadFromUri('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/');
+1560-        setModelsLoaded(true);
+1561-      } catch(e) {
+1562-        console.error("Model loading failed", e);
+1563-      }
+1564-    }
+1565-    loadModels();
+1566-  }, []);
+1567-
+1568-  useEffect(() => {
+1569-    let stream: MediaStream | null = null;
+1570-    if (isOpen) {
+1571-      navigator.mediaDevices
+1572-        .getUserMedia({ video: { facingMode: "user" } })
+1573-        .then((s) => {
+1574-          stream = s;
+1575-          if (videoRef.current) videoRef.current.srcObject = s;
+1576-        })
+1577-        .catch((err) => {
+1578-          console.error("Camera error:", err);
+1579-          alert("Gagal mengakses kamera!");
+1580-          onClose();
+1581-        });
+1582-    }
+1583:    return () => {
+1584-      stream?.getTracks().forEach((track) => track.stop());
+1585-    };
+1586-  }, [isOpen]);
+1587-
+1588-  const capture = async () => {
+1589-    if (videoRef.current && canvasRef.current) {
+1590-      if (modelsLoaded) {
+1591-        const detection = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions());
+1592-        if (!detection) {
+1593-          alert("Wajah tidak terdeteksi! Silakan pastikan wajah terlihat jelas.");
+1594-          return;
+1595-        }
+1596-      } else {
+1597-        alert("Sistem deteksi wajah sedang memuat...");
+1598-        return;
+1599-      }
+1600-      
+1601-      const context = canvasRef.current.getContext("2d");
+1602-      if (context) {
+1603-        const width = 240;
+1604-        const height =
+1605-          (videoRef.current.videoHeight / videoRef.current.videoWidth) * width;
+1606-        canvasRef.current.width = width;
+1607-        canvasRef.current.height = height;
+1608-        context.drawImage(videoRef.current, 0, 0, width, height);
+1609-        const dataUrl = canvasRef.current.toDataURL("image/jpeg", 0.4);
+1610-        onCapture(dataUrl);
+1611-        onClose();
+1612-      }
+1613-    }
+1614-  };
+1615-
+1616:  return (
+1617-    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+1618-      <DialogContent className="glass-panel text-white border-white/20 p-4 md:p-6 max-w-sm rounded-[2rem] outline-none">
+1619-        <DialogHeader>
+1620-          <DialogTitle className="text-white">Selfie Absensi</DialogTitle>
+1621-        </DialogHeader>
+--
+1631-        </div>
+1632-        <div className="flex justify-center pt-4">
+1633-          <Button
+1634-            onClick={capture}
+1635-            size="lg"
+1636-            className="w-16 h-16 rounded-full bg-white text-black hover:bg-white/90 active:scale-90 transition-all border-none shadow-2xl"
+1637-          >
+1638-            <Camera className="w-8 h-8" />
+1639-          </Button>
+1640-        </div>
+1641-      </DialogContent>
+1642-    </Dialog>
+1643-  );
+1644-}
+1645-
+1646-function BreakSlider({
+1647-  onComplete,
+1648-  isBreak,
+1649-  disabled,
+1650-}: {
+1651-  onComplete: () => Promise<void> | void;
+1652-  isBreak: boolean;
+1653-  disabled: boolean;
+1654-}) {
+1655-  const controls = useAnimation();
+1656-  const containerRef = React.useRef<HTMLDivElement>(null);
+1657-  const [dragRight, setDragRight] = useState(260);
+1658-
+1659-  useEffect(() => {
+1660-    if (containerRef.current) {
+1661-      const width = containerRef.current.offsetWidth;
+1662-      setDragRight(width - 40); // 40 is button width
+1663-    }
+1664-
+1665-    const handleResize = () => {
+1666-      if (containerRef.current) {
+1667-        setDragRight(containerRef.current.offsetWidth - 40);
+1668-      }
+1669-    };
+1670-    window.addEventListener("resize", handleResize);
+1671:    return () => window.removeEventListener("resize", handleResize);
+1672-  }, []);
+1673-
+1674-  useEffect(() => {
+1675-    controls.start({ x: isBreak ? dragRight : 0 });
+1676-  }, [isBreak, controls, dragRight]);
+1677-
+1678:  return (
+1679-    <div
+1680-      className={`relative h-14 rounded-full border border-white/10 transition-all overflow-hidden ${disabled ? "opacity-30 pointer-events-none" : "opacity-100"}`}
+1681-      style={{
+1682-        background: isBreak
+1683-          ? "rgba(59, 130, 246, 0.1)"
+--
+1717-                // Snap back if didn't reach threshold
+1718-                controls.start({ x: isBreak ? dragRight : 0 });
+1719-              }
+1720-            }}
+1721-            animate={controls}
+1722-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+1723-            className={`absolute w-10 h-10 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing shadow-xl z-20 ${isBreak ? "bg-blue-500" : "bg-amber-500"}`}
+1724-          >
+1725-            <Coffee className="w-5 h-5 text-white" />
+1726-          </motion.div>
+1727-        </div>
+1728-      </div>
+1729-    </div>
+1730-  );
+1731-}
+1732-
+1733-function EmployeeSelector({
+1734-  employees,
+1735-  onAdd,
+1736-  onRemove,
+1737-  selectedIds,
+1738-  onSelect,
+1739-  selectedId,
+1740-  placeholder,
+1741-  disabled = false,
+1742-}: {
+1743-  employees: Employee[];
+1744-  onAdd?: (id: string) => void;
+1745-  onRemove?: (id: string) => void;
+1746-  selectedIds?: string[];
+1747-  onSelect?: (id: string) => void;
+1748-  selectedId?: string;
+1749-  placeholder?: string;
+1750-  disabled?: boolean;
+1751-}) {
+1752-  const [search, setSearch] = useState("");
+1753-  const isMulti = !!onAdd && !!onRemove && !!selectedIds;
+1754-
+1755-  const filteredMatches = employees.filter((e) => {
+1756-    if (isMulti) {
+1757:      return (
+1758-        !selectedIds.includes(e.id) &&
+1759-        (e.name.toLowerCase().includes(search.toLowerCase()) ||
+1760-          (e.pin && e.pin.toLowerCase().includes(search.toLowerCase())))
+1761-      );
+1762-    } else {
+1763:      return (
+1764-        e.name.toLowerCase().includes(search.toLowerCase()) ||
+1765-        (e.pin && e.pin.toLowerCase().includes(search.toLowerCase()))
+1766-      );
+1767-    }
+1768-  });
+1769-
+1770-  const handleKeyDown = (e: React.KeyboardEvent) => {
+1771-    if (disabled) return;
+1772-    if (e.key === "Enter" && filteredMatches.length === 1) {
+1773-      if (isMulti && onAdd) onAdd(filteredMatches[0].id);
+1774-      else if (onSelect) onSelect(filteredMatches[0].id);
+1775-      setSearch("");
+1776-    }
+1777-  };
+1778-
+1779-  const selectedEmp =
+1780-    !isMulti && selectedId ? employees.find((e) => e.id === selectedId) : null;
+1781-
+1782:  return (
+1783-    <div className="flex flex-col gap-2 w-full">
+1784-      {isMulti && selectedIds && (
+1785-        <div className="flex flex-wrap gap-1">
+1786-          {selectedIds.map((id) => {
+1787-            const emp = employees.find((e) => e.id === id);
+--
+1948-
+1949-  useEffect(() => {
+1950-    let componentMounted = true;
+1951-    if (!selectedPeriod) return;
+1952-    setLoading(true);
+1953-
+1954-    // Fetch Bonus Master and Bonus Estafet
+1955-    const unsubMaster = onSnapshot(
+1956-      doc(db, "bonusMasterConfig", selectedPeriod),
+1957-      (snap) => {
+1958-        if (componentMounted) {
+1959-          setBonusMaster(
+1960-            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+1961-          );
+1962-        }
+1963-      },
+1964-    );
+1965-
+1966-    const unsubEstafet = onSnapshot(
+1967-      doc(db, "bonusEstafet", selectedPeriod),
+1968-      (snap) => {
+1969-        if (componentMounted) {
+1970-          const data = snap.exists() ? snap.data() : {};
+1971-          setDailyAssignments(data.dailyAssignments || {});
+1972-          setIsLocked(data.isLocked || false);
+1973-          setLoading(false);
+1974-        }
+1975-      },
+1976-      (error) => {
+1977-        if (componentMounted) {
+1978-          handleFirestoreError(
+1979-            error,
+1980-            OperationType.GET,
+1981-            `bonusEstafet/${selectedPeriod}`,
+1982-          );
+1983-          setLoading(false);
+1984-        }
+1985-      },
+1986-    );
+1987-
+1988:    return () => {
+1989-      componentMounted = false;
+1990-      unsubMaster();
+1991-      unsubEstafet();
+1992-    };
+1993-  }, [selectedPeriod]);
+--
+2047-        });
+2048-      } else {
+2049-        await setDoc(docRef, {
+2050-          periodId: selectedPeriod,
+2051-          dailyAssignments: assignments,
+2052-          isLocked: false,
+2053-          updatedAt: serverTimestamp(),
+2054-        });
+2055-      }
+2056-    } catch (error) {
+2057-      handleFirestoreError(
+2058-        error,
+2059-        OperationType.WRITE,
+2060-        `bonusEstafet/${selectedPeriod}`,
+2061-      );
+2062-    }
+2063-  };
+2064-
+2065-  const toggleEmployee = (dateStr: string, empId: string) => {
+2066-    setDailyAssignments((prev) => {
+2067-      const current = prev[dateStr] || {
+2068-        bonusAmount: bonusMaster[dateStr] || 0,
+2069-        employeeIds: [],
+2070-      };
+2071-      const ids = current.employeeIds.includes(empId)
+2072-        ? current.employeeIds.filter((id) => id !== empId)
+2073-        : [...current.employeeIds, empId];
+2074-      return {
+2075-        ...prev,
+2076-        [dateStr]: {
+2077-          ...current,
+2078-          employeeIds: ids,
+2079-          bonusAmount: bonusMaster[dateStr] || 0,
+2080-        },
+2081-      };
+2082-    });
+2083-  };
+2084-
+2085-  if (!currentPeriod) return null;
+2086-
+2087:  return (
+2088-    <div className="space-y-6">
+2089-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+2090-        <div>
+2091-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+2092-            <Zap className="w-5 h-5 text-emerald-400" /> Bonus Estafet
+--
+2142-        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+2143-          <DialogTitle>Buka Kunci Periode (Estafet)</DialogTitle>
+2144-          <div className="space-y-4 pt-4">
+2145-            <Input
+2146-              type="password"
+2147-              placeholder="Masukkan Password Admin"
+2148-              value={unlockPassword}
+2149-              onChange={(e) => setUnlockPassword(e.target.value)}
+2150-              className="bg-white/5 border-white/10 text-white"
+2151-            />
+2152-            <Button
+2153-              onClick={confirmUnlock}
+2154-              className="w-full bg-emerald-600 hover:bg-emerald-500"
+2155-            >
+2156-              Konfirmasi Buka Kunci
+2157-            </Button>
+2158-          </div>
+2159-        </DialogContent>
+2160-      </Dialog>
+2161-
+2162-      <Card className="glass-panel border-none bg-black/40">
+2163-        <CardContent className="p-6">
+2164-          <div className="flex justify-between items-center mb-4">
+2165-            <h3 className="text-sm font-bold text-white uppercase tracking-tight">
+2166-              Akumulasi Bonus Per Karyawan
+2167-            </h3>
+2168-            <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+2169-              <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">
+2170-                Total Periode:
+2171-              </span>
+2172-              <span className="text-emerald-400 font-black text-sm">
+2173-                Rp {new Intl.NumberFormat("id-ID").format(grandTotal)}
+2174-              </span>
+2175-            </div>
+2176-          </div>
+2177-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+2178-            {employees
+2179-              .filter((emp) => (employeeTotals[emp.id] || 0) > 0)
+2180-              .map((emp) => {
+2181-                const total = employeeTotals[emp.id] || 0;
+2182:                return (
+2183-                  <div
+2184-                    key={emp.id}
+2185-                    className="bg-white/5 p-3 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-colors flex flex-col gap-1"
+2186-                  >
+2187-                    <div className="flex justify-between items-start gap-2">
+--
+2195-                    <span className="text-emerald-400 font-black text-xs">
+2196-                      Rp {new Intl.NumberFormat("id-ID").format(total)}
+2197-                    </span>
+2198-                  </div>
+2199-                );
+2200-              })}
+2201-            {Object.keys(employeeTotals).length === 0 && (
+2202-              <div className="col-span-full py-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
+2203-                <p className="text-white/20 text-xs italic">
+2204-                  Belum ada data akumulasi untuk periode ini.
+2205-                </p>
+2206-              </div>
+2207-            )}
+2208-          </div>
+2209-        </CardContent>
+2210-      </Card>
+2211-
+2212-      <Card className="glass-panel border-none bg-black/40">
+2213-        <CardContent className="p-0">
+2214-          <div className="overflow-x-auto">
+2215-            <Table>
+2216-              <TableHeader>
+2217-                <TableRow className="border-white/5 bg-white/5">
+2218-                  <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6">
+2219-                    Tanggal
+2220-                  </TableHead>
+2221-                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">
+2222-                    Bonus (Rp)
+2223-                  </TableHead>
+2224-                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">
+2225-                    Karyawan
+2226-                  </TableHead>
+2227-                </TableRow>
+2228-              </TableHeader>
+2229-              <TableBody>
+2230-                {dates.map((date) => {
+2231-                  const dateStr = format(date, "yyyy-MM-dd");
+2232-                  const bonus = bonusMaster[dateStr] || 0;
+2233-                  const selectedEmpIds =
+2234-                    dailyAssignments[dateStr]?.employeeIds || [];
+2235:                  return (
+2236-                    <TableRow key={dateStr} className="border-white/5">
+2237-                      <TableCell className="pl-6 font-bold text-white text-sm">
+2238-                        {format(date, "dd MMM", { locale: id })}
+2239-                      </TableCell>
+2240-                      <TableCell className="text-emerald-400 font-bold">
+--
+2349-    while (curr <= currentPeriod.end) {
+2350-      days.push(new Date(curr));
+2351-      curr.setDate(curr.getDate() + 1);
+2352-    }
+2353-    return days;
+2354-  }, [currentPeriod]);
+2355-
+2356-  useEffect(() => {
+2357-    let componentMounted = true;
+2358-    if (!selectedPeriod) return;
+2359-    setLoading(true);
+2360-
+2361-    // Fetch existing settings for this period
+2362-    const unsub = onSnapshot(
+2363-      doc(db, "bonusMasterConfig", selectedPeriod),
+2364-      (snap) => {
+2365-        if (componentMounted) {
+2366-          if (snap.exists()) {
+2367-            const data = snap.data();
+2368-            setDailyData(data.dailyHighestReceipt || {});
+2369-            setIsLocked(data.isLocked || false);
+2370-          } else {
+2371-            setDailyData({});
+2372-            setIsLocked(false);
+2373-          }
+2374-          setLoading(false);
+2375-        }
+2376-      },
+2377-      (error) => {
+2378-        if (componentMounted) {
+2379-          handleFirestoreError(
+2380-            error,
+2381-            OperationType.GET,
+2382-            `bonusMasterConfig/${selectedPeriod}`,
+2383-          );
+2384-          setLoading(false);
+2385-        }
+2386-      },
+2387-    );
+2388-
+2389:    return () => {
+2390-      componentMounted = false;
+2391-      unsub();
+2392-    };
+2393-  }, [selectedPeriod]);
+2394-
+--
+2500-          `bonusMasterConfig/${selectedPeriod}`,
+2501-        );
+2502-      }
+2503-    } else {
+2504-      toast.error("Password salah");
+2505-    }
+2506-  };
+2507-
+2508-  const handleCreatePeriod = async () => {
+2509-    if (!newPeriodName || !newPeriodStart || !newPeriodEnd) {
+2510-      toast.error("Lengkapi data periode!");
+2511-      return;
+2512-    }
+2513-    try {
+2514-      const periodId =
+2515-        newPeriodName.replace(/\s+/g, "_").toLowerCase() + "_" + Date.now();
+2516-      await setDoc(doc(db, "periodControls", periodId), {
+2517-        name: newPeriodName,
+2518-        startDate: newPeriodStart,
+2519-        endDate: newPeriodEnd,
+2520-        status: "open",
+2521-        createdAt: serverTimestamp(),
+2522-        updatedAt: serverTimestamp(),
+2523-      });
+2524-      setSelectedPeriod(periodId);
+2525-      setIsDialogOpen(false);
+2526-      setNewPeriodName("");
+2527-      toast.success("Periode berhasil dibuat!");
+2528-    } catch (error) {
+2529-      handleFirestoreError(error, OperationType.WRITE, "periodControls");
+2530-    }
+2531-  };
+2532-
+2533-  const handleInputChange = (dateStr: string, val: string) => {
+2534-    const num = parseInt(val.replace(/\D/g, "")) || 0;
+2535-    setDailyData((prev) => ({ ...prev, [dateStr]: num }));
+2536-  };
+2537-
+2538-  if (!currentPeriod) return null;
+2539-
+2540:  return (
+2541-    <div className="space-y-6">
+2542-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+2543-        <div>
+2544-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+2545-            <Zap className="w-5 h-5 text-emerald-400" /> Master Nota Tertinggi
+--
+2670-              value={password}
+2671-              onChange={(e) => setPassword(e.target.value)}
+2672-              className="bg-white/5 border-white/10 text-white"
+2673-            />
+2674-            <Button
+2675-              onClick={confirmUnlock}
+2676-              className="w-full bg-emerald-600 hover:bg-emerald-500"
+2677-            >
+2678-              KONFIRMASI BUKA KUNCI
+2679-            </Button>
+2680-          </div>
+2681-        </DialogContent>
+2682-      </Dialog>
+2683-
+2684-      <Card className="glass-panel border-none shadow-2xl bg-[#151f2e] overflow-hidden">
+2685-        <CardContent className="p-0">
+2686-          {loading ? (
+2687-            <div className="p-20 text-center text-white/20 animate-pulse font-black uppercase tracking-widest">
+2688-              Memuat Data Periode...
+2689-            </div>
+2690-          ) : (
+2691-            <div className="overflow-x-auto no-scrollbar">
+2692-              <Table>
+2693-                <TableHeader>
+2694-                  <TableRow className="border-white/5 hover:bg-transparent bg-white/5">
+2695-                    <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6 w-[200px]">
+2696-                      Hari / Tanggal
+2697-                    </TableHead>
+2698-                    <TableHead className="text-white/40 font-bold uppercase text-[10px]">
+2699-                      Nominal Nota Tertinggi (Rp)
+2700-                    </TableHead>
+2701-                    <TableHead className="text-white/40 font-bold uppercase text-[10px] text-right pr-6">
+2702-                      Status
+2703-                    </TableHead>
+2704-                  </TableRow>
+2705-                </TableHeader>
+2706-                <TableBody>
+2707-                  {dates.map((date) => {
+2708-                    const dateStr = format(date, "yyyy-MM-dd");
+2709-                    const value = dailyData[dateStr] || 0;
+2710:                    return (
+2711-                      <TableRow
+2712-                        key={dateStr}
+2713-                        className="border-white/5 hover:bg-white/5 transition-colors group bg-[#101524]"
+2714-                      >
+2715-                        <TableCell className="pl-6 py-4">
+--
+2884-
+2885-  useEffect(() => {
+2886-    let componentMounted = true;
+2887-    if (!selectedPeriod) return;
+2888-    setLoading(true);
+2889-
+2890-    // Fetch Bonus Master and Bonus Jaga Depan
+2891-    const unsubMaster = onSnapshot(
+2892-      doc(db, "bonusMasterConfig", selectedPeriod),
+2893-      (snap) => {
+2894-        if (componentMounted) {
+2895-          setBonusMaster(
+2896-            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+2897-          );
+2898-        }
+2899-      },
+2900-    );
+2901-
+2902-    const unsubJagaDepan = onSnapshot(
+2903-      doc(db, "bonusJagaDepan", selectedPeriod),
+2904-      (snap) => {
+2905-        if (componentMounted) {
+2906-          const data = snap.exists() ? snap.data() : {};
+2907-          setDailyAssignments(data.dailyAssignments || {});
+2908-          setIsLocked(data.isLocked || false);
+2909-          setLoading(false);
+2910-        }
+2911-      },
+2912-      (error) => {
+2913-        if (componentMounted) {
+2914-          handleFirestoreError(
+2915-            error,
+2916-            OperationType.GET,
+2917-            `bonusJagaDepan/${selectedPeriod}`,
+2918-          );
+2919-          setLoading(false);
+2920-        }
+2921-      },
+2922-    );
+2923-
+2924:    return () => {
+2925-      componentMounted = false;
+2926-      unsubMaster();
+2927-      unsubJagaDepan();
+2928-    };
+2929-  }, [selectedPeriod]);
+--
+2957-          { isLocked: false },
+2958-          { merge: true },
+2959-        );
+2960-        setShowUnlockDialog(false);
+2961-        setUnlockPassword("");
+2962-        toast.success("Periode berhasil dibuka");
+2963-      } catch (e) {
+2964-        handleFirestoreError(
+2965-          e,
+2966-          OperationType.WRITE,
+2967-          `bonusJagaDepan/${selectedPeriod}`,
+2968-        );
+2969-      }
+2970-    } else {
+2971-      toast.error("Password salah!");
+2972-    }
+2973-  };
+2974-
+2975-  const autoSaveAssignments = async (assignments: Record<string, any>) => {
+2976-    try {
+2977-      await setDoc(
+2978-        doc(db, "bonusJagaDepan", selectedPeriod),
+2979-        {
+2980-          periodId: selectedPeriod,
+2981-          dailyAssignments: assignments,
+2982-          updatedAt: serverTimestamp(),
+2983-        },
+2984-        { merge: true },
+2985-      );
+2986-    } catch (error) {
+2987-      handleFirestoreError(
+2988-        error,
+2989-        OperationType.WRITE,
+2990-        `bonusJagaDepan/${selectedPeriod}`,
+2991-      );
+2992-    }
+2993-  };
+2994-
+2995-  if (!currentPeriod) return null;
+2996-
+2997:  return (
+2998-    <div className="space-y-6">
+2999-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+3000-        <div>
+3001-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+3002-            <ShieldAlert className="w-5 h-5 text-emerald-400" /> Bonus Jaga
+--
+3053-        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white">
+3054-          <DialogTitle>Buka Kunci Periode (Jaga Depan)</DialogTitle>
+3055-          <div className="space-y-4 pt-4">
+3056-            <Input
+3057-              type="password"
+3058-              placeholder="Masukkan Password Admin"
+3059-              value={unlockPassword}
+3060-              onChange={(e) => setUnlockPassword(e.target.value)}
+3061-              className="bg-white/5 border-white/10 text-white"
+3062-            />
+3063-            <Button
+3064-              onClick={confirmUnlock}
+3065-              className="w-full bg-emerald-600 hover:bg-emerald-500"
+3066-            >
+3067-              Konfirmasi Buka Kunci
+3068-            </Button>
+3069-          </div>
+3070-        </DialogContent>
+3071-      </Dialog>
+3072-
+3073-      <Card className="glass-panel border-none bg-black/40">
+3074-        <CardContent className="p-6">
+3075-          <div className="flex justify-between items-center mb-4">
+3076-            <h3 className="text-sm font-bold text-white uppercase tracking-tight">
+3077-              Akumulasi Bonus Per Karyawan
+3078-            </h3>
+3079-            <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+3080-              <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">
+3081-                Total Periode:
+3082-              </span>
+3083-              <span className="text-emerald-400 font-black text-sm">
+3084-                Rp {new Intl.NumberFormat("id-ID").format(grandTotal)}
+3085-              </span>
+3086-            </div>
+3087-          </div>
+3088-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+3089-            {employees
+3090-              .filter((emp) => (employeeTotals[emp.id] || 0) > 0)
+3091-              .map((emp) => {
+3092-                const total = employeeTotals[emp.id] || 0;
+3093:                return (
+3094-                  <div
+3095-                    key={emp.id}
+3096-                    className="bg-white/5 p-3 rounded-xl border border-white/5 hover:border-emerald-500/30 transition-colors flex flex-col gap-1"
+3097-                  >
+3098-                    <div className="flex justify-between items-start gap-2">
+--
+3106-                    <span className="text-emerald-400 font-black text-xs">
+3107-                      Rp {new Intl.NumberFormat("id-ID").format(total)}
+3108-                    </span>
+3109-                  </div>
+3110-                );
+3111-              })}
+3112-            {Object.keys(employeeTotals).length === 0 && (
+3113-              <div className="col-span-full py-8 text-center border-2 border-dashed border-white/5 rounded-2xl">
+3114-                <p className="text-white/20 text-xs italic">
+3115-                  Belum ada data akumulasi untuk periode ini.
+3116-                </p>
+3117-              </div>
+3118-            )}
+3119-          </div>
+3120-        </CardContent>
+3121-      </Card>
+3122-
+3123-      <Card className="glass-panel border-none bg-black/40">
+3124-        <CardContent className="p-0">
+3125-          <div className="overflow-x-auto">
+3126-            <Table>
+3127-              <TableHeader>
+3128-                <TableRow className="border-white/5 bg-white/5">
+3129-                  <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6">
+3130-                    Tanggal
+3131-                  </TableHead>
+3132-                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">
+3133-                    Bonus (Rp)
+3134-                  </TableHead>
+3135-                  <TableHead className="text-white/40 font-bold uppercase text-[10px]">
+3136-                    Karyawan
+3137-                  </TableHead>
+3138-                </TableRow>
+3139-              </TableHeader>
+3140-              <TableBody>
+3141-                {dates.map((date) => {
+3142-                  const dateStr = format(date, "yyyy-MM-dd");
+3143-                  const bonus = bonusMaster[dateStr] || 0;
+3144-                  const selectedEmpIds =
+3145-                    dailyAssignments[dateStr]?.employeeIds || [];
+3146:                  return (
+3147-                    <TableRow key={dateStr} className="border-white/5">
+3148-                      <TableCell className="pl-6 font-bold text-white text-sm">
+3149-                        {format(date, "dd MMM", { locale: id })}
+3150-                      </TableCell>
+3151-                      <TableCell className="text-emerald-400 font-bold">
+--
+3284-        totals[emp.id] = (totals[emp.id] || 0) + Number(entry.amount);
+3285-      }
+3286-    });
+3287-    return totals;
+3288-  }, [entries, employees]);
+3289-
+3290-  const grandTotal = React.useMemo(() => {
+3291-    return Object.values(employeeTotals).reduce(
+3292-      (sum: number, val: number) => sum + val,
+3293-      0,
+3294-    );
+3295-  }, [employeeTotals]);
+3296-
+3297-  useEffect(() => {
+3298-    let componentMounted = true;
+3299-    if (!selectedPeriod) return;
+3300-    setLoading(true);
+3301-
+3302-    const unsub = onSnapshot(
+3303-      doc(db, "bonusLainLain", selectedPeriod),
+3304-      (snap) => {
+3305-        if (componentMounted) {
+3306-          const data = snap.exists() ? snap.data() : {};
+3307-          setEntries(data.entries || []);
+3308-          setIsLocked(data.isLocked || false);
+3309-          setLoading(false);
+3310-        }
+3311-      },
+3312-      (error) => {
+3313-        if (componentMounted) {
+3314-          handleFirestoreError(
+3315-            error,
+3316-            OperationType.GET,
+3317-            `bonusLainLain/${selectedPeriod}`,
+3318-          );
+3319-          setLoading(false);
+3320-        }
+3321-      },
+3322-    );
+3323-
+3324:    return () => {
+3325-      componentMounted = false;
+3326-      unsub();
+3327-    };
+3328-  }, [selectedPeriod]);
+3329-
+--
+3456-        OperationType.WRITE,
+3457-        `bonusLainLain/${selectedPeriod}`,
+3458-      );
+3459-      toast.error("Gagal menambah entri");
+3460-    }
+3461-  };
+3462-
+3463-  const removeEntry = async (id: string) => {
+3464-    if (isLocked) {
+3465-      toast.error("Periode ini sudah dikunci!");
+3466-      return;
+3467-    }
+3468-    const newEntries = entries.filter((e) => e.id !== id);
+3469-    try {
+3470-      const docRef = doc(db, "bonusLainLain", selectedPeriod);
+3471-      const snap = await getDoc(docRef);
+3472-      if (snap.exists()) {
+3473-        await updateDoc(docRef, {
+3474-          entries: newEntries,
+3475-          updatedAt: serverTimestamp(),
+3476-        });
+3477-      } else {
+3478-        await setDoc(docRef, {
+3479-          periodId: selectedPeriod,
+3480-          entries: newEntries,
+3481-          isLocked: false,
+3482-          updatedAt: serverTimestamp(),
+3483-        });
+3484-      }
+3485-      toast.success("Entri otomatis dihapus");
+3486-    } catch (e) {
+3487-      handleFirestoreError(
+3488-        e,
+3489-        OperationType.WRITE,
+3490-        `bonusLainLain/${selectedPeriod}`,
+3491-      );
+3492-      toast.error("Gagal menghapus entri");
+3493-    }
+3494-  };
+3495-
+3496:  return (
+3497-    <div className="space-y-6">
+3498-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+3499-        <div>
+3500-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+3501-            <Zap className="w-5 h-5 text-amber-400" /> Bonus Campuran
+--
+3726-                            {employees.find((e) => e.pin === entry.pin)?.name ||
+3727-                              "-"}
+3728-                          </TableCell>
+3729-                          <TableCell className="text-white/80">
+3730-                            {bonusTypes[entry.bonusTypeId] || entry.bonusTypeId}
+3731-                          </TableCell>
+3732-                          <TableCell className="text-emerald-400 font-bold">
+3733-                            {new Intl.NumberFormat("id-ID").format(
+3734-                              entry.amount,
+3735-                            )}
+3736-                          </TableCell>
+3737-                          <TableCell>
+3738-                            <Button
+3739-                              variant="ghost"
+3740-                              size="sm"
+3741-                              onClick={() => removeEntry(entry.id)}
+3742-                              disabled={isLocked}
+3743-                            >
+3744-                              <Trash2 className="w-4 h-4 text-rose-500" />
+3745-                            </Button>
+3746-                          </TableCell>
+3747-                        </TableRow>
+3748-                      ))}
+3749-                    </TableBody>
+3750-                  </Table>
+3751-                </div>
+3752-              </CardContent>
+3753-            </Card>
+3754-          </div>
+3755-
+3756-          <Card className="glass-panel border-none bg-black/40">
+3757-            <CardContent className="p-6">
+3758-              <h3 className="text-sm font-bold text-white uppercase tracking-tight mb-4">
+3759-                Akumulasi Total Per Karyawan
+3760-              </h3>
+3761-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+3762-                {employees
+3763-                  .filter((emp) => (employeeTotals[emp.id] || 0) > 0)
+3764-                  .map((emp) => {
+3765-                    const total = employeeTotals[emp.id] || 0;
+3766:                    return (
+3767-                      <div
+3768-                        key={emp.id}
+3769-                        className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col justify-between"
+3770-                      >
+3771-                        <span
+--
+3814-  const periodOptions = React.useMemo(
+3815-    () => getCombinedPeriods(controls),
+3816-    [controls],
+3817-  );
+3818-  const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
+3819-  const setSelectedPeriod = setActivePeriodId || (() => {});
+3820-  const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+3821-
+3822-  const [jagaDepanData, setJagaDepanData] = useState<any>(null);
+3823-  const [bonusMaster, setBonusMaster] = useState<any[]>([]);
+3824-  const [campuranData, setCampuranData] = useState<any>(null);
+3825-  const [loading, setLoading] = useState(true);
+3826-
+3827-  useEffect(() => {
+3828-    if (!selectedPeriod) return;
+3829-    setLoading(true);
+3830-
+3831-    const unsubJaga = onSnapshot(
+3832-      doc(db, "bonusJagaDepan", selectedPeriod),
+3833-      (snap) => {
+3834-        setJagaDepanData(snap.exists() ? snap.data() : null);
+3835-      },
+3836-    );
+3837-
+3838-    const unsubMaster = onSnapshot(
+3839-      doc(db, "bonusMasterConfig", selectedPeriod),
+3840-      (snap) => {
+3841-        setBonusMaster(
+3842-          snap.exists() ? snap.data().dailyHighestReceipt || [] : [],
+3843-        );
+3844-      },
+3845-    );
+3846-
+3847-    const unsubCampuran = onSnapshot(
+3848-      doc(db, "bonusLainLain", selectedPeriod),
+3849-      (snap) => {
+3850-        setCampuranData(snap.exists() ? snap.data() : null);
+3851-      },
+3852-    );
+3853-
+3854:    return () => {
+3855-      unsubJaga();
+3856-      unsubMaster();
+3857-      unsubCampuran();
+3858-    };
+3859-  }, [selectedPeriod]);
+--
+3923-            total: 0,
+3924-          };
+3925-        }
+3926-        totals[emp.id].campuran += entry.amount || 0;
+3927-      });
+3928-    }
+3929-
+3930-    // 3. Final Total
+3931-    Object.values(totals).forEach((t) => {
+3932-      t.total = t.jagaDepan + t.campuran;
+3933-    });
+3934-
+3935-    return Object.fromEntries(
+3936-      Object.entries(totals).filter(([_, val]) => val.total > 0),
+3937-    );
+3938-  }, [jagaDepanData, bonusMaster, campuranData, employees]);
+3939-
+3940-  const grandTotal = Object.values(combinedTotals).reduce(
+3941-    (sum, item: any) => sum + item.total,
+3942-    0,
+3943-  );
+3944-
+3945-  const downloadExcel = () => {
+3946-    if (Object.keys(combinedTotals).length === 0) return;
+3947-
+3948-    const data = Object.values(combinedTotals).map((item: any) => ({
+3949-      "No. Absen": item.pin,
+3950-      Nama: item.name,
+3951-      "Total Bonus Lain Lain": item.total,
+3952-    }));
+3953-
+3954-    const ws = XLSX.utils.json_to_sheet(data);
+3955-    const wb = XLSX.utils.book_new();
+3956-    XLSX.utils.book_append_sheet(wb, ws, "Bonus Lain-Lain");
+3957-    XLSX.writeFile(
+3958-      wb,
+3959-      `Bonus_Lain_Lain_Combined_${currentPeriod?.label || selectedPeriod || "All"}.xlsx`,
+3960-    );
+3961-  };
+3962-
+3963:  return (
+3964-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+3965-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+3966-        <div>
+3967-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+3968-            <Calculator className="w-5 h-5 text-emerald-400" /> Bonus Lain-Lain
+--
+4130-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+4131-  const [inputNota, setInputNota] = useState<string>("");
+4132-  const [inputBalen, setInputBalen] = useState<string>("");
+4133-
+4134-  useEffect(() => {
+4135-    if (!selectedPeriod) return;
+4136-    setLoading(true);
+4137-
+4138-    const unsub = onSnapshot(
+4139-      doc(db, "bonusOperator", selectedPeriod),
+4140-      (snap) => {
+4141-        if (snap.exists()) {
+4142-          const data = snap.data();
+4143-          setNotaRate(data.notaRate ?? 50);
+4144-          setBalenRate(data.balenRate ?? 70);
+4145-          setEntries(
+4146-            (data.entries as Record<
+4147-              string,
+4148-              { notaCount: number; balenCount: number }
+4149-            >) || {},
+4150-          );
+4151-          setIsLocked(data.isLocked || false);
+4152-        } else {
+4153-          setNotaRate(50);
+4154-          setBalenRate(70);
+4155-          setEntries({});
+4156-          setIsLocked(false);
+4157-        }
+4158-        setLoading(false);
+4159-      },
+4160-      (error) => {
+4161-        handleFirestoreError(
+4162-          error,
+4163-          OperationType.GET,
+4164-          `bonusOperator/${selectedPeriod}`,
+4165-        );
+4166-        setLoading(false);
+4167-      },
+4168-    );
+4169-
+4170:    return () => unsub();
+4171-  }, [selectedPeriod]);
+4172-
+4173-  const autoSaveConfig = async (nRate: number, bRate: number) => {
+4174-    try {
+4175-      await setDoc(
+--
+4307-      toast.success("Akses edit tarif diberikan");
+4308-    } else {
+4309-      toast.error("Password salah!");
+4310-    }
+4311-  };
+4312-
+4313-  const downloadExcel = () => {
+4314-    if (!currentPeriod || Object.keys(entries).length === 0) return;
+4315-
+4316-    const data = Object.entries(
+4317-      entries as Record<string, { notaCount: number; balenCount: number }>,
+4318-    ).map(([empId, val]) => {
+4319-      const emp = employees.find((e) => e.id === empId);
+4320-      const totalBonus = val.notaCount * notaRate + val.balenCount * balenRate;
+4321-      return {
+4322-        "No. Absen": emp?.pin || "",
+4323-        Nama: emp?.name || "",
+4324-        Nota: val.notaCount,
+4325-        Balen: val.balenCount,
+4326-        "Total Bonus Operator": totalBonus,
+4327-      };
+4328-    });
+4329-
+4330-    const worksheet = XLSX.utils.json_to_sheet(data);
+4331-    const workbook = XLSX.utils.book_new();
+4332-    XLSX.utils.book_append_sheet(workbook, worksheet, "Bonus Operator");
+4333-    XLSX.writeFile(
+4334-      workbook,
+4335-      `Bonus_Operator_${currentPeriod?.label || selectedPeriod}.xlsx`,
+4336-    );
+4337-    toast.success("Excel berhasil diunduh");
+4338-  };
+4339-
+4340-  const selectedEmployee = employees.find((e) => e.id === selectedEmpId);
+4341-  const filteredEmployees = employees.filter(
+4342-    (e) =>
+4343-      e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+4344-      e.pin.toLowerCase().includes(searchTerm.toLowerCase()),
+4345-  );
+4346-
+4347:  return (
+4348-    <div className="space-y-6">
+4349-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+4350-        <div>
+4351-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+4352-            <ShieldAlert className="w-5 h-5 text-emerald-400" /> Bonus Operator
+--
+4611-                <TableRow className="border-white/10 hover:bg-transparent text-xs text-white/40">
+4612-                  <TableHead>Pin</TableHead>
+4613-                  <TableHead>Nama</TableHead>
+4614-                  <TableHead className="text-center">Nota</TableHead>
+4615-                  <TableHead className="text-center">Balen</TableHead>
+4616-                  <TableHead className="text-right">Total Bonus</TableHead>
+4617-                  {!isLocked && (
+4618-                    <TableHead className="text-center">Aksi</TableHead>
+4619-                  )}
+4620-                </TableRow>
+4621-              </TableHeader>
+4622-              <TableBody>
+4623-                {loading ? (
+4624-                  <TableRow>
+4625-                    <TableCell
+4626-                      colSpan={6}
+4627-                      className="text-center py-10 text-white/20"
+4628-                    >
+4629-                      Memuat data...
+4630-                    </TableCell>
+4631-                  </TableRow>
+4632-                ) : Object.keys(entries).length === 0 ? (
+4633-                  <TableRow>
+4634-                    <TableCell
+4635-                      colSpan={6}
+4636-                      className="text-center py-10 text-white/20 italic"
+4637-                    >
+4638-                      Belum ada data input.
+4639-                    </TableCell>
+4640-                  </TableRow>
+4641-                ) : (
+4642-                  Object.entries(
+4643-                    entries as Record<
+4644-                      string,
+4645-                      { notaCount: number; balenCount: number }
+4646-                    >,
+4647-                  ).map(([empId, val]) => {
+4648-                    const emp = employees.find((e) => e.id === empId);
+4649-                    const totalBonus =
+4650-                      val.notaCount * notaRate + val.balenCount * balenRate;
+4651:                    return (
+4652-                      <TableRow
+4653-                        key={empId}
+4654-                        className="border-white/5 hover:bg-white/5 transition-colors"
+4655-                      >
+4656-                        <TableCell className="text-white/60 font-mono text-xs">
+--
+4726-  >(null);
+4727-  const [showCamera, setShowCamera] = useState(false);
+4728-  const [pendingAction, setPendingAction] = useState<null | {
+4729-    action: any;
+4730-    location: string;
+4731-  }>(null);
+4732-  const [isProcessing, setIsProcessing] = useState(false);
+4733-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+4734-  const periodOptions = getPeriodOptions();
+4735-  const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
+4736-  const [history, setHistory] = useState<Attendance[]>([]);
+4737-  const [activeTab, setActiveTab] = useState("absen");
+4738-  const [riwayatStart, setRiwayatStart] = useState("");
+4739-  const [riwayatEnd, setRiwayatEnd] = useState("");
+4740-
+4741-  useEffect(() => {
+4742-    const q = query(
+4743-      collection(db, "attendance"),
+4744-      where("employeeId", "==", employee.id),
+4745-      orderBy("date", "desc"),
+4746-    );
+4747-    // Filter by period logic will be applied in render based on start/end dates
+4748-    const unsub = onSnapshot(
+4749-      q,
+4750-      (snap) =>
+4751-        setHistory(
+4752-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Attendance),
+4753-        ),
+4754-      (err) =>
+4755-        handleFirestoreError(err, OperationType.LIST, "attendance_history"),
+4756-    );
+4757-    return unsub;
+4758-  }, [employee.id]);
+4759-
+4760-  const [showChangePass, setShowChangePass] = useState(false);
+4761-  const [newPass, setNewPass] = useState("");
+4762-  const today = format(new Date(), "yyyy-MM-dd");
+4763-
+4764-  useEffect(() => {
+4765-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+4766:    return () => clearInterval(timer);
+4767-  }, []);
+4768-
+4769-  useEffect(() => {
+4770-    const q = query(
+4771-      collection(db, "attendance"),
+--
+5041-    alert("Password berhasil diperbarui!", "success");
+5042-    setShowChangePass(false);
+5043-    setNewPass("");
+5044-  };
+5045-
+5046-  const getStatusColor = (status: string) => {
+5047-    switch (status) {
+5048-      case "present":
+5049-        return "bg-emerald-50 text-emerald-600 border-emerald-200";
+5050-      case "late":
+5051-        return "bg-amber-50 text-amber-600 border-amber-200";
+5052-      default:
+5053-        return "bg-slate-50 text-slate-600 border-slate-200";
+5054-    }
+5055-  };
+5056-
+5057-  const currentShift = shifts.find(
+5058-    (s) => s.id === (attendance?.shiftId || selectedShiftId),
+5059-  );
+5060-
+5061-  const attendanceStats =
+5062-    attendance && currentShift
+5063-      ? calculateAttendanceStats(attendance, currentShift)
+5064-      : { late: 0, earlyLeave: 0, overtime: 0 };
+5065-
+5066-  const getActionLabel = (type: string | null) => {
+5067-    switch (type) {
+5068-      case "checkIn":
+5069-        return "Masuk Kerja";
+5070-      case "breakStart":
+5071-        return "Mulai Istirahat";
+5072-      case "breakEnd":
+5073-        return "Selesai Istirahat";
+5074-      case "checkOut":
+5075-        return "Pulang";
+5076-      default:
+5077-        return "";
+5078-    }
+5079-  };
+5080-
+5081:  return (
+5082-    <div className="h-screen overflow-x-hidden overflow-y-auto p-4 md:p-10">
+5083-      <div className="max-w-4xl mx-auto pb-20">
+5084-        {/* Change Password Dialog */}
+5085-        <Dialog open={showChangePass} onOpenChange={setShowChangePass}>
+5086-          <DialogContent className="glass-panel text-foreground border-border sm:max-w-[400px]">
+--
+5557-                    <Input
+5558-                      type="date"
+5559-                      value={riwayatStart}
+5560-                      onChange={(e) => setRiwayatStart(e.target.value)}
+5561-                      className="glass-panel border-white/10 text-white flex-1 md:w-[150px]"
+5562-                    />
+5563-                    <span className="text-white/50">-</span>
+5564-                    <Input
+5565-                      type="date"
+5566-                      value={riwayatEnd}
+5567-                      onChange={(e) => setRiwayatEnd(e.target.value)}
+5568-                      className="glass-panel border-white/10 text-white flex-1 md:w-[150px]"
+5569-                    />
+5570-                  </div>
+5571-                </CardHeader>
+5572-                <CardContent>
+5573-                  <div className="overflow-x-auto no-scrollbar">
+5574-                    <Table>
+5575-                      <TableHeader>
+5576-                        <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
+5577-                          <TableHead className="text-white/40">
+5578-                            Tanggal
+5579-                          </TableHead>
+5580-                          <TableHead className="text-white/40">Masuk</TableHead>
+5581-                          <TableHead className="text-white/40">
+5582-                            Pulang
+5583-                          </TableHead>
+5584-                          <TableHead className="text-white/40">
+5585-                            Status
+5586-                          </TableHead>
+5587-                        </TableRow>
+5588-                      </TableHeader>
+5589-                      <TableBody>
+5590-                        {history
+5591-                          .filter((h) => {
+5592-                            if (!riwayatStart && !riwayatEnd) return true;
+5593-                            if (riwayatStart && !riwayatEnd)
+5594-                              return h.date >= riwayatStart;
+5595-                            if (!riwayatStart && riwayatEnd)
+5596-                              return h.date <= riwayatEnd;
+5597:                            return (
+5598-                              h.date >= riwayatStart && h.date <= riwayatEnd
+5599-                            );
+5600-                          })
+5601-                          .map((a) => (
+5602-                            <TableRow
+--
+5777-  const [loading, setLoading] = useState(true);
+5778-  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+5779-  const [showClearDialog, setShowClearDialog] = useState(false);
+5780-  const [password, setPassword] = useState("");
+5781-  const [selectedEmpId, setSelectedEmpId] = useState("");
+5782-  const [inputAmount, setInputAmount] = useState("");
+5783-  const [editId, setEditId] = useState<string | null>(null);
+5784-
+5785-  useEffect(() => {
+5786-    let componentMounted = true;
+5787-    if (!selectedPeriod) return;
+5788-    setLoading(true);
+5789-
+5790-    const unsub = onSnapshot(
+5791-      doc(db, "bonusNota", selectedPeriod),
+5792-      (snap) => {
+5793-        if (componentMounted) {
+5794-          if (snap.exists()) {
+5795-            const data = snap.data();
+5796-            setEntries(data.entries || {});
+5797-            setIsLocked(data.isLocked || false);
+5798-          } else {
+5799-            setEntries({});
+5800-            setIsLocked(false);
+5801-          }
+5802-          setLoading(false);
+5803-        }
+5804-      },
+5805-      (error) => {
+5806-        if (componentMounted) {
+5807-          handleFirestoreError(
+5808-            error,
+5809-            OperationType.GET,
+5810-            `bonusNota/${selectedPeriod}`,
+5811-          );
+5812-          setLoading(false);
+5813-        }
+5814-      },
+5815-    );
+5816-
+5817:    return () => {
+5818-      componentMounted = false;
+5819-      unsub();
+5820-    };
+5821-  }, [selectedPeriod]);
+5822-
+--
+5961-        const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
+5962-
+5963-        const updated = { ...entries };
+5964-        let detectedPin = "";
+5965-        let detectedAmount = "";
+5966-
+5967-        data.forEach((row: any) => {
+5968-          const rowKeys = Object.keys(row);
+5969-
+5970-          const pinKey = rowKeys.find((k) => {
+5971-            const lk = k.toLowerCase().replace(/[^a-z]/g, "");
+5972-            return [
+5973-              "noabsen",
+5974-              "absen",
+5975-              "pin",
+5976-              "idabsen",
+5977-              "nik",
+5978-              "noinduk",
+5979-            ].includes(lk);
+5980-          });
+5981-          if (pinKey) detectedPin = pinKey;
+5982-          const pin = pinKey ? String(row[pinKey] || "").trim() : "";
+5983-
+5984-          const amountKey =
+5985-            rowKeys.find((k) => {
+5986-              const lk = k.toLowerCase().trim();
+5987-              return [
+5988-                "bonus nota",
+5989-                "nominal bonus",
+5990-                "bonus",
+5991-                "nominal",
+5992-                "jumlah",
+5993-                "nota",
+5994-                "amount",
+5995-                "total",
+5996-                "grand total",
+5997-              ].some((s) => lk === s || lk.startsWith(s));
+5998-            }) ||
+5999-            rowKeys.find((k) => {
+6000-              const lk = k.toLowerCase().trim();
+6001:              return (
+6002-                lk.includes("nota") ||
+6003-                (lk.includes("bonus") &&
+6004-                  !lk.includes("pin") &&
+6005-                  !lk.includes("absen"))
+6006-              );
+--
+6043-          if (emp && !isNaN(amount)) {
+6044-            updated[emp.id] = Math.max(0, Math.floor(amount));
+6045-          }
+6046-        });
+6047-        setEntries(updated);
+6048-        saveEntries(updated);
+6049-        toast.success(
+6050-          `Impor Berhasil! Kolom terdeteksi: PIN (${detectedPin || "?"}), Nominal (${detectedAmount || "?"})`,
+6051-        );
+6052-      } catch (err) {
+6053-        toast.error("Gagal impor file");
+6054-      }
+6055-    };
+6056-    reader.readAsBinaryString(file);
+6057-    e.target.value = ""; // Reset input
+6058-  };
+6059-
+6060-  const handleDownload = () => {
+6061-    const data = Object.entries(entries).map(([id, amount]) => {
+6062-      const emp = employees.find((e) => e.id === id);
+6063-      return {
+6064-        "No. Absen": emp?.pin || "",
+6065-        Nama: emp?.name || "",
+6066-        "Bonus Nota": amount,
+6067-      };
+6068-    });
+6069-    const ws = XLSX.utils.json_to_sheet(data);
+6070-    const wb = XLSX.utils.book_new();
+6071-    XLSX.utils.book_append_sheet(wb, ws, "Bonus Nota");
+6072-    XLSX.writeFile(
+6073-      wb,
+6074-      `Bonus_Nota_${currentPeriod?.label || selectedPeriod}.xlsx`,
+6075-    );
+6076-  };
+6077-
+6078-  const grandTotal = (Object.values(entries) as number[]).reduce(
+6079-    (a: number, b: number) => a + b,
+6080-    0,
+6081-  );
+6082-
+6083:  return (
+6084-    <div className="space-y-6">
+6085-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+6086-        <div>
+6087-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+6088-            <Zap className="w-5 h-5 text-amber-400" /> Bonus Nota
+--
+6211-                Akumulasi Bonus Nota ({currentPeriod?.label || selectedPeriod})
+6212-              </h3>
+6213-              <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+6214-                <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">
+6215-                  Grand Total:
+6216-                </span>
+6217-                <span className="text-emerald-400 font-black text-sm">
+6218-                  Rp {new Intl.NumberFormat("id-ID").format(grandTotal)}
+6219-                </span>
+6220-              </div>
+6221-            </div>
+6222-            <div className="overflow-x-auto max-h-[500px] no-scrollbar">
+6223-              <Table>
+6224-                <TableHeader>
+6225-                  <TableRow className="border-white/5 bg-white/5">
+6226-                    <TableHead className="text-white/40 text-xs font-black uppercase">
+6227-                      PIN
+6228-                    </TableHead>
+6229-                    <TableHead className="text-white/40 text-xs font-black uppercase">
+6230-                      Nama
+6231-                    </TableHead>
+6232-                    <TableHead className="text-white/40 text-xs font-black uppercase text-right">
+6233-                      Bonus Nota
+6234-                    </TableHead>
+6235-                    <TableHead className="text-white/40 text-xs font-black uppercase text-right"></TableHead>
+6236-                  </TableRow>
+6237-                </TableHeader>
+6238-                <TableBody>
+6239-                  {Object.entries(entries).length === 0 ? (
+6240-                    <TableRow>
+6241-                      <TableCell
+6242-                        colSpan={4}
+6243-                        className="text-center py-12 text-white/20 italic text-xs uppercase tracking-widest"
+6244-                      >
+6245-                        Tidak ada data bonus
+6246-                      </TableCell>
+6247-                    </TableRow>
+6248-                  ) : (
+6249-                    Object.entries(entries).map(([empId, amount]) => {
+6250-                      const emp = employees.find((e) => e.id === empId);
+6251:                      return (
+6252-                        <TableRow
+6253-                          key={empId}
+6254-                          className="border-white/5 hover:bg-white/5 transition-colors"
+6255-                        >
+6256-                          <TableCell className="text-white/60 font-mono text-xs">
+--
+6393-  const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
+6394-  const [isLocked, setIsLocked] = useState(false);
+6395-  const [loading, setLoading] = useState(true);
+6396-  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+6397-  const [password, setPassword] = useState("");
+6398-  const [selectedEmpId, setSelectedEmpId] = useState("");
+6399-  const [inputAmount, setInputAmount] = useState("");
+6400-
+6401-  useEffect(() => {
+6402-    let componentMounted = true;
+6403-    if (!selectedPeriod) return;
+6404-    setLoading(true);
+6405-
+6406-    const unsub = onSnapshot(
+6407-      doc(db, "koreksiGaji", selectedPeriod),
+6408-      (snap) => {
+6409-        if (componentMounted) {
+6410-          if (snap.exists()) {
+6411-            const data = snap.data();
+6412-            setEntries(data.entries || {});
+6413-            setIsLocked(data.isLocked || false);
+6414-          } else {
+6415-            setEntries({});
+6416-            setIsLocked(false);
+6417-          }
+6418-          setLoading(false);
+6419-        }
+6420-      },
+6421-      (error) => {
+6422-        if (componentMounted) {
+6423-          handleFirestoreError(
+6424-            error,
+6425-            OperationType.GET,
+6426-            `koreksiGaji/${selectedPeriod}`,
+6427-          );
+6428-          setLoading(false);
+6429-        }
+6430-      },
+6431-    );
+6432-
+6433:    return () => {
+6434-      componentMounted = false;
+6435-      unsub();
+6436-    };
+6437-  }, [selectedPeriod]);
+6438-
+--
+6502-        Nominal: amount,
+6503-      };
+6504-    });
+6505-    const ws = XLSX.utils.json_to_sheet(data);
+6506-    const wb = XLSX.utils.book_new();
+6507-    XLSX.utils.book_append_sheet(wb, ws, "Koreksi Gaji");
+6508-    XLSX.writeFile(
+6509-      wb,
+6510-      `Koreksi_Gaji_${currentPeriod?.label || selectedPeriod}.xlsx`,
+6511-    );
+6512-  };
+6513-
+6514-  const toggleLock = async () => {
+6515-    if (isLocked) {
+6516-      setShowUnlockDialog(true);
+6517-    } else {
+6518-      await setDoc(
+6519-        doc(db, "koreksiGaji", selectedPeriod),
+6520-        { isLocked: true },
+6521-        { merge: true },
+6522-      );
+6523-      toast.success("Periode dikunci");
+6524-    }
+6525-  };
+6526-
+6527-  const handleUnlock = async () => {
+6528-    if (password === "admin123") {
+6529-      await setDoc(
+6530-        doc(db, "koreksiGaji", selectedPeriod),
+6531-        { isLocked: false },
+6532-        { merge: true },
+6533-      );
+6534-      setShowUnlockDialog(false);
+6535-      setPassword("");
+6536-      toast.success("Periode dibuka");
+6537-    } else {
+6538-      toast.error("Password salah");
+6539-    }
+6540-  };
+6541-
+6542:  return (
+6543-    <div className="space-y-6">
+6544-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+6545-        <div>
+6546-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+6547-            <Zap className="w-5 h-5 text-amber-400" /> Koreksi Gaji (Penambahan)
+--
+6608-                  disabled={isLocked}
+6609-                />
+6610-              </div>
+6611-              <div className="space-y-1">
+6612-                <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">
+6613-                  Nominal
+6614-                </Label>
+6615-                <Input
+6616-                  type="number"
+6617-                  value={inputAmount}
+6618-                  onChange={(e) => setInputAmount(e.target.value)}
+6619-                  placeholder="0"
+6620-                  disabled={isLocked}
+6621-                  className="glass-panel border-white/10 text-white h-11 rounded-xl"
+6622-                />
+6623-              </div>
+6624-              <Button
+6625-                onClick={handleAdd}
+6626-                className="w-full h-11 rounded-xl bg-primary text-white font-bold"
+6627-                disabled={isLocked}
+6628-              >
+6629-                Tambah
+6630-              </Button>
+6631-            </div>
+6632-          </CardContent>
+6633-        </Card>
+6634-
+6635-        <Card className="glass-panel border-none bg-black/40 md:col-span-2">
+6636-          <CardContent className="p-6">
+6637-            <Table>
+6638-              <TableHeader>
+6639-                <TableRow className="border-white/5">
+6640-                  <TableHead className="text-white/40">Karyawan</TableHead>
+6641-                  <TableHead className="text-white/40">Nominal</TableHead>
+6642-                  <TableHead className="text-white/40"></TableHead>
+6643-                </TableRow>
+6644-              </TableHeader>
+6645-              <TableBody>
+6646-                {Object.entries(entries).map(([id, amount]) => {
+6647-                  const emp = employees.find((e) => e.id === id);
+6648:                  return (
+6649-                    <TableRow key={id} className="border-white/5">
+6650-                      <TableCell className="text-white font-bold">
+6651-                        {emp?.name || id}
+6652-                      </TableCell>
+6653-                      <TableCell className="text-emerald-400">
+--
+6731-  const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
+6732-  const [isLocked, setIsLocked] = useState(false);
+6733-  const [loading, setLoading] = useState(true);
+6734-  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+6735-  const [password, setPassword] = useState("");
+6736-  const [selectedEmpId, setSelectedEmpId] = useState("");
+6737-  const [inputAmount, setInputAmount] = useState("");
+6738-
+6739-  useEffect(() => {
+6740-    let componentMounted = true;
+6741-    if (!selectedPeriod) return;
+6742-    setLoading(true);
+6743-
+6744-    const unsub = onSnapshot(
+6745-      doc(db, "koreksiGajiMinus", selectedPeriod),
+6746-      (snap) => {
+6747-        if (componentMounted) {
+6748-          if (snap.exists()) {
+6749-            const data = snap.data();
+6750-            setEntries(data.entries || {});
+6751-            setIsLocked(data.isLocked || false);
+6752-          } else {
+6753-            setEntries({});
+6754-            setIsLocked(false);
+6755-          }
+6756-          setLoading(false);
+6757-        }
+6758-      },
+6759-      (error) => {
+6760-        if (componentMounted) {
+6761-          handleFirestoreError(
+6762-            error,
+6763-            OperationType.GET,
+6764-            `koreksiGajiMinus/${selectedPeriod}`,
+6765-          );
+6766-          setLoading(false);
+6767-        }
+6768-      },
+6769-    );
+6770-
+6771:    return () => {
+6772-      componentMounted = false;
+6773-      unsub();
+6774-    };
+6775-  }, [selectedPeriod]);
+6776-
+--
+6840-        Nominal: amount,
+6841-      };
+6842-    });
+6843-    const ws = XLSX.utils.json_to_sheet(data);
+6844-    const wb = XLSX.utils.book_new();
+6845-    XLSX.utils.book_append_sheet(wb, ws, "Koreksi Gaji Pengurangan");
+6846-    XLSX.writeFile(
+6847-      wb,
+6848-      `Koreksi_Gaji_Pengurangan_${currentPeriod?.label || selectedPeriod}.xlsx`,
+6849-    );
+6850-  };
+6851-
+6852-  const toggleLock = async () => {
+6853-    if (isLocked) {
+6854-      setShowUnlockDialog(true);
+6855-    } else {
+6856-      await setDoc(
+6857-        doc(db, "koreksiGajiMinus", selectedPeriod),
+6858-        { isLocked: true },
+6859-        { merge: true },
+6860-      );
+6861-      toast.success("Periode dikunci");
+6862-    }
+6863-  };
+6864-
+6865-  const handleUnlock = async () => {
+6866-    if (password === "admin123") {
+6867-      await setDoc(
+6868-        doc(db, "koreksiGajiMinus", selectedPeriod),
+6869-        { isLocked: false },
+6870-        { merge: true },
+6871-      );
+6872-      setShowUnlockDialog(false);
+6873-      setPassword("");
+6874-      toast.success("Periode dibuka");
+6875-    } else {
+6876-      toast.error("Password salah");
+6877-    }
+6878-  };
+6879-
+6880:  return (
+6881-    <div className="space-y-6">
+6882-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+6883-        <div>
+6884-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+6885-            <Zap className="w-5 h-5 text-rose-400" /> Koreksi Gaji (Pengurangan)
+--
+6946-                  disabled={isLocked}
+6947-                />
+6948-              </div>
+6949-              <div className="space-y-1">
+6950-                <Label className="text-white/40 text-[10px] uppercase font-bold tracking-widest ml-1">
+6951-                  Nominal
+6952-                </Label>
+6953-                <Input
+6954-                  type="number"
+6955-                  value={inputAmount}
+6956-                  onChange={(e) => setInputAmount(e.target.value)}
+6957-                  placeholder="0"
+6958-                  disabled={isLocked}
+6959-                  className="glass-panel border-white/10 text-white h-11 rounded-xl"
+6960-                />
+6961-              </div>
+6962-              <Button
+6963-                onClick={handleAdd}
+6964-                className="w-full h-11 rounded-xl bg-primary text-white font-bold"
+6965-                disabled={isLocked}
+6966-              >
+6967-                Tambah
+6968-              </Button>
+6969-            </div>
+6970-          </CardContent>
+6971-        </Card>
+6972-
+6973-        <Card className="glass-panel border-none bg-black/40 md:col-span-2">
+6974-          <CardContent className="p-6">
+6975-            <Table>
+6976-              <TableHeader>
+6977-                <TableRow className="border-white/5">
+6978-                  <TableHead className="text-white/40">Karyawan</TableHead>
+6979-                  <TableHead className="text-white/40">Nominal</TableHead>
+6980-                  <TableHead className="text-white/40"></TableHead>
+6981-                </TableRow>
+6982-              </TableHeader>
+6983-              <TableBody>
+6984-                {Object.entries(entries).map(([id, amount]) => {
+6985-                  const emp = employees.find((e) => e.id === id);
+6986:                  return (
+6987-                    <TableRow key={id} className="border-white/5">
+6988-                      <TableCell className="text-white font-bold">
+6989-                        {emp?.name || id}
+6990-                      </TableCell>
+6991-                      <TableCell className="text-rose-400">
+--
+7070-  const [loading, setLoading] = useState(true);
+7071-  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+7072-  const [showClearDialog, setShowClearDialog] = useState(false);
+7073-  const [password, setPassword] = useState("");
+7074-  const [selectedEmpId, setSelectedEmpId] = useState("");
+7075-  const [inputAmount, setInputAmount] = useState("");
+7076-  const [editId, setEditId] = useState<string | null>(null);
+7077-
+7078-  useEffect(() => {
+7079-    let componentMounted = true;
+7080-    if (!selectedPeriod) return;
+7081-    setLoading(true);
+7082-
+7083-    const unsub = onSnapshot(
+7084-      doc(db, "bonusBerat", selectedPeriod),
+7085-      (snap) => {
+7086-        if (componentMounted) {
+7087-          if (snap.exists()) {
+7088-            const data = snap.data();
+7089-            setEntries(data.entries || {});
+7090-            setIsLocked(data.isLocked || false);
+7091-          } else {
+7092-            setEntries({});
+7093-            setIsLocked(false);
+7094-          }
+7095-          setLoading(false);
+7096-        }
+7097-      },
+7098-      (error) => {
+7099-        if (componentMounted) {
+7100-          handleFirestoreError(
+7101-            error,
+7102-            OperationType.GET,
+7103-            `bonusBerat/${selectedPeriod}`,
+7104-          );
+7105-          setLoading(false);
+7106-        }
+7107-      },
+7108-    );
+7109-
+7110:    return () => {
+7111-      componentMounted = false;
+7112-      unsub();
+7113-    };
+7114-  }, [selectedPeriod]);
+7115-
+--
+7254-        const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
+7255-
+7256-        const updated = { ...entries };
+7257-        let detectedPin = "";
+7258-        let detectedAmount = "";
+7259-
+7260-        data.forEach((row: any) => {
+7261-          const rowKeys = Object.keys(row);
+7262-
+7263-          const pinKey = rowKeys.find((k) => {
+7264-            const lk = k.toLowerCase().replace(/[^a-z]/g, "");
+7265-            return [
+7266-              "noabsen",
+7267-              "absen",
+7268-              "pin",
+7269-              "idabsen",
+7270-              "nik",
+7271-              "noinduk",
+7272-            ].includes(lk);
+7273-          });
+7274-          if (pinKey) detectedPin = pinKey;
+7275-          const pin = pinKey ? String(row[pinKey] || "").trim() : "";
+7276-
+7277-          const amountKey =
+7278-            rowKeys.find((k) => {
+7279-              const lk = k.toLowerCase().trim();
+7280-              return [
+7281-                "bonus berat",
+7282-                "nominal bonus",
+7283-                "bonus",
+7284-                "nominal",
+7285-                "jumlah",
+7286-                "berat",
+7287-                "amount",
+7288-                "total",
+7289-                "grand total",
+7290-              ].some((s) => lk === s || lk.startsWith(s));
+7291-            }) ||
+7292-            rowKeys.find((k) => {
+7293-              const lk = k.toLowerCase().trim();
+7294:              return (
+7295-                lk.includes("berat") ||
+7296-                (lk.includes("bonus") &&
+7297-                  !lk.includes("pin") &&
+7298-                  !lk.includes("absen"))
+7299-              );
+--
+7336-          if (emp && !isNaN(amount)) {
+7337-            updated[emp.id] = Math.max(0, Math.floor(amount));
+7338-          }
+7339-        });
+7340-        setEntries(updated);
+7341-        saveEntries(updated);
+7342-        toast.success(
+7343-          `Impor Berhasil! Kolom terdeteksi: PIN (${detectedPin || "?"}), Nominal (${detectedAmount || "?"})`,
+7344-        );
+7345-      } catch (err) {
+7346-        toast.error("Gagal impor file");
+7347-      }
+7348-    };
+7349-    reader.readAsBinaryString(file);
+7350-    e.target.value = ""; // Reset input
+7351-  };
+7352-
+7353-  const handleDownload = () => {
+7354-    const data = Object.entries(entries).map(([id, amount]) => {
+7355-      const emp = employees.find((e) => e.id === id);
+7356-      return {
+7357-        "No. Absen": emp?.pin || "",
+7358-        Nama: emp?.name || "",
+7359-        "Bonus Berat": amount,
+7360-      };
+7361-    });
+7362-    const ws = XLSX.utils.json_to_sheet(data);
+7363-    const wb = XLSX.utils.book_new();
+7364-    XLSX.utils.book_append_sheet(wb, ws, "Bonus Berat");
+7365-    XLSX.writeFile(
+7366-      wb,
+7367-      `Bonus_Berat_${currentPeriod?.label || selectedPeriod}.xlsx`,
+7368-    );
+7369-  };
+7370-
+7371-  const grandTotal = (Object.values(entries) as number[]).reduce(
+7372-    (a: number, b: number) => a + b,
+7373-    0,
+7374-  );
+7375-
+7376:  return (
+7377-    <div className="space-y-6">
+7378-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+7379-        <div>
+7380-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-2">
+7381-            <Layers className="w-5 h-5 text-teal-400" /> Bonus Berat
+--
+7504-                Akumulasi Bonus Berat ({currentPeriod?.label || selectedPeriod})
+7505-              </h3>
+7506-              <div className="bg-emerald-500/20 px-4 py-1 rounded-lg border border-emerald-500/30">
+7507-                <span className="text-[10px] text-emerald-400 font-bold uppercase mr-2">
+7508-                  Grand Total:
+7509-                </span>
+7510-                <span className="text-emerald-400 font-black text-sm">
+7511-                  Rp {new Intl.NumberFormat("id-ID").format(grandTotal)}
+7512-                </span>
+7513-              </div>
+7514-            </div>
+7515-            <div className="overflow-x-auto max-h-[500px] no-scrollbar">
+7516-              <Table>
+7517-                <TableHeader>
+7518-                  <TableRow className="border-white/5 bg-white/5">
+7519-                    <TableHead className="text-white/40 text-xs font-black uppercase">
+7520-                      PIN
+7521-                    </TableHead>
+7522-                    <TableHead className="text-white/40 text-xs font-black uppercase">
+7523-                      Nama
+7524-                    </TableHead>
+7525-                    <TableHead className="text-white/40 text-xs font-black uppercase text-right">
+7526-                      Bonus Berat
+7527-                    </TableHead>
+7528-                    <TableHead className="text-white/40 text-xs font-black uppercase text-right"></TableHead>
+7529-                  </TableRow>
+7530-                </TableHeader>
+7531-                <TableBody>
+7532-                  {Object.entries(entries).length === 0 ? (
+7533-                    <TableRow>
+7534-                      <TableCell
+7535-                        colSpan={4}
+7536-                        className="text-center py-12 text-white/20 italic text-xs uppercase tracking-widest"
+7537-                      >
+7538-                        Tidak ada data bonus
+7539-                      </TableCell>
+7540-                    </TableRow>
+7541-                  ) : (
+7542-                    Object.entries(entries).map(([empId, amount]) => {
+7543-                      const emp = employees.find((e) => e.id === empId);
+7544:                      return (
+7545-                        <TableRow
+7546-                          key={empId}
+7547-                          className="border-white/5 hover:bg-white/5 transition-colors"
+7548-                        >
+7549-                          <TableCell className="text-white/60 font-mono text-xs">
+--
+7655-// --- ADMIN DASHBOARD ---
+7656-function AdminOfficeConfig() {
+7657-  const [config, setConfig] = useState<any>(null);
+7658-  const [loading, setLoading] = useState(true);
+7659-
+7660-  function LocationMarker() {
+7661-    const map = useMapEvents({
+7662-      click(e) {
+7663-        setConfig((prev: any) => ({
+7664-          ...prev,
+7665-          lat: e.latlng.lat,
+7666-          lng: e.latlng.lng,
+7667-        }));
+7668-      },
+7669-    });
+7670-    return config && config.lat !== 0 ? (
+7671-      <Marker position={[config.lat, config.lng]} />
+7672-    ) : null;
+7673-  }
+7674-
+7675-  useEffect(() => {
+7676-    const unsub = onSnapshot(
+7677-      doc(db, "config", "office"),
+7678-      (snap) => {
+7679-        if (snap.exists()) setConfig(snap.data());
+7680-        else setConfig({ lat: -6.2088, lng: 106.8456, radius: 100 });
+7681-        setLoading(false);
+7682-      },
+7683-      (err) => handleFirestoreError(err, OperationType.GET, "config/office"),
+7684-    );
+7685-    return unsub;
+7686-  }, []);
+7687-
+7688-  const handleUpdate = async () => {
+7689-    await setDoc(doc(db, "config", "office"), config);
+7690-    alert("Konfigurasi lokasi kantor diperbarui!");
+7691-  };
+7692-
+7693-  if (loading) return <div>Memuat...</div>;
+7694-
+7695:  return (
+7696-    <div className="glass-panel p-6 space-y-6">
+7697-      <h3 className="text-xl font-bold text-white">Atur Lokasi Kantor</h3>
+7698-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+7699-        <div>
+7700-          <Label className="text-white/50">Latitude</Label>
+--
+8048-        {
+8049-          value: "office",
+8050-          label: "Lokasi Kantor",
+8051-          icon: <MapPin className="w-4 h-4" />,
+8052-        },
+8053-        {
+8054-          value: "music",
+8055-          label: "Musik Request",
+8056-          icon: <Music className="w-4 h-4" />,
+8057-        },
+8058-        {
+8059-          value: "kata",
+8060-          label: "Kata-kata",
+8061-          icon: <MessageSquare className="w-4 h-4" />,
+8062-        },
+8063-        {
+8064-          value: "db-status",
+8065-          label: "Status Database",
+8066-          icon: <Database className="w-4 h-4" />,
+8067-        },
+8068-      ],
+8069-    },
+8070-  ];
+8071-
+8072-  const menuGroups = rawMenuGroups
+8073-    .map((g) => {
+8074-      if (currentUser?.role === "spv") {
+8075-        return {
+8076-          ...g,
+8077-          items: g.items.filter((i) =>
+8078-            ["dashboard", "live", "leaves", "jadwal"].includes(i.value),
+8079-          ),
+8080-        };
+8081-      }
+8082-      return g;
+8083-    })
+8084-    .filter((g) => g.items.length > 0);
+8085-
+8086-  const allMenuItems = menuGroups.flatMap((g) => g.items);
+8087-
+8088:  return (
+8089-    <Tabs
+8090-      value={activeTab}
+8091-      onValueChange={setActiveTab}
+8092-      className="flex h-screen flex-col overflow-hidden bg-background w-full"
+8093-    >
+8094-      {/* Header with Integrated Menu */}
+8095-      <header className="h-16 w-full glass-panel border-x-0 border-t-0 rounded-none px-4 md:px-8 flex items-center sticky top-0 z-30 bg-background/40 backdrop-blur-xl shrink-0 gap-4">
+8096-        <Dialog open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+8097-          <DialogTrigger
+8098-            render={
+8099-              <Button
+8100-                variant="ghost"
+8101-                size="icon"
+8102-                className="text-white hover:bg-white/10"
+8103-              >
+8104-                <Menu className="w-6 h-6" />
+8105-              </Button>
+8106-            }
+8107-          />
+8108-          <DialogContent className="text-white left-0 top-0 translate-x-0 translate-y-0 h-full w-[350px] rounded-none p-6 m-0 border-r border-white/10 border-y-0 border-l-0 duration-300 shadow-2xl !bg-[#000000] overflow-hidden">
+8109-            <div className="flex items-center gap-3 mb-10 px-2">
+8110-              <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0 border border-primary/30">
+8111-                <Settings className="w-5 h-5 text-primary" />
+8112-              </div>
+8113-              <span className="font-bold text-lg text-foreground">
+8114-                Menu Admin
+8115-              </span>
+8116-            </div>
+8117-            <nav className="flex-1 overflow-y-auto pr-2 custom-scrollbar scroll-smooth">
+8118-              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-4 items-stretch p-0">
+8119-                {menuGroups
+8120-                  .filter(
+8121-                    (g) =>
+8122-                      !g.superAdminOnly || currentUser?.role === "superadmin",
+8123-                  )
+8124-                  .map((group) => {
+8125-                    const isExpanded = expandedGroup === group.label;
+8126:                    return (
+8127-                      <div key={group.label} className="space-y-2">
+8128-                        <button
+8129-                          onClick={() => toggleGroup(group.label)}
+8130-                          className="w-full flex items-center justify-between px-3 py-2 rounded-2xl hover:bg-white/5 transition-all group/btn"
+8131-                        >
+--
+8512-              </TabsContent>
+8513-            </div>
+8514-          </div>
+8515-        </div>
+8516-      </main>
+8517-    </Tabs>
+8518-  );
+8519-}
+8520-
+8521-function AdminMusic() {
+8522-  const [musicUrl, setMusicUrl] = useState("");
+8523-  const [loading, setLoading] = useState(true);
+8524-
+8525-  useEffect(() => {
+8526-    const unsub = onSnapshot(
+8527-      doc(db, "systemConfig", "musicSettings"),
+8528-      (doc) => {
+8529-        if (doc.exists()) {
+8530-          const data = doc.data();
+8531-          setMusicUrl(data.url || "");
+8532-        }
+8533-        setLoading(false);
+8534-      },
+8535-      (err) =>
+8536-        handleFirestoreError(
+8537-          err,
+8538-          OperationType.GET,
+8539-          "systemConfig/musicSettings",
+8540-        ),
+8541-    );
+8542-    return unsub;
+8543-  }, []);
+8544-
+8545-  const handleSave = async () => {
+8546-    await setDoc(doc(db, "systemConfig", "musicSettings"), {
+8547-      url: musicUrl,
+8548-    });
+8549-    alert("Musik berhasil disimpan!");
+8550-  };
+8551-
+8552:  return (
+8553-    <Card className="glass-panel border-none p-6 text-white">
+8554-      <CardHeader>
+8555-        <CardTitle>Pengaturan Musik Request Libur</CardTitle>
+8556-        <CardDescription className="text-white/60">
+8557-          Konfigurasi background music untuk request libur:
+--
+8592-  setActiveTab: (tab: string) => void;
+8593-  adminName: string;
+8594-  role: string;
+8595-  confirm: (msg: string, title?: string) => Promise<boolean>;
+8596-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+8597-  employees: Employee[];
+8598-  jobLevels: JobLevel[];
+8599-}) {
+8600-  const [stats, setStats] = useState({
+8601-    totalEmployees: 0,
+8602-    presentToday: 0,
+8603-    lateToday: 0,
+8604-    absentToday: 0,
+8605-    pendingLeaves: 0,
+8606-    badDebtsCount: 0,
+8607-    totalBadDebtAmount: 0,
+8608-  });
+8609-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+8610-  const [badDebtList, setBadDebtList] = useState<any[]>([]);
+8611-  const [loading, setLoading] = useState(true);
+8612-  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+8613-  const [isOnlineDetailOpen, setIsOnlineDetailOpen] = useState(false);
+8614-  const [isBadDebtOpen, setIsBadDebtOpen] = useState(false);
+8615-
+8616-  useEffect(() => {
+8617-    // Listener for online users (last seen in last 5 minutes)
+8618-    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+8619-    const q = query(
+8620-      collection(db, "employees"),
+8621-      where("lastSeen", ">", Timestamp.fromDate(fiveMinsAgo)),
+8622-    );
+8623-
+8624-    const unsub = onSnapshot(q, (snap) => {
+8625-      const online = snap.docs.map((doc) => ({
+8626-        id: doc.id,
+8627-        ...doc.data(),
+8628-      }));
+8629-      setOnlineUsers(online);
+8630-    });
+8631-
+8632:    return () => unsub();
+8633-  }, []);
+8634-
+8635-  useEffect(() => {
+8636-    const fetchDashboardData = async () => {
+8637-      setLoading(true);
+--
+8747-    };
+8748-
+8749-    fetchDashboardData();
+8750-  }, []);
+8751-
+8752-  const candidatesWithDetails = employees
+8753-    .filter((e) => e.isActive !== false && e.jobPositionId)
+8754-    .map((e) => {
+8755-      const suggestedLevel = getSuggestedLevelForEmployee(
+8756-        e.joinDate || "",
+8757-        e.jobPositionId || "",
+8758-        e.jobLevelId || "",
+8759-        jobLevels,
+8760-      );
+8761-      if (!suggestedLevel) return null;
+8762-
+8763-      const service = calculateService(e.joinDate!);
+8764-      // handle if minYear is null or undefined
+8765-      const minYear = suggestedLevel.serviceMinYear || 0;
+8766-      const requiredTotalMonths = minYear * 12;
+8767-      const employeeTotalMonths = service.totalYears * 12 + service.totalMonths;
+8768-      const excessMonths = employeeTotalMonths - requiredTotalMonths;
+8769-
+8770-      return {
+8771-        employee: e,
+8772-        suggestedLevel,
+8773-        service,
+8774-        excessMonths,
+8775-      };
+8776-    })
+8777-    .filter((c): c is NonNullable<typeof c> => c !== null);
+8778-
+8779-  const overdueCandidates = candidatesWithDetails.filter(
+8780-    (c) => c.excessMonths > 0,
+8781-  );
+8782-  const reminderCandidates = candidatesWithDetails.filter(
+8783-    (c) => c.excessMonths === 0,
+8784-  );
+8785-
+8786-  if (loading) {
+8787:    return (
+8788-      <div className="flex flex-col items-center justify-center py-20 gap-3">
+8789-        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+8790-        <p className="text-xs text-white/40 uppercase tracking-widest font-black">
+8791-          Memuat Dashboard...
+8792-        </p>
+8793-      </div>
+8794-    );
+8795-  }
+8796-
+8797:  return (
+8798-    <div className="space-y-8 pb-10">
+8799-      {/* Welcome Section */}
+8800-      <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border border-white/10 p-8 md:p-10">
+8801-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-[100px] rounded-full -mr-20 -mt-20 anim-pulse-slow" />
+8802-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+--
+8825-              <span className="text-xs font-black text-white/80 uppercase tracking-tighter">
+8826-                {format(new Date(), "EEEE, d MMMM yyyy", { locale: id })}
+8827-              </span>
+8828-            </div>
+8829-            <p className="text-[9px] font-mono text-white/20 mr-2 uppercase tracking-widest">
+8830-              System Time Sync: OK
+8831-            </p>
+8832-          </div>
+8833-        </div>
+8834-      </div>
+8835-
+8836-      {(overdueCandidates.length > 0 || reminderCandidates.length > 0) && (
+8837-        <div className="space-y-4">
+8838-          {overdueCandidates.length > 0 && (
+8839-            <Card
+8840-              className="glass-panel border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition-all cursor-pointer shadow-[0_0_20px_rgba(244,63,94,0.15)] group"
+8841-              onClick={() => setActiveTab("employees")}
+8842-            >
+8843-              <CardHeader className="pb-3 border-b border-rose-500/20 mb-2">
+8844-                <div className="flex items-center gap-2 text-rose-400">
+8845-                  <Zap className="w-5 h-5 animate-pulse" />
+8846-                  <CardTitle className="text-lg">
+8847-                    {overdueCandidates.length} Karyawan Terlambat Naik Pangkat
+8848-                  </CardTitle>
+8849-                </div>
+8850-                <CardDescription className="text-rose-400/80">
+8851-                  Karyawan berikut sudah memenuhi kriteria masa kerja dan lewat
+8852-                  dari waktu minimum. Evaluasi segera tingkatannya di menu
+8853-                  Karyawan.
+8854-                </CardDescription>
+8855-              </CardHeader>
+8856-              <CardContent>
+8857-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+8858-                  {overdueCandidates.slice(0, 3).map((candidate, idx) => {
+8859-                    const currentLevel = jobLevels.find(
+8860-                      (l) => l.id === candidate.employee.jobLevelId,
+8861-                    );
+8862-                    const excessYears = Math.floor(candidate.excessMonths / 12);
+8863-                    const excessRemainingMonths = candidate.excessMonths % 12;
+8864-
+8865:                    return (
+8866-                      <div
+8867-                        key={idx}
+8868-                        className="flex justify-between items-center bg-black/40 p-3 rounded-xl border border-rose-500/20 hover:border-rose-500/40 transition-colors"
+8869-                      >
+8870-                        <div className="flex flex-col gap-2">
+--
+8897-                        </div>
+8898-                      </div>
+8899-                    );
+8900-                  })}
+8901-                </div>
+8902-                {overdueCandidates.length > 3 && (
+8903-                  <div className="text-center mt-4">
+8904-                    <p className="text-xs text-rose-400/80 font-bold uppercase tracking-wider hover:text-rose-300 transition-colors inline-block pb-1 border-b border-rose-500/30 cursor-pointer">
+8905-                      + Lihat {overdueCandidates.length - 3} Lainnya
+8906-                    </p>
+8907-                  </div>
+8908-                )}
+8909-              </CardContent>
+8910-            </Card>
+8911-          )}
+8912-
+8913-          {reminderCandidates.length > 0 && (
+8914-            <Card
+8915-              className="glass-panel border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
+8916-              onClick={() => setActiveTab("employees")}
+8917-            >
+8918-              <CardHeader className="pb-3 border-b border-amber-500/10 mb-2 flex flex-row items-center justify-between">
+8919-                <div>
+8920-                  <div className="flex items-center gap-2 text-amber-400">
+8921-                    <Bell className="w-4 h-4 animate-bounce" />
+8922-                    <CardTitle className="text-md">
+8923-                      Pengingat: Siap Naik Pangkat
+8924-                    </CardTitle>
+8925-                  </div>
+8926-                  <CardDescription className="text-amber-400/70 text-xs mt-1">
+8927-                    Baru memenuhi kriteria (0 bulan lewat).
+8928-                  </CardDescription>
+8929-                </div>
+8930-                <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs font-black">
+8931-                  {reminderCandidates.length}
+8932-                </Badge>
+8933-              </CardHeader>
+8934-              <CardContent>
+8935-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+8936-                  {reminderCandidates.slice(0, 4).map((candidate, idx) => {
+8937:                    return (
+8938-                      <div
+8939-                        key={idx}
+8940-                        className="flex items-center justify-between bg-black/20 p-2 rounded-xl border border-white/5"
+8941-                      >
+8942-                        <div className="flex items-center gap-2 overflow-hidden">
+--
+9407-  );
+9408-}
+9409-
+9410-function AdminDatabaseStatus() {
+9411-  const [counts, setCounts] = useState<Record<string, number>>({});
+9412-  const [loading, setLoading] = useState(true);
+9413-
+9414-  const collectionsToCount = [
+9415-    "employees",
+9416-    "attendance",
+9417-    "manualAttendance",
+9418-    "leaveRequests",
+9419-    "periodControls",
+9420-    "periodQuotas",
+9421-    "shifts",
+9422-    "activityLogs",
+9423-  ];
+9424-
+9425-  useEffect(() => {
+9426-    const fetchCounts = async () => {
+9427-      setLoading(true);
+9428-      const newCounts: Record<string, number> = {};
+9429-      try {
+9430-        await Promise.all(
+9431-          collectionsToCount.map(async (collName) => {
+9432-            const q = query(collection(db, collName));
+9433-            const snapshot = await getCountFromServer(q);
+9434-            newCounts[collName] = snapshot.data().count;
+9435-          }),
+9436-        );
+9437-        setCounts(newCounts);
+9438-      } catch (err) {
+9439-        console.error("Error fetching database counts:", err);
+9440-      } finally {
+9441-        setLoading(false);
+9442-      }
+9443-    };
+9444-    fetchCounts();
+9445-  }, []);
+9446-
+9447:  return (
+9448-    <Card className="glass-panel border-none p-6 text-white">
+9449-      <CardHeader>
+9450-        <CardTitle className="flex items-center gap-2">
+9451-          <Database className="w-5 h-5 text-primary" />
+9452-          Status Penyimpanan Database
+--
+9851-          deactivationReason: reason,
+9852-          deactivationDate: deactivationDate
+9853-        });
+9854-        alert("Karyawan dinonaktifkan.", "success");
+9855-      }
+9856-    }
+9857-  };
+9858-
+9859-  const triggerEdit = (e: Employee) => {
+9860-    setIsEditing(e);
+9861-    setFormData({
+9862-      name: e.name,
+9863-      nickname: e.nickname || "",
+9864-      pin: e.pin,
+9865-      role: e.role,
+9866-      division: e.division || "Depan",
+9867-      organization:
+9868-        e.organization ||
+9869-        ("Non-Executive" as "Baru" | "Non-Executive" | "Executive"),
+9870-      jobPositionId: e.jobPositionId || "",
+9871-      jobLevelId: e.jobLevelId || "",
+9872-      joinDate: e.joinDate || format(new Date(), "yyyy-MM-dd"),
+9873-      password: e.password || "",
+9874-    });
+9875-    setShowAdd(true);
+9876-  };
+9877-
+9878-  const promotionCandidates = employees
+9879-    .filter((e) => e.isActive !== false && e.jobPositionId)
+9880-    .map((e) => ({
+9881-      employee: e,
+9882-      suggestedLevel: getSuggestedLevelForEmployee(
+9883-        e.joinDate || "",
+9884-        e.jobPositionId || "",
+9885-        e.jobLevelId || "",
+9886-        jobLevels,
+9887-      ),
+9888-    }))
+9889-    .filter((candidate) => candidate.suggestedLevel !== null);
+9890-
+9891:  return (
+9892-    <Card className="glass-panel border-none shadow-lg w-full">
+9893-      <CardHeader className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+9894-        <div>
+9895-          <CardTitle className="text-white">List Karyawan</CardTitle>
+9896-          <CardDescription className="text-white/50">
+--
+10665-
+10666-  const handleSaveLevel = async () => {
+10667-    if (!levelForm.name || !selectedPositionId) return;
+10668-    if (editingLevel) {
+10669-      await updateDoc(doc(db, "jobLevels", editingLevel.id), {
+10670-        ...levelForm,
+10671-        jobPositionId: selectedPositionId,
+10672-      });
+10673-    } else {
+10674-      await addDoc(collection(db, "jobLevels"), {
+10675-        ...levelForm,
+10676-        jobPositionId: selectedPositionId,
+10677-      });
+10678-    }
+10679-    setShowAddLevel(false);
+10680-    setLevelForm({
+10681-      name: "",
+10682-      rank: 0,
+10683-      promotionType: "pusat",
+10684-      serviceMinYear: null,
+10685-      serviceMaxYear: null,
+10686-      description: "",
+10687-    });
+10688-    setEditingLevel(null);
+10689-  };
+10690-
+10691-  const handleDeletePosition = async (id: string) => {
+10692-    if (await confirm("Hapus jabatan ini?")) {
+10693-      await deleteDoc(doc(db, "jobPositions", id));
+10694-      alert("Jabatan dihapus", "success");
+10695-    }
+10696-  };
+10697-
+10698-  const handleDeleteLevel = async (id: string) => {
+10699-    if (await confirm("Hapus level ini?")) {
+10700-      await deleteDoc(doc(db, "jobLevels", id));
+10701-      alert("Level dihapus", "success");
+10702-    }
+10703-  };
+10704-
+10705:  return (
+10706-    <div className="space-y-6">
+10707-      <div className="flex gap-2 p-1 bg-white/5 rounded-2xl w-fit border border-white/10">
+10708-        <Button
+10709-          variant="ghost"
+10710-          onClick={() => setActiveSubTab("positions")}
+--
+11184-  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
+11185-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+11186-}) {
+11187-  const [showAdd, setShowAdd] = useState(false);
+11188-  const [name, setName] = useState("");
+11189-  const [isEditing, setIsEditing] = useState<Division | null>(null);
+11190-
+11191-  const handleSave = async () => {
+11192-    if (!name) return;
+11193-    if (isEditing) {
+11194-      await updateDoc(doc(db, "divisions", isEditing.id), { name });
+11195-    } else {
+11196-      await addDoc(collection(db, "divisions"), { name });
+11197-    }
+11198-    setShowAdd(false);
+11199-    setName("");
+11200-    setIsEditing(null);
+11201-  };
+11202-
+11203-  const triggerEdit = (d: Division) => {
+11204-    setIsEditing(d);
+11205-    setName(d.name);
+11206-    setShowAdd(true);
+11207-  };
+11208-
+11209-  const handleDelete = async (id: string) => {
+11210-    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
+11211-    if (pwd !== "admin123") {
+11212-      alert("Password salah!", "error");
+11213-      return;
+11214-    }
+11215-    const isConfirmed = await confirm(
+11216-      "Hapus divisi ini? Semua bagian di divisi ini mungkin akan terdampak.",
+11217-    );
+11218-    if (isConfirmed) {
+11219-      await deleteDoc(doc(db, "divisions", id));
+11220-      alert("Divisi berhasil dihapus.", "success");
+11221-    }
+11222-  };
+11223-
+11224:  return (
+11225-    <Card className="glass-panel border-none shadow-lg text-white">
+11226-      <CardHeader className="flex flex-row items-center justify-between">
+11227-        <CardTitle className="text-white">Daftar Divisi</CardTitle>
+11228-        <Dialog
+11229-          open={showAdd}
+--
+11351-  );
+11352-
+11353-  useEffect(() => {
+11354-    if (divisions.length > 0 && !divisions.find((d) => d.name === division)) {
+11355-      setDivision(divisions[0].name);
+11356-    }
+11357-  }, [divisions]);
+11358-
+11359-  const handleAdd = async () => {
+11360-    if (!name) return;
+11361-    await addDoc(collection(db, "sections"), { name, division });
+11362-    setShowAdd(false);
+11363-    setName("");
+11364-  };
+11365-
+11366-  const handleDelete = async (id: string) => {
+11367-    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
+11368-    if (pwd !== "admin123") {
+11369-      alert("Password salah!", "error");
+11370-      return;
+11371-    }
+11372-    const isConfirmed = await confirm("Hapus bagian ini?");
+11373-    if (isConfirmed) {
+11374-      await deleteDoc(doc(db, "sections", id));
+11375-      alert("Bagian berhasil dihapus.", "success");
+11376-    }
+11377-  };
+11378-
+11379-  const groupedSections: Record<string, Section[]> = {};
+11380-  divisions.forEach((div) => {
+11381-    groupedSections[div.name] = sections.filter((s) => s.division === div.name);
+11382-  });
+11383-  // Handle fallback for legacy or mismatched ones
+11384-  const otherSections = sections.filter(
+11385-    (s) => !divisions.map((d) => d.name).includes(s.division || ""),
+11386-  );
+11387-  if (otherSections.length > 0) {
+11388-    groupedSections["Lainnya"] = otherSections;
+11389-  }
+11390-
+11391:  return (
+11392-    <Card className="glass-panel border-none shadow-lg">
+11393-      <CardHeader className="flex flex-row items-center justify-between">
+11394-        <CardTitle className="text-white">Daftar Bagian</CardTitle>
+11395-        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+11396-          <DialogTrigger
+--
+11519-}
+11520-
+11521-// --- ADMIN: JADWAL LIBUR CHART ---
+11522-function DraggableLeaveBadge({
+11523-  request,
+11524-  dateStr,
+11525-  isSunday,
+11526-  getNickname,
+11527-  getSectionInitials,
+11528-  disabled,
+11529-  dragId,
+11530-  displayDate,
+11531-}: {
+11532-  request: LeaveRequest;
+11533-  dateStr: string;
+11534-  isSunday: boolean;
+11535-  getNickname: (id: string, name: string) => string;
+11536-  getSectionInitials: (id: string) => string;
+11537-  disabled?: boolean;
+11538-  dragId?: string;
+11539-  displayDate?: string | null;
+11540-  key?: string;
+11541-}) {
+11542-  const { attributes, listeners, setNodeRef, transform, isDragging } =
+11543-    useDraggable({
+11544-      id: dragId || `${request.id}|${dateStr}`,
+11545-      disabled,
+11546-      data: { request, dateStr },
+11547-    });
+11548-
+11549-  const style = transform
+11550-    ? {
+11551-        transform: CSS.Translate.toString(transform),
+11552-        zIndex: 999,
+11553-        touchAction: "none",
+11554-      }
+11555-    : {
+11556-        touchAction: "none",
+11557-      };
+11558-
+11559:  return (
+11560-    <motion.div
+11561-      ref={setNodeRef}
+11562-      style={style}
+11563-      {...listeners}
+11564-      {...attributes}
+--
+11567-      className={`text-[9px] md:text-[10px] p-2 rounded-lg font-bold truncate transition-transform hover:scale-[1.02] active:scale-95 shadow-sm cursor-grab active:cursor-grabbing ${
+11568-        isDragging
+11569-          ? "opacity-50 scale-105 shadow-xl ring-2 ring-primary bg-primary/20"
+11570-          : isSunday
+11571-            ? "bg-rose-500/20 text-rose-100 border border-rose-500/20"
+11572-            : "bg-white/5 text-white/90 border border-white/10 hover:border-primary/30 hover:bg-white/10"
+11573-      } ${disabled ? "cursor-default" : ""}`}
+11574-    >
+11575-      <span className="text-primary mr-1">●</span>
+11576-      {getNickname(request.employeeId, request.employeeName)}
+11577-      <span className="ml-1 opacity-50 font-normal">
+11578-        {getSectionInitials(request.sectionId)}
+11579-      </span>
+11580-      {displayDate && !isNaN(new Date(displayDate).getTime()) && (
+11581-        <span className="ml-2 px-1.5 py-0.5 rounded bg-black/40 text-[9px] font-mono opacity-80 whitespace-nowrap">
+11582-          {format(new Date(displayDate), "dd MMM yy")}
+11583-        </span>
+11584-      )}
+11585-    </motion.div>
+11586-  );
+11587-}
+11588-
+11589-function DroppableCell({
+11590-  dateStr,
+11591-  children,
+11592-  isSunday,
+11593-  isToday,
+11594-  className,
+11595-}: {
+11596-  dateStr: string;
+11597-  children: React.ReactNode;
+11598-  isSunday: boolean;
+11599-  isToday: boolean;
+11600-  className?: string;
+11601-  key?: string;
+11602-}) {
+11603-  const { isOver, setNodeRef } = useDroppable({
+11604-    id: dateStr,
+11605-  });
+11606-
+11607:  return (
+11608-    <div
+11609-      ref={setNodeRef}
+11610-      className={
+11611-        className
+11612-          ? `${className} ${isOver ? "bg-primary/20 scale-[0.98]" : ""}`
+--
+11839-          r.date2,
+11840-          r.date3,
+11841-          r.date4,
+11842-          r.date5,
+11843-          r.date6,
+11844-        ];
+11845-        const newDArr = currentDates.filter(
+11846-          (d) => !!d && d !== "TRASH",
+11847-        ) as string[];
+11848-        const updateData: any = {
+11849-          dates: newDArr,
+11850-          updatedAt: serverTimestamp(),
+11851-        };
+11852-        for (let i = 1; i <= 6; i++) updateData[`date${i}`] = null;
+11853-        newDArr.forEach((d, i) => {
+11854-          if (i < 6) updateData[`date${i + 1}`] = d;
+11855-        });
+11856-        if (newDArr.length === 0) updateData.status = "rejected";
+11857-        return { ref: doc(db, "leaveRequests", r.id), data: updateData };
+11858-      });
+11859-
+11860-      for (const op of batchOps) {
+11861-        await updateDoc(op.ref, op.data);
+11862-      }
+11863-
+11864-      alert("Tempat sampah berhasil dikosongkan. Kuota telah dikembalikan.");
+11865-    } catch (err) {
+11866-      console.error(err);
+11867-      alert("Terjadi kesalahan saat menghapus permanen.");
+11868-    }
+11869-  };
+11870-
+11871-  // Find initials for section. Max 4 letters.
+11872-  const getSectionInitials = (sectionId: string) => {
+11873-    const section = sections.find((s) => s.id === sectionId);
+11874-    if (!section) return "";
+11875-    const name = section.name;
+11876-    const parts = name.split(" ");
+11877-    if (parts.length > 1) {
+11878-      // If multiple words, take first letter of each, up to 4
+11879:      return (
+11880-        "(" +
+11881-        parts
+11882-          .map((p) => p[0])
+11883-          .join("")
+11884-          .substring(0, 4)
+--
+12194-      alert("Jadwal libur berhasil dikembalikan ke request awal karyawan.");
+12195-    } catch (err) {
+12196-      console.error(err);
+12197-      alert("Gagal mengembalikan data.");
+12198-    }
+12199-  };
+12200-
+12201-  // Group requests by date
+12202-  const dateMap: Record<string, (LeaveRequest & { _dateIndex?: number })[]> =
+12203-    {};
+12204-  leaveRequests.forEach((req) => {
+12205-    if (req.division !== selectedDivision) return;
+12206-    const rDates = req.dates || [
+12207-      req.date1,
+12208-      req.date2,
+12209-      req.date3,
+12210-      req.date4,
+12211-      req.date5,
+12212-      req.date6,
+12213-    ];
+12214-    rDates.forEach((d, dateIndex) => {
+12215-      if (d) {
+12216-        if (!dateMap[d]) dateMap[d] = [];
+12217-        if (
+12218-          d === "TRASH" ||
+12219-          d === "WAITING" ||
+12220-          !dateMap[d].some((r) => r.employeeId === req.employeeId)
+12221-        ) {
+12222-          dateMap[d].push({ ...req, _dateIndex: dateIndex });
+12223-        }
+12224-      }
+12225-    });
+12226-  });
+12227-
+12228-  const hasPendingTrashOrWaiting =
+12229-    (dateMap["WAITING"] && dateMap["WAITING"].length > 0) ||
+12230-    (dateMap["TRASH"] && dateMap["TRASH"].length > 0);
+12231-
+12232-  const activePeriod = periodOptions.find((p) => p.value === selectedPeriod);
+12233-
+12234:  return (
+12235-    <div className="space-y-6" id="jadwal-libur-section">
+12236-      <Card className="glass-panel border-none shadow-lg text-white">
+12237-        <CardHeader className="flex flex-col md:flex-row items-center justify-between gap-4">
+12238-          <div className="w-full md:w-auto">
+12239-            <CardTitle className="text-primary uppercase tracking-[0.2em] font-black text-xl flex items-center gap-3 text-wrap">
+--
+12383-            <div className="flex flex-col items-center justify-center h-80 glass-panel border-white/10 rounded-3xl p-10 text-center">
+12384-              <p className="text-white/40 text-sm font-bold tracking-widest animate-pulse uppercase">
+12385-                Silakan Pilih Periode Di Atas
+12386-              </p>
+12387-            </div>
+12388-          ) : loading ? (
+12389-            <div className="flex items-center justify-center h-96">
+12390-              <div className="flex flex-col items-center gap-4">
+12391-                <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+12392-                <p className="text-white/20 text-[10px] tracking-[0.3em] font-bold">
+12393-                  Sinkronisasi Data...
+12394-                </p>
+12395-              </div>
+12396-            </div>
+12397-          ) : (
+12398-            <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+12399-              {(() => {
+12400-                const startDate = startOfDay(activePeriod.start);
+12401-                const endDate = endOfDay(activePeriod.end);
+12402-                const days = eachDayOfInterval({
+12403-                  start: startDate,
+12404-                  end: endDate,
+12405-                });
+12406-                const weekDays = [
+12407-                  "SENIN",
+12408-                  "SELASA",
+12409-                  "RABU",
+12410-                  "KAMIS",
+12411-                  "JUMAT",
+12412-                  "SABTU",
+12413-                  "MINGGU",
+12414-                ];
+12415-                const firstDayOfWeek = getDay(days[0]);
+12416-                const paddingBefore =
+12417-                  firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+12418-                const calendarCells = [];
+12419-                for (let i = 0; i < paddingBefore; i++)
+12420-                  calendarCells.push(null);
+12421-                days.forEach((d) => calendarCells.push(d));
+12422-
+12423:                return (
+12424-                  <div className="space-y-4">
+12425-                    {isEditingSchedule && (
+12426-                      <div className="grid grid-cols-2 gap-4">
+12427-                        <DroppableCell
+12428-                          dateStr="WAITING"
+--
+12478-                                isSunday={false}
+12479-                                getNickname={getNickname}
+12480-                                getSectionInitials={getSectionInitials}
+12481-                                disabled={!isEditingSchedule}
+12482-                                displayDate={
+12483-                                  r.originalDates
+12484-                                    ? r.originalDates[r._dateIndex as number]
+12485-                                    : null
+12486-                                }
+12487-                              />
+12488-                            ))}
+12489-                          </div>
+12490-                          {dateMap["TRASH"] && dateMap["TRASH"].length > 0 && (
+12491-                            <Button
+12492-                              size="sm"
+12493-                              variant="destructive"
+12494-                              className="absolute bottom-4 right-4 shadow-lg text-[10px] uppercase font-bold tracking-wider"
+12495-                              onClick={handleEmptyTrash}
+12496-                            >
+12497-                              Hapus Permanen
+12498-                            </Button>
+12499-                          )}
+12500-                        </DroppableCell>
+12501-                      </div>
+12502-                    )}
+12503-                    <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/40 backdrop-blur-md shadow-2xl">
+12504-                      <div className="grid grid-cols-7 bg-white/5 border-b border-white/10">
+12505-                        {weekDays.map((wd) => (
+12506-                          <div
+12507-                            key={wd}
+12508-                            className="p-4 text-center text-[10px] md:text-xs font-black text-white/40 tracking-widest border-r border-white/10 last:border-r-0 uppercase"
+12509-                          >
+12510-                            {wd}
+12511-                          </div>
+12512-                        ))}
+12513-                      </div>
+12514-
+12515-                      <div className="grid grid-cols-7 border-b border-white/10 last:border-b-0">
+12516-                        {calendarCells.map((date, idx) => {
+12517-                          if (!date)
+12518:                            return (
+12519-                              <div
+12520-                                key={`pad-${idx}`}
+12521-                                className="min-h-[140px] bg-white/[0.02] border-r border-white/10 last:border-r-0"
+12522-                              />
+12523-                            );
+12524-
+12525-                          const dateStr = format(date, "yyyy-MM-dd");
+12526-                          const isSunday = getDay(date) === 0;
+12527-                          const isToday = isSameDay(date, new Date());
+12528-                          const requests = dateMap[dateStr] || [];
+12529-
+12530:                          return (
+12531-                            <DroppableCell
+12532-                              key={dateStr}
+12533-                              dateStr={dateStr}
+12534-                              isSunday={isSunday}
+12535-                              isToday={isToday}
+--
+12789-      usedRequests.forEach((r) => {
+12790-        const dArr = r.dates || [
+12791-          r.date1,
+12792-          r.date2,
+12793-          r.date3,
+12794-          r.date4,
+12795-          r.date5,
+12796-          r.date6,
+12797-        ];
+12798-        dArr.forEach((d, i) => {
+12799-          if (d) {
+12800-            if (d === "TRASH" || d === "WAITING") {
+12801-              uniqueDates.add(`${r.id}-${d}-${i}`);
+12802-            } else {
+12803-              uniqueDates.add(d);
+12804-            }
+12805-          }
+12806-        });
+12807-      });
+12808-      const usedLeave = uniqueDates.size;
+12809-      const remaining = Math.max(0, currentQuota - usedLeave);
+12810-
+12811-      return {
+12812-        "No. Absen": e.pin,
+12813-        "Nama Karyawan": e.name,
+12814-        Kuota: currentQuota,
+12815-        Diambil: usedLeave,
+12816-        Sisa: remaining,
+12817-      };
+12818-    });
+12819-    const ws = XLSX.utils.json_to_sheet(data);
+12820-    const wb = XLSX.utils.book_new();
+12821-    XLSX.utils.book_append_sheet(wb, ws, "Data Kuota Libur");
+12822-    const activePeriod = periodOptions.find((p) => p.value === selectedPeriod);
+12823-    XLSX.writeFile(
+12824-      wb,
+12825-      `Data_Kuota_Libur_${activePeriod?.label || selectedPeriod}.xlsx`,
+12826-    );
+12827-  };
+12828-
+12829:  return (
+12830-    <Card className="glass-panel border-none shadow-lg">
+12831-      <CardHeader className="flex flex-row items-center justify-between">
+12832-        <div>
+12833-          <CardTitle className="text-white">Pengaturan Kuota Libur</CardTitle>
+12834-          <CardDescription className="text-white/50">
+--
+12919-              </TableRow>
+12920-            </TableHeader>
+12921-            <TableBody>
+12922-              {employees.map((e) => {
+12923-                const currentQuota = calculateEffectiveQuota(
+12924-                  e.id,
+12925-                  selectedPeriod,
+12926-                  periodOptions,
+12927-                  controls,
+12928-                  quotas,
+12929-                  leaveRequests,
+12930-                );
+12931-
+12932-                // Calculate used quota from 'leaveRequests' collection using unique dates logic
+12933-                const employeeRequests = leaveRequests.filter(
+12934-                  (a) => a.employeeId === e.id && a.period === selectedPeriod,
+12935-                );
+12936-                const uniqueDates = new Set<string>();
+12937-                employeeRequests.forEach((r) => {
+12938-                  const dArr = r.dates || [
+12939-                    r.date1,
+12940-                    r.date2,
+12941-                    r.date3,
+12942-                    r.date4,
+12943-                    r.date5,
+12944-                    r.date6,
+12945-                  ];
+12946-                  dArr.forEach((d, i) => {
+12947-                    if (d) {
+12948-                      if (d === "TRASH" || d === "WAITING") {
+12949-                        uniqueDates.add(`${r.id}-${d}-${i}`);
+12950-                      } else {
+12951-                        uniqueDates.add(d);
+12952-                      }
+12953-                    }
+12954-                  });
+12955-                });
+12956-                const usedLeave = uniqueDates.size;
+12957-                const remaining = Math.max(0, currentQuota - usedLeave);
+12958-
+12959:                return (
+12960-                  <TableRow
+12961-                    key={e.id}
+12962-                    className="border-white/5 hover:bg-white/5"
+12963-                  >
+12964-                    <TableCell className="font-semibold text-white whitespace-nowrap">
+--
+13195-        await setDoc(
+13196-          doc(db, "periodControls", id),
+13197-          {
+13198-            hidden: true,
+13199-            updatedAt: serverTimestamp(),
+13200-          },
+13201-          { merge: true },
+13202-        );
+13203-      }
+13204-      alert("Periode berhasil dihapus.", "success");
+13205-    }
+13206-  };
+13207-
+13208-  const togglePermanentClose = async (
+13209-    periodId: string,
+13210-    currentStatus: boolean,
+13211-  ) => {
+13212-    const pwd = await prompt(
+13213-      `Masukkan Password Admin untuk ${currentStatus ? "membuka permanen (unlock)" : "menutup permanen"}:`,
+13214-    );
+13215-    if (pwd !== "admin123") {
+13216-      alert("Password salah!", "error");
+13217-      return;
+13218-    }
+13219-    await setDoc(
+13220-      doc(db, "periodControls", periodId),
+13221-      {
+13222-        isPermanentlyClosed: !currentStatus,
+13223-        status: !currentStatus ? "closed" : "open",
+13224-        updatedAt: serverTimestamp(),
+13225-      },
+13226-      { merge: true },
+13227-    );
+13228-    alert(
+13229-      `Periode berhasil ${!currentStatus ? "Ditutup" : "Dibuka"}!`,
+13230-      "success",
+13231-    );
+13232-  };
+13233-
+13234-  if (loading)
+13235:    return (
+13236-      <div className="text-white p-10 text-center">
+13237-        Memuat pengaturan periode...
+13238-      </div>
+13239-    );
+13240-
+13241:  return (
+13242-    <Card className="glass-panel border-none shadow-lg">
+13243-      <CardHeader className="flex flex-row items-center justify-between">
+13244-        <div>
+13245-          <CardTitle className="text-white">
+13246-            Pengaturan Batas Waktu Request
+--
+13298-                      setNewPeriod({ ...newPeriod, endDate: e.target.value })
+13299-                    }
+13300-                    className="field-input"
+13301-                  />
+13302-                </div>
+13303-              </div>
+13304-              <div className="space-y-2">
+13305-                <Label>Batas Tabungan Libur (Max Accumulation)</Label>
+13306-                <div className="flex items-center gap-2">
+13307-                  <Input
+13308-                    type="number"
+13309-                    value={newPeriod.maxAccumulatedLeave.toString()}
+13310-                    onChange={(e) =>
+13311-                      setNewPeriod({
+13312-                        ...newPeriod,
+13313-                        maxAccumulatedLeave: parseInt(e.target.value) || 0,
+13314-                      } as any)
+13315-                    }
+13316-                    className="field-input w-24"
+13317-                  />
+13318-                  <span className="text-xs text-white/40 italic">Hari</span>
+13319-                </div>
+13320-              </div>
+13321-            </div>
+13322-            <DialogFooter>
+13323-              <Button
+13324-                onClick={handleAddCustom}
+13325-                className="w-full bg-emerald-600 hover:bg-emerald-500"
+13326-              >
+13327-                Buat Periode Sekarang
+13328-              </Button>
+13329-            </DialogFooter>
+13330-          </DialogContent>
+13331-        </Dialog>
+13332-      </CardHeader>
+13333-      <CardContent>
+13334-        <div className="space-y-4">
+13335-          {combinedPeriods.map((p) => {
+13336-            const ctrl = controls[p.value] || { status: "open" };
+13337-            const isCustom = p.value.startsWith("custom_");
+13338:            return (
+13339-              <div
+13340-                key={p.value}
+13341-                className="glass-panel p-4 border-white/5 flex flex-wrap items-center justify-between gap-4"
+13342-              >
+13343-                <div className="flex items-center gap-3">
+--
+13726-                    <Trash2 className="w-4 h-4" />
+13727-                  </Button>
+13728-                </div>
+13729-              </div>
+13730-            );
+13731-          })}
+13732-        </div>
+13733-      </CardContent>
+13734-    </Card>
+13735-  );
+13736-}
+13737-
+13738-function AdminKata() {
+13739-  const [kata, setKata] = useState("");
+13740-  const [postSubmitKata, setPostSubmitKata] = useState("");
+13741-  const [postSubmitDuration, setPostSubmitDuration] = useState(7);
+13742-  const [loading, setLoading] = useState(true);
+13743-
+13744-  useEffect(() => {
+13745-    const unsub = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+13746-      if (doc.exists()) {
+13747-        const data = doc.data();
+13748-        setKata(data.text || "");
+13749-        setPostSubmitKata(data.postText || "");
+13750-        setPostSubmitDuration(data.duration || 7);
+13751-      }
+13752-      setLoading(false);
+13753-    });
+13754-    return unsub;
+13755-  }, []);
+13756-
+13757-  const handleSave = async () => {
+13758-    await setDoc(doc(db, "systemConfig", "requestKata"), {
+13759-      text: kata,
+13760-      postText: postSubmitKata,
+13761-      duration: postSubmitDuration,
+13762-    });
+13763-    alert("Kata-kata dan durasi berhasil disimpan!");
+13764-  };
+13765-
+13766:  return (
+13767-    <div className="space-y-6">
+13768-      <Card className="glass-panel border-none p-6 text-white">
+13769-        <CardHeader>
+13770-          <CardTitle>Pengaturan Kata-kata Request (Sebelum Form)</CardTitle>
+13771-          <CardDescription className="text-white/60">
+--
+13831-  shifts: Shift[];
+13832-  confirm: (msg: string, title?: string) => Promise<boolean>;
+13833-  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
+13834-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+13835-}) {
+13836-  const [showAdd, setShowAdd] = useState(false);
+13837-  const [formData, setFormData] = useState({
+13838-    name: "",
+13839-    startTime: "08:00",
+13840-    endTime: "17:00",
+13841-    breakStart: "12:00",
+13842-    breakEnd: "13:00",
+13843-  });
+13844-
+13845-  const handleAdd = async () => {
+13846-    if (!formData.name) return;
+13847-    await addDoc(collection(db, "shifts"), formData);
+13848-    setShowAdd(false);
+13849-    setFormData({
+13850-      name: "",
+13851-      startTime: "08:00",
+13852-      endTime: "17:00",
+13853-      breakStart: "12:00",
+13854-      breakEnd: "13:00",
+13855-    });
+13856-  };
+13857-
+13858-  const handleDelete = async (id: string) => {
+13859-    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
+13860-    if (pwd !== "admin123") {
+13861-      alert("Password salah!", "error");
+13862-      return;
+13863-    }
+13864-    const isConfirmed = await confirm("Hapus shift ini?");
+13865-    if (isConfirmed) {
+13866-      await deleteDoc(doc(db, "shifts", id));
+13867-      alert("Shift berhasil dihapus.", "success");
+13868-    }
+13869-  };
+13870-
+13871:  return (
+13872-    <Card className="glass-panel border-none shadow-lg">
+13873-      <CardHeader className="flex flex-row items-center justify-between">
+13874-        <CardTitle className="text-white">List Shift Kerja</CardTitle>
+13875-        <Dialog open={showAdd} onOpenChange={setShowAdd}>
+13876-          <DialogTrigger className="rounded-xl flex items-center justify-center gap-2 bg-primary hover:bg-primary/80 transition-colors h-10 px-4 py-2 font-medium text-white shadow-sm">
+--
+14041-    const dateObj = toDateSafe(viewDate);
+14042-    const startOfDay = new Date(dateObj);
+14043-    startOfDay.setHours(0, 0, 0, 0);
+14044-    const endOfDay = new Date(dateObj);
+14045-    endOfDay.setHours(23, 59, 59, 999);
+14046-
+14047-    const q = query(
+14048-      collection(db, "activityLogs"),
+14049-      where("timestamp", ">=", Timestamp.fromDate(startOfDay)),
+14050-      where("timestamp", "<=", Timestamp.fromDate(endOfDay)),
+14051-      orderBy("timestamp", "desc"),
+14052-      limit(200),
+14053-    );
+14054-    const unsub = onSnapshot(
+14055-      q,
+14056-      (snap) => {
+14057-        setLogs(
+14058-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ActivityLog),
+14059-        );
+14060-        setLoading(false);
+14061-      },
+14062-      (err) => {
+14063-        console.error("Query activityLogs failed, might need index:", err);
+14064-        // Fallback to global if filter fails due to index missing
+14065-        const qGlobal = query(
+14066-          collection(db, "activityLogs"),
+14067-          orderBy("timestamp", "desc"),
+14068-          limit(100),
+14069-        );
+14070-        onSnapshot(qGlobal, (s) => {
+14071-          setLogs(
+14072-            s.docs.map((d) => ({ id: d.id, ...d.data() }) as ActivityLog),
+14073-          );
+14074-          setLoading(false);
+14075-        });
+14076-      },
+14077-    );
+14078-    return unsub;
+14079-  }, [viewDate]);
+14080-
+14081:  return (
+14082-    <DialogContent className="glass-panel text-white border-white/20 p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col rounded-[2rem]">
+14083-      <DialogHeader>
+14084-        <DialogTitle className="text-white text-xl font-bold flex items-center gap-2">
+14085-          <History className="w-5 h-5 text-primary" /> Log Aktivitas:{" "}
+14086-          {format(toDateSafe(viewDate), "dd MMMM yyyy")}
+14087-        </DialogTitle>
+14088-      </DialogHeader>
+14089-      <div className="flex-1 overflow-y-auto custom-scrollbar py-4">
+14090-        <Table>
+14091-          <TableHeader>
+14092-            <TableRow className="border-white/10 hover:bg-transparent">
+14093-              <TableHead className="text-white/40">Karyawan</TableHead>
+14094-              <TableHead className="text-white/40">Aksi</TableHead>
+14095-              <TableHead className="text-white/40">Waktu</TableHead>
+14096-              <TableHead className="text-white/40">Lokasi</TableHead>
+14097-              <TableHead className="text-white/40">Foto</TableHead>
+14098-            </TableRow>
+14099-          </TableHeader>
+14100-          <TableBody>
+14101-            {logs.map((log) => {
+14102-              const location = log.location ? JSON.parse(log.location) : null;
+14103:              return (
+14104-                <TableRow
+14105-                  key={log.id}
+14106-                  className="border-white/5 hover:bg-white/5"
+14107-                >
+14108-                  <TableCell className="font-medium text-white">
+--
+14328-      return alert("Pilih karyawan dan tanggal!");
+14329-
+14330-    // Check if record already exists for this employee and date
+14331-    const q = query(
+14332-      collection(db, "attendance"),
+14333-      where("employeeId", "==", liburData.employeeId),
+14334-      where("date", "==", liburData.date),
+14335-    );
+14336-    const snap = await getDocs(q);
+14337-    const emp = employees.find((e) => e.id === liburData.employeeId);
+14338-
+14339-    if (!snap.empty) {
+14340-      await updateDoc(doc(db, "attendance", snap.docs[0].id), {
+14341-        status: "day-off",
+14342-        checkIn: null,
+14343-        checkOut: null,
+14344-        breakStart: null,
+14345-        breakEnd: null,
+14346-        updatedAt: serverTimestamp(),
+14347-      });
+14348-    } else {
+14349-      await addDoc(collection(db, "attendance"), {
+14350-        employeeId: liburData.employeeId,
+14351-        employeeName: emp?.name || "Unknown",
+14352-        date: liburData.date,
+14353-        status: "day-off",
+14354-        updatedAt: serverTimestamp(),
+14355-      });
+14356-    }
+14357-
+14358-    setShowLibur(false);
+14359-    setLiburData({ employeeId: "", date: format(new Date(), "yyyy-MM-dd") });
+14360-  };
+14361-
+14362-  const stats = {
+14363-    total: employees.length,
+14364-    present: liveAttendance.length,
+14365-    absent: employees.length - liveAttendance.length,
+14366-  };
+14367-
+14368:  return (
+14369-    <div className="space-y-6">
+14370-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+14371-        <StatCard
+14372-          label="Total Karyawan"
+14373-          value={stats.total}
+--
+14655-          </div>
+14656-        </CardHeader>
+14657-        <CardContent>
+14658-          <div className="overflow-x-auto no-scrollbar">
+14659-            <Table>
+14660-              <TableHeader>
+14661-                <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
+14662-                  <TableHead className="text-white/40 whitespace-nowrap">
+14663-                    Nama Karyawan
+14664-                  </TableHead>
+14665-                  <TableHead className="text-white/40 whitespace-nowrap">
+14666-                    Shift
+14667-                  </TableHead>
+14668-                  <TableHead className="text-white/40 whitespace-nowrap">
+14669-                    Masuk
+14670-                  </TableHead>
+14671-                  <TableHead className="text-white/40 whitespace-nowrap">
+14672-                    Istirahat
+14673-                  </TableHead>
+14674-                  <TableHead className="text-white/40 whitespace-nowrap">
+14675-                    Pulang
+14676-                  </TableHead>
+14677-                  <TableHead className="text-white/40 whitespace-nowrap">
+14678-                    Statistik
+14679-                  </TableHead>
+14680-                  <TableHead className="text-white/40 whitespace-nowrap text-right">
+14681-                    Aksi
+14682-                  </TableHead>
+14683-                </TableRow>
+14684-              </TableHeader>
+14685-              <TableBody>
+14686-                {employees
+14687-                  .filter((e) => liveAttendance.some((a) => a.employeeId === e.id))
+14688-                  .map((e) => {
+14689-                  const a = liveAttendance.find((att) => att.employeeId === e.id);
+14690-                  const shift = a ? shifts.find((s) => s.id === a.shiftId) : null;
+14691-                  const statsData = a && shift
+14692-                    ? calculateAttendanceStats(a, shift)
+14693-                    : { late: 0, earlyLeave: 0, overtime: 0 };
+14694-
+14695:                  return (
+14696-                    <TableRow
+14697-                      key={e.id}
+14698-                      className="border-white/5 hover:bg-white/5"
+14699-                    >
+14700-                      <TableCell className="font-semibold text-white whitespace-nowrap">
+--
+14993-    if (isConfirmed) {
+14994-      await deleteDoc(doc(db, "leaveRequests", id));
+14995-      alert("Request libur berhasil dihapus.", "success");
+14996-    }
+14997-  };
+14998-
+14999-  const handleDeleteAll = async () => {
+15000-    if (requests.length === 0) return;
+15001-    const isConfirmed1 = await confirm(
+15002-      `Apakah yakin anda akan menghapus request libur divisi ${selectedDivision}?`,
+15003-    );
+15004-    if (!isConfirmed1) return;
+15005-
+15006-    const pwd = await prompt(
+15007-      "Masukkan Password Admin untuk melanjutkan penghapusan:",
+15008-    );
+15009-    if (pwd !== "admin123") {
+15010-      alert("Password salah!", "error");
+15011-      return;
+15012-    }
+15013-
+15014-    const isConfirmed2 = await confirm(
+15015-      `Apakah anda sudah yakin untuk menghapus ini?`,
+15016-    );
+15017-    if (!isConfirmed2) return;
+15018-
+15019-    try {
+15020-      await Promise.all(
+15021-        requests.map((r) => deleteDoc(doc(db, "leaveRequests", r.id))),
+15022-      );
+15023-      alert(
+15024-        `Semua request libur divisi ${selectedDivision} periode ini berhasil dihapus.`,
+15025-        "success",
+15026-      );
+15027-    } catch (err) {
+15028-      console.error(err);
+15029-      alert("Terjadi kesalahan saat menghapus data.", "error");
+15030-    }
+15031-  };
+15032-
+15033:  return (
+15034-    <div className="space-y-6">
+15035-      <div className="flex justify-center mb-2 overflow-x-auto no-scrollbar">
+15036-        <Tabs
+15037-          value={selectedDivision}
+15038-          onValueChange={(v: any) => setSelectedDivision(v)}
+--
+15331-    if (currentRequests && currentRequests.length > 0) {
+15332-      const r = currentRequests[0];
+15333-      const initialDates = r.dates
+15334-        ? [...r.dates]
+15335-        : Object.entries(r)
+15336-            .filter(([k, v]) => k.startsWith("date") && v)
+15337-            .map(([k, v]) => v as string);
+15338-
+15339-      const maxDays = periodControl?.maxDaysPerRequest || 6;
+15340-      while (initialDates.length < maxDays) initialDates.push("");
+15341-
+15342-      setFormData({
+15343-        dates: initialDates.slice(0, maxDays),
+15344-        reason: r.reason || "",
+15345-        sectionId: r.sectionId || "",
+15346-      });
+15347-    } else {
+15348-      const maxDays = periodControl?.maxDaysPerRequest || 6;
+15349-      setFormData({
+15350-        dates: Array(maxDays).fill(""),
+15351-        reason: "",
+15352-        sectionId: "",
+15353-      });
+15354-    }
+15355-
+15356-    setShowMusicPopup(true);
+15357-    setMusicPopupText(requestKata || "Silakan ajukan request libur Anda.");
+15358-    playMusic();
+15359-
+15360-    setTimeout(() => {
+15361-      setShowMusicPopup(false);
+15362-      setShowAdd(true);
+15363-    }, 6000);
+15364-  };
+15365-
+15366-  useEffect(() => {
+15367-    const active = periodOptions.filter((p) => {
+15368-      const ctrl = controls[p.value];
+15369-      if (!ctrl) return false;
+15370-      // Always show if admin checked it, or if it's currently open/scheduled
+15371:      return (
+15372-        ctrl.isVisibleToEmployee === true ||
+15373-        ctrl.status === "open" ||
+15374-        ctrl.status === "scheduled"
+15375-      );
+15376-    });
+--
+15390-        const snap = await getDoc(doc(db, "periodControls", selectedPeriod));
+15391-        setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
+15392-      } catch (err) {
+15393-        console.error("Error fetching period control:", err);
+15394-      }
+15395-    };
+15396-    fetchPeriod();
+15397-  }, [selectedPeriod]);
+15398-
+15399-  useEffect(() => {
+15400-    // Listener that synchronizes request additions and Admin deletions in real-time
+15401-    // Fetch ALL requests for THIS employee (cross-division) to ensure accurate carryover
+15402-    const qEmp = query(
+15403-      collection(db, "leaveRequests"),
+15404-      where("employeeId", "==", employee.id),
+15405-    );
+15406-    const unsubEmp = onSnapshot(qEmp, (snap) => {
+15407-      const data = snap.docs.map(
+15408-        (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
+15409-      );
+15410-      setRequests(data);
+15411-    });
+15412-
+15413-    // Listener for ALL requests in the CURRENT division (for popular dates / quota checks)
+15414-    const qDiv = query(
+15415-      collection(db, "leaveRequests"),
+15416-      where("division", "==", employee.division || "Depan"),
+15417-      orderBy("createdAt", "desc"),
+15418-    );
+15419-    const unsubDiv = onSnapshot(
+15420-      qDiv,
+15421-      (snap) => {
+15422-        const data = snap.docs.map(
+15423-          (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
+15424-        );
+15425-        setAllRequests(data);
+15426-      },
+15427-      (err) => console.error("Employee leave error:", err),
+15428-    );
+15429-
+15430:    return () => {
+15431-      unsubEmp();
+15432-      unsubDiv();
+15433-    };
+15434-  }, [employee.id, employee.division]);
+15435-
+--
+15655-        if (!usersPerDate[d]) usersPerDate[d] = [];
+15656-        if (!usersPerDate[d].includes(name)) {
+15657-          usersPerDate[d].push(name);
+15658-        }
+15659-      }
+15660-    });
+15661-  });
+15662-
+15663-  const popularDates = Object.entries(usageMap)
+15664-    .sort((a, b) => b[1] - a[1])
+15665-    .slice(0, 5);
+15666-
+15667-  const getPeriodStatus = () => {
+15668-    if (!periodControl) return "open";
+15669-    if (periodControl.isPermanentlyClosed) return "closed";
+15670-    if (periodControl.status === "closed") return "closed";
+15671-    if (periodControl.status === "scheduled") {
+15672-      const now = new Date();
+15673-      if (periodControl.openDate) {
+15674-        const openStr = `${periodControl.openDate} ${periodControl.openTime || "08:00"}`;
+15675-        try {
+15676-          const openDate = parse(openStr, "yyyy-MM-dd HH:mm", new Date());
+15677-          if (isAfter(openDate, now)) return "not_yet_open";
+15678-        } catch (e) {}
+15679-      }
+15680-      if (periodControl.deadlineDate) {
+15681-        const deadlineStr = `${periodControl.deadlineDate} ${periodControl.deadlineTime || "17:00"}`;
+15682-        try {
+15683-          const deadline = parse(deadlineStr, "yyyy-MM-dd HH:mm", new Date());
+15684-          if (isAfter(now, deadline)) return "closed";
+15685-        } catch (e) {}
+15686-      }
+15687-    }
+15688-    return "open";
+15689-  };
+15690-
+15691-  const periodStatusResult = getPeriodStatus();
+15692-  const isClosed = periodStatusResult !== "open";
+15693-  const currentPeriodValue = format(new Date(), "yyyy-MM");
+15694-
+15695:  return (
+15696-    <div className="space-y-6 mt-8 pb-12 text-white">
+15697-      {/* Improved Music & Words Popup using motion for reliability */}
+15698-      <AnimatePresence>
+15699-        {showMusicPopup && (
+15700-          <motion.div
+--
+15798-              size="sm"
+15799-            />
+15800-            <StatCard
+15801-              label="Sisa Kuota"
+15802-              value={Math.max(0, periodEffectiveQuota - usedDays)}
+15803-              icon={<Clock className="text-amber-400 w-4 h-4" />}
+15804-              size="sm"
+15805-            />
+15806-          </div>
+15807-          <p className="text-[9px] text-white/30 italic mr-2 text-right">
+15808-            * Maksimal Kuota: {periodControl?.maxAccumulatedLeave || 6} hari
+15809-            (termasuk sisa periode lalu yang terakumulasi otomatis).
+15810-          </p>
+15811-        </div>
+15812-      </div>
+15813-
+15814-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+15815-        <div className="lg:col-span-2 space-y-6">
+15816-          <Card className="glass-panel border-none shadow-xl">
+15817-            <CardHeader className="flex flex-row items-center justify-between">
+15818-              <div>
+15819-                <CardTitle className="text-white text-lg">
+15820-                  Input Tanggal Libur Saya
+15821-                </CardTitle>
+15822-                <CardDescription className="text-white/40">
+15823-                  Isi tanggal libur yang diinginkan (Maks.{" "}
+15824-                  {periodControl?.maxDaysPerRequest || 6} hari)
+15825-                </CardDescription>
+15826-              </div>
+15827-              <Dialog
+15828-                open={showAdd}
+15829-                onOpenChange={(val) => {
+15830-                  setShowAdd(val);
+15831-                  if (!val && !isPostPopupRef.current && !showMusicPopup)
+15832-                    stopMusic();
+15833-                }}
+15834-              >
+15835-                {/* No DialogTrigger here, we open it via handleRequestClick after 4s */}
+15836-                {(() => {
+15837-                  if (!selectedPeriod) {
+15838:                    return (
+15839-                      <Button className="bg-rose-500/20 text-rose-300 rounded-xl px-4 py-2 text-sm font-bold">
+15840-                        Belum ada request yang dibuka
+15841-                      </Button>
+15842-                    );
+15843-                  }
+15844:                  return (
+15845-                    <Button
+15846-                      disabled={isClosed}
+15847-                      onClick={handleRequestClick}
+15848-                      className={`inline-flex items-center justify-center h-10 px-4 py-2 text-white rounded-xl shadow-lg transition-colors font-bold text-sm gap-2 border-none ${isClosed ? "bg-white/5 text-white/20" : "bg-primary hover:bg-primary/80"}`}
+15849-                    >
+--
+16001-                        className={`border-white/5 hover:bg-white/5 ${r.isModifiedByAdmin ? "bg-amber-500/5" : ""}`}
+16002-                      >
+16003-                        <TableCell>
+16004-                          <div className="flex flex-col gap-1">
+16005-                            <Badge
+16006-                              variant="outline"
+16007-                              className="border-none bg-emerald-500/20 text-emerald-400 capitalize w-fit"
+16008-                            >
+16009-                              {r.status}
+16010-                            </Badge>
+16011-                            {r.isModifiedByAdmin && (
+16012-                              <Badge className="bg-amber-500 text-black text-[8px] px-1 py-0 font-black h-4 w-fit">
+16013-                                DIRUBAH ADMIN
+16014-                              </Badge>
+16015-                            )}
+16016-                          </div>
+16017-                        </TableCell>
+16018-                        <TableCell className="text-white/50 text-xs">
+16019-                          {sections.find((s) => s.id === r.sectionId)?.name ||
+16020-                            "-"}
+16021-                        </TableCell>
+16022-                        <TableCell className="text-emerald-400/80 font-bold text-xs relative group/date">
+16023-                          <div className="flex flex-col gap-0.5">
+16024-                            <div className="flex flex-wrap gap-x-1">
+16025-                              {(() => {
+16026-                                const currentDates = (
+16027-                                  r.dates || [
+16028-                                    r.date1,
+16029-                                    r.date2,
+16030-                                    r.date3,
+16031-                                    r.date4,
+16032-                                    r.date5,
+16033-                                    r.date6,
+16034-                                  ]
+16035-                                ).filter(Boolean);
+16036-                                return currentDates.map((d, i) => {
+16037-                                  const isNew =
+16038-                                    r.isModifiedByAdmin &&
+16039-                                    r.originalDates &&
+16040-                                    !r.originalDates.includes(d);
+16041:                                  return (
+16042-                                    <span
+16043-                                      key={i}
+16044-                                      className={isNew ? "text-amber-400" : ""}
+16045-                                    >
+16046-                                      {d}
+16047-                                      {i < currentDates.length - 1 ? "," : ""}
+16048-                                    </span>
+16049-                                  );
+16050-                                });
+16051-                              })()}
+16052-                            </div>
+16053-                            {r.isModifiedByAdmin && r.originalDates && (
+16054-                              <div className="text-[9px] text-white/30 flex flex-wrap gap-x-1 items-center">
+16055-                                <span className="opacity-50">Asli:</span>
+16056-                                {r.originalDates
+16057-                                  .filter(Boolean)
+16058-                                  .map((od, idx) => {
+16059-                                    const currentDates = (
+16060-                                      r.dates || [
+16061-                                        r.date1,
+16062-                                        r.date2,
+16063-                                        r.date3,
+16064-                                        r.date4,
+16065-                                        r.date5,
+16066-                                        r.date6,
+16067-                                      ]
+16068-                                    ).filter(Boolean);
+16069-                                    const wasMoved = !currentDates.includes(od);
+16070:                                    return (
+16071-                                      <span
+16072-                                        key={idx}
+16073-                                        className={
+16074-                                          wasMoved
+16075-                                            ? "line-through text-rose-500/50"
+--
+16112-              </div>
+16113-            </CardContent>
+16114-          </Card>
+16115-
+16116-          {/* List of others */}
+16117-          <Card className="glass-panel border-none shadow-xl">
+16118-            <CardHeader>
+16119-              <CardTitle className="text-white text-lg flex items-center gap-2">
+16120-                <Eye className="w-4 h-4 text-primary" /> Daftar Request Divisi{" "}
+16121-                {employee.division}
+16122-              </CardTitle>
+16123-              <CardDescription className="text-white/40">
+16124-                Gunakan daftar ini untuk melihat tanggal mana saja yang sudah
+16125-                ramai di divisi Anda.
+16126-              </CardDescription>
+16127-            </CardHeader>
+16128-            <CardContent>
+16129-              <div className="overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
+16130-                <Table>
+16131-                  <TableHeader>
+16132-                    <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
+16133-                      <TableHead className="text-white/40 sticky top-0 bg-secondary/80 backdrop-blur-md">
+16134-                        Nama
+16135-                      </TableHead>
+16136-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-secondary/80 backdrop-blur-md">
+16137-                        Tanggal Libur
+16138-                      </TableHead>
+16139-                      <TableHead className="text-white/40 text-[10px] sticky top-0 bg-secondary/80 backdrop-blur-md">
+16140-                        Alasan
+16141-                      </TableHead>
+16142-                    </TableRow>
+16143-                  </TableHeader>
+16144-                  <TableBody>
+16145-                    {currentAllRequests
+16146-                      .filter((r) => r.employeeId !== employee.id)
+16147-                      .map((r) => {
+16148-                        const emp = employees.find(
+16149-                          (e) => e.id === r.employeeId,
+16150-                        );
+16151-                        const displayName = emp?.nickname || r.employeeName;
+16152:                        return (
+16153-                          <TableRow
+16154-                            key={r.id}
+16155-                            className="border-white/5 hover:bg-white/5"
+16156-                          >
+16157-                            <TableCell className="font-medium text-white/80 text-[11px] whitespace-nowrap">
+--
+16197-                  MERAH
+16198-                </span>{" "}
+16199-                menunjukkan kuota sudah penuh (
+16200-                {periodControl?.maxRequestsPerDay || 7} orang).
+16201-              </CardDescription>
+16202-            </CardHeader>
+16203-            <CardContent className="py-8">
+16204-              <div className="space-y-6">
+16205-                <div className="grid grid-cols-7 gap-2 mb-2">
+16206-                  {["S", "S", "R", "K", "J", "S", "M"].map((day, i) => (
+16207-                    <div
+16208-                      key={i}
+16209-                      className="text-center text-[10px] font-black text-white/20 uppercase tracking-widest"
+16210-                    >
+16211-                      {day}
+16212-                    </div>
+16213-                  ))}
+16214-                </div>
+16215-
+16216-                <div className="grid grid-cols-7 gap-2">
+16217-                  {(() => {
+16218-                    const period = periodOptions.find(
+16219-                      (p) => p.value === selectedPeriod,
+16220-                    );
+16221-                    if (!period) return null;
+16222-
+16223-                    const daysInRange = eachDayOfInterval({
+16224-                      start: startOfDay(period.start),
+16225-                      end: endOfDay(period.end),
+16226-                    });
+16227-
+16228-                    // Add padding for the first day of the period to align with day of week
+16229-                    const firstDayPadding =
+16230-                      period.start.getDay() === 0
+16231-                        ? 6
+16232-                        : period.start.getDay() - 1;
+16233-                    const padding = Array(firstDayPadding).fill(null);
+16234-
+16235-                    return [...padding, ...daysInRange].map((date, i) => {
+16236-                      if (!date)
+16237:                        return (
+16238-                          <div key={`pad-${i}`} className="aspect-square" />
+16239-                        );
+16240-
+16241-                      const dateStr = format(date, "yyyy-MM-dd");
+16242-                      const count = usageMap[dateStr] || 0;
+16243-                      const maxLimit = periodControl?.maxRequestsPerDay || 7;
+16244-                      const isFull = count >= maxLimit;
+16245-                      const isToday =
+16246-                        format(new Date(), "yyyy-MM-dd") === dateStr;
+16247-                      const colIndex = i % 7;
+16248-
+16249-                      const tooltipPositionClass =
+16250-                        colIndex < 2
+16251-                          ? "left-0 -translate-x-2"
+16252-                          : colIndex > 4
+16253-                            ? "right-0 translate-x-2 left-auto"
+16254-                            : "left-1/2 -translate-x-1/2";
+16255-
+16256-                      const arrowPositionClass =
+16257-                        colIndex < 2
+16258-                          ? "left-6"
+16259-                          : colIndex > 4
+16260-                            ? "right-6 left-auto"
+16261-                            : "left-1/2 -translate-x-1/2";
+16262-
+16263:                      return (
+16264-                        <div
+16265-                          key={dateStr}
+16266-                          onClick={() => {
+16267-                            if (isFull || count > 0) {
+16268-                              setActiveHoldDate((prev) =>
+--
+16598-      const startStr = format(reportStart, "yyyy-MM-dd");
+16599-      const endStr = format(reportEnd, "yyyy-MM-dd");
+16600-
+16601-      const q = query(
+16602-        collection(db, "manualAttendance"),
+16603-        where("date", ">=", startStr),
+16604-        where("date", "<=", endStr),
+16605-      );
+16606-      const snap = await getDocs(q);
+16607-      const records = snap.docs.map((d) => d.data());
+16608-
+16609-      const wb = XLSX.utils.book_new();
+16610-
+16611-      const exportRows = employees.map((emp) => {
+16612-        const row: any = { Nama: emp.name, PIN: emp.pin };
+16613-        // We need all dates in the range
+16614-        for (
+16615-          let d = new Date(reportStart);
+16616-          d <= reportEnd;
+16617-          d.setDate(d.getDate() + 1)
+16618-        ) {
+16619-          const dateStr = format(d, "yyyy-MM-dd");
+16620-          const record = records.find(
+16621-            (r) => r.employeeId === emp.id && r.date === dateStr,
+16622-          );
+16623-          row[dateStr] = record ? record.status : "H";
+16624-        }
+16625-        return row;
+16626-      });
+16627-
+16628-      const ws = XLSX.utils.json_to_sheet(exportRows);
+16629-      XLSX.utils.book_append_sheet(wb, ws, "Rekap Manual");
+16630-      XLSX.writeFile(wb, `Rekap_Manual_${startStr}_to_${endStr}.xlsx`);
+16631-    } catch (error) {
+16632-      console.error("Export error:", error);
+16633-    } finally {
+16634-      setIsExporting(false);
+16635-    }
+16636-  };
+16637-
+16638:  return (
+16639-    <div className="space-y-6">
+16640-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+16641-        <Popover>
+16642-          <PopoverTrigger
+16643-            render={
+--
+16806-              </p>
+16807-            </CardContent>
+16808-          </Card>
+16809-        ))}
+16810-      </div>
+16811-
+16812-      {/* Entries List */}
+16813-      <Card className="glass-panel border-none shadow-2xl bg-black/40 overflow-hidden">
+16814-        <CardHeader className="border-b border-white/5">
+16815-          <CardTitle className="text-white text-md flex items-center gap-2">
+16816-            <History className="w-5 h-5 text-primary" /> Daftar Perubahan Status
+16817-            Hari Ini
+16818-          </CardTitle>
+16819-          <CardDescription className="text-white/40">
+16820-            Karyawan yang tidak berstatus hadir pada tanggal ini.
+16821-          </CardDescription>
+16822-        </CardHeader>
+16823-        <CardContent className="p-0">
+16824-          <Table>
+16825-            <TableHeader>
+16826-              <TableRow className="border-white/5 hover:bg-transparent bg-white/5">
+16827-                <TableHead className="text-white/40 font-bold uppercase text-[10px] pl-6">
+16828-                  Karyawan
+16829-                </TableHead>
+16830-                <TableHead className="text-white/40 font-bold uppercase text-[10px]">
+16831-                  PIN
+16832-                </TableHead>
+16833-                <TableHead className="text-white/40 font-bold uppercase text-[10px]">
+16834-                  Status
+16835-                </TableHead>
+16836-                <TableHead className="text-white/40 font-bold uppercase text-[10px] pr-6 text-right">
+16837-                  Aksi
+16838-                </TableHead>
+16839-              </TableRow>
+16840-            </TableHeader>
+16841-            <TableBody>
+16842-              {(Object.entries(manualData) as [string, string][]).map(
+16843-                ([empId, status]) => {
+16844-                  const emp = employees.find((e) => e.id === empId);
+16845-                  if (!emp) return null;
+16846:                  return (
+16847-                    <TableRow
+16848-                      key={empId}
+16849-                      className="border-white/5 hover:bg-white/5 transition-colors"
+16850-                    >
+16851-                      <TableCell className="font-bold text-white pl-6">
+--
+16874-                    </TableRow>
+16875-                  );
+16876-                },
+16877-              )}
+16878-              {Object.keys(manualData).length === 0 && (
+16879-                <TableRow>
+16880-                  <TableCell
+16881-                    colSpan={4}
+16882-                    className="text-center py-20 text-white/20 italic"
+16883-                  >
+16884-                    Semua karyawan terdata hadir (Default).
+16885-                  </TableCell>
+16886-                </TableRow>
+16887-              )}
+16888-            </TableBody>
+16889-          </Table>
+16890-        </CardContent>
+16891-      </Card>
+16892-    </div>
+16893-  );
+16894-}
+16895-
+16896-// --- ADMIN: BACKUP ---
+16897-function AdminBackup({ employees }: { employees: Employee[] }) {
+16898-  const [exportStart, setExportStart] = useState<Date>(new Date());
+16899-  const [exportEnd, setExportEnd] = useState<Date>(new Date());
+16900-  const [isExporting, setIsExporting] = useState(false);
+16901-
+16902-  const handleBackupExport = async () => {
+16903-    setIsExporting(true);
+16904-    try {
+16905-      await generateBackupZip(exportStart, exportEnd);
+16906-    } catch (err) {
+16907-      console.error(err);
+16908-      alert("Gagal backup.");
+16909-    } finally {
+16910-      setIsExporting(false);
+16911-    }
+16912-  };
+16913-
+16914:  return (
+16915-    <Card className="bg-slate-900 border-white/10 p-6 text-white shadow-2xl">
+16916-      <CardHeader>
+16917-        <CardTitle className="text-xl font-bold">Backup Data All</CardTitle>
+16918-        <CardDescription className="text-white/60">
+16919-          Pilih rentang waktu untuk mengunduh seluruh data (Absen, Libur,
+--
+17059-        };
+17060-      });
+17061-
+17062-      const ws = XLSX.utils.json_to_sheet(data);
+17063-      const wb = XLSX.utils.book_new();
+17064-      XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
+17065-      XLSX.writeFile(
+17066-        wb,
+17067-        `Rekap_Absensi_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`,
+17068-      );
+17069-    } finally {
+17070-      setExportLoading(false);
+17071-    }
+17072-  };
+17073-
+17074-  const handleEditTime = async (
+17075-    id: string,
+17076-    field: string,
+17077-    newTimeStr: string,
+17078-  ) => {
+17079-    if (!newTimeStr) return;
+17080-    try {
+17081-      const attendance = attendances.find((a) => a.id === id);
+17082-      if (!attendance) return;
+17083-
+17084-      const newTime = parse(
+17085-        newTimeStr,
+17086-        "HH:mm",
+17087-        attendance.date ? toDateSafe(attendance.date) : new Date(),
+17088-      );
+17089-      await updateDoc(doc(db, "attendance", id), {
+17090-        [field]: newTime,
+17091-        updatedAt: serverTimestamp(),
+17092-      });
+17093-      setIsEditingAttendance(null);
+17094-    } catch (e) {
+17095-      alert("Format jam salah (HH:mm)");
+17096-    }
+17097-  };
+17098-
+17099:  return (
+17100-    <div className="space-y-6">
+17101-      <Card className="glass-panel border-none shadow-lg">
+17102-        <CardHeader className="flex flex-row items-center justify-between">
+17103-          <div>
+17104-            <CardTitle className="text-white">Rekap Absensi</CardTitle>
+--
+17144-              <Input
+17145-                type="date"
+17146-                value={format(dateRange.end, "yyyy-MM-dd")}
+17147-                onChange={(e) => {
+17148-                  if (e.target.value) {
+17149-                    setDateRange({ ...dateRange, end: new Date(e.target.value) });
+17150-                  }
+17151-                }}
+17152-                className="field-input w-40"
+17153-              />
+17154-            </div>
+17155-          </div>
+17156-
+17157-          <div className="overflow-x-auto no-scrollbar">
+17158-            <Table>
+17159-              <TableHeader>
+17160-                <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
+17161-                  <TableHead className="text-white/40 whitespace-nowrap">
+17162-                    Tanggal
+17163-                  </TableHead>
+17164-                  <TableHead className="text-white/40 whitespace-nowrap">
+17165-                    Nama
+17166-                  </TableHead>
+17167-                  <TableHead className="text-white/40 whitespace-nowrap">
+17168-                    Shift
+17169-                  </TableHead>
+17170-                  <TableHead className="text-white/40 whitespace-nowrap">
+17171-                    Masuk
+17172-                  </TableHead>
+17173-                  <TableHead className="text-white/40 whitespace-nowrap">
+17174-                    Pulang
+17175-                  </TableHead>
+17176-                  <TableHead className="text-right text-white/40 whitespace-nowrap">
+17177-                    Aksi
+17178-                  </TableHead>
+17179-                </TableRow>
+17180-              </TableHeader>
+17181-              <TableBody>
+17182-                {attendances.map((a) => {
+17183-                  const shift = shifts.find((s) => s.id === a.shiftId);
+17184:                  return (
+17185-                    <TableRow
+17186-                      key={a.id}
+17187-                      className="border-white/5 hover:bg-white/5"
+17188-                    >
+17189-                      <TableCell className="text-xs font-medium text-white/60 whitespace-nowrap">
+--
+17254-                                }
+17255-                              />
+17256-                            </div>
+17257-                          </DialogContent>
+17258-                        </Dialog>
+17259-                      </TableCell>
+17260-                    </TableRow>
+17261-                  );
+17262-                })}
+17263-                {attendances.length === 0 && (
+17264-                  <TableRow>
+17265-                    <TableCell
+17266-                      colSpan={5}
+17267-                      className="text-center py-10 text-white/30 italic"
+17268-                    >
+17269-                      Tidak ada data untuk rentang tanggal ini.
+17270-                    </TableCell>
+17271-                  </TableRow>
+17272-                )}
+17273-              </TableBody>
+17274-            </Table>
+17275-          </div>
+17276-        </CardContent>
+17277-      </Card>
+17278-    </div>
+17279-  );
+17280-}
+17281-
+17282-function EditTimeField({
+17283-  label,
+17284-  current,
+17285-  onSave,
+17286-}: {
+17287-  label: string;
+17288-  current: any;
+17289-  onSave: (v: string) => void;
+17290-}) {
+17291-  const [val, setVal] = useState(
+17292-    current ? format(toDateSafe(current), "HH:mm") : "",
+17293-  );
+17294:  return (
+17295-    <div className="flex items-center justify-between gap-4">
+17296-      <Label className="text-white/70 w-1/2">{label}</Label>
+17297-      <div className="flex gap-2">
+17298-        <Input
+17299-          type="time"
+17300-          value={val}
+17301-          onChange={(e) => setVal(e.target.value)}
+17302-          className="field-input w-32"
+17303-        />
+17304-        <Button
+17305-          size="sm"
+17306-          onClick={() => onSave(val)}
+17307-          className="bg-primary hover:bg-primary/80"
+17308-        >
+17309-          OK
+17310-        </Button>
+17311-      </div>
+17312-    </div>
+17313-  );
+17314-}
+17315-
+17316-// Helpers
+17317-
+17318-function LocalInput({
+17319-  value,
+17320-  type = "text",
+17321-  placeholder,
+17322-  className,
+17323-  onSave,
+17324-}: {
+17325-  value: string | number;
+17326-  type?: string;
+17327-  placeholder?: string;
+17328-  className?: string;
+17329-  onSave: (v: string) => void;
+17330-}) {
+17331-  const [val, setVal] = useState(value?.toString() || "");
+17332-
+17333-  useEffect(() => {
+17334-    setVal(value?.toString() || "");
+17335-  }, [value]);
+17336-
+17337:  return (
+17338-    <Input
+17339-      type={type}
+17340-      value={val}
+17341-      placeholder={placeholder}
+17342-      onChange={(e) => setVal(e.target.value)}
+17343-      onBlur={() => onSave(val)}
+17344-      className={className}
+17345-    />
+17346-  );
+17347-}
+17348-
+17349-function StatCard({
+17350-  label,
+17351-  value,
+17352-  icon,
+17353-  size = "default",
+17354-}: {
+17355-  label: string;
+17356-  value: number;
+17357-  icon: React.ReactNode;
+17358-  size?: "default" | "sm";
+17359-}) {
+17360-  if (size === "sm") {
+17361:    return (
+17362-      <Card className="glass-panel border-none shadow-sm flex flex-col items-center justify-center p-4 gap-2 bg-transparent">
+17363-        <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-sm border border-white/10">
+17364-          {icon}
+17365-        </div>
+17366-        <div className="text-center">
+17367-          <p className="text-[10px] font-bold text-white/60 uppercase tracking-tight">
+17368-            {label}
+17369-          </p>
+17370-          <p className="text-xl font-bold text-white tracking-tighter leading-none">
+17371-            {value}
+17372-          </p>
+17373-        </div>
+17374-      </Card>
+17375-    );
+17376-  }
+17377:  return (
+17378-    <Card className="glass-panel border-none shadow-xl flex items-center p-6 gap-6 bg-transparent">
+17379-      <div className="w-14 h-14 rounded-2xl bg-white/10 shadow-inner flex items-center justify-center text-2xl border border-white/10">
+17380-        {icon}
+17381-      </div>
+17382-      <div>
