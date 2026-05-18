@@ -145,7 +145,9 @@ import { toast, Toaster } from "sonner";
 import { PotonganKehilanganManager } from "./components/PotonganKehilanganManager";
 import { PotonganKehilanganBersamaManager } from "./components/PotonganKehilanganBersamaManager";
 import { PotonganSeragamManager } from "./components/PotonganSeragamManager";
+import { AdminSuperAdminManager } from "./components/AdminSuperAdminManager";
 import AdminAuditDanExport from "./components/AdminAuditDanExport";
+import { WhatsappSelectionDialog } from "./components/WhatsappSelectionDialog";
 import {
   Dialog,
   DialogContent,
@@ -182,6 +184,7 @@ import {
   ActivityLog,
   JobPosition,
   JobLevel,
+  SuperAdmin,
 } from "./types";
 import { addMonths, subMonths, lastDayOfMonth } from "date-fns";
 
@@ -457,6 +460,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [activePeriodId, setActivePeriodId] = useState<string>("");
+  const [superAdmins, setSuperAdmins] = useState<SuperAdmin[]>([]);
+  const [showWaSelection, setShowWaSelection] = useState(false);
 
   // Initialize Listeners
   useEffect(() => {
@@ -552,6 +557,19 @@ export default function App() {
       unsubJobPositions();
       unsubJobLevels();
     };
+  }, []);
+
+  useEffect(() => {
+    const unsubSuperAdmins = onSnapshot(
+      collection(db, "superAdmins"),
+      (snapshot) => {
+        setSuperAdmins(
+          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as SuperAdmin),
+        );
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, "superAdmins"),
+    );
+    return unsubSuperAdmins;
   }, []);
 
   const handleLogin = (employee: Employee, credential: string): boolean => {
@@ -756,6 +774,12 @@ export default function App() {
       }}
     >
       <div className="min-h-screen relative font-sans selection:bg-primary/20">
+        <WhatsappSelectionDialog
+          isOpen={showWaSelection}
+          onClose={() => setShowWaSelection(false)}
+          superAdmins={superAdmins}
+          currentUser={currentUser}
+        />
         <div className="mesh-bg" />
         <div className="relative z-10 min-h-screen">
           <AnimatePresence mode="wait">
@@ -775,6 +799,7 @@ export default function App() {
                   theme={theme}
                   toggleTheme={toggleTheme}
                   alert={customAlert}
+                  setWaSelection={setShowWaSelection}
                 />
               </motion.div>
             )}
@@ -945,6 +970,7 @@ function LoginView({
   theme,
   toggleTheme,
   alert,
+  setWaSelection,
   jobPositions = [],
 }: {
   employees: Employee[];
@@ -954,6 +980,7 @@ function LoginView({
   theme: "light" | "dark";
   toggleTheme: () => void;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
+  setWaSelection: (show: boolean) => void;
 }) {
   const [absenId, setAbsenId] = useState("");
   const [pin, setPin] = useState("");
@@ -1256,12 +1283,7 @@ function LoginView({
                           <div className="flex justify-end px-1 mt-2">
                             <button
                               type="button"
-                              onClick={() =>
-                                alert(
-                                  "Lupa password? Silakan hubungi Admin Anda untuk melakukan reset password melalui panel Admin.",
-                                  "info",
-                                )
-                              }
+                              onClick={() => setWaSelection(true)}
                               className="text-[9px] text-white/40 hover:text-white underline italic cursor-pointer"
                             >
                               Lupa Password?
@@ -7990,6 +8012,11 @@ function AdminDashboard({
       superAdminOnly: true,
       items: [
         {
+          value: "superadmin-manager",
+          label: "Data SuperAdmin",
+          icon: <Crown className="w-4 h-4" />,
+        },
+        {
           value: "job-config",
           label: "Struktur & Karir",
           icon: <Briefcase className="w-4 h-4" />,
@@ -8185,6 +8212,9 @@ function AdminDashboard({
             </div>
 
             <div className="focus-visible:outline-none min-h-[500px]">
+              <TabsContent value="superadmin-manager" className="mt-0 outline-none">
+                <AdminSuperAdminManager />
+              </TabsContent>
               <TabsContent value="employees" className="mt-0 outline-none">
                 <motion.div
                   initial={{ opacity: 0 }}

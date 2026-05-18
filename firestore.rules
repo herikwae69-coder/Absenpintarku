@@ -46,6 +46,7 @@ service cloud.firestore {
     match /koreksiGaji/{id} { allow read, list: if true; allow write: if isValidId(id); }
     match /koreksiGajiMinus/{id} { allow read, list: if true; allow write: if isValidId(id); }
     match /potonganSeragam/{id} { allow read, list: if true; allow write: if isValidId(id); }
+    match /superAdmins/{id} { allow read, list: if true; allow write: if isValidId(id); }
     
     match /potonganKehilangan/{employeeId}/debts/{debtId} {
         allow read, get, list: if true;
