@@ -774,12 +774,6 @@ export default function App() {
       }}
     >
       <div className="min-h-screen relative font-sans selection:bg-primary/20">
-        <WhatsappSelectionDialog
-          isOpen={showWaSelection}
-          onClose={() => setShowWaSelection(false)}
-          superAdmins={superAdmins}
-          currentUser={currentUser}
-        />
         <div className="mesh-bg" />
         <div className="relative z-10 min-h-screen">
           <AnimatePresence mode="wait">
@@ -800,6 +794,8 @@ export default function App() {
                   toggleTheme={toggleTheme}
                   alert={customAlert}
                   setWaSelection={setShowWaSelection}
+                  showWaSelection={showWaSelection}
+                  superAdmins={superAdmins}
                 />
               </motion.div>
             )}
@@ -971,6 +967,8 @@ function LoginView({
   toggleTheme,
   alert,
   setWaSelection,
+  showWaSelection,
+  superAdmins,
   jobPositions = [],
 }: {
   employees: Employee[];
@@ -981,6 +979,8 @@ function LoginView({
   toggleTheme: () => void;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
   setWaSelection: (show: boolean) => void;
+  showWaSelection: boolean;
+  superAdmins: SuperAdmin[];
 }) {
   const [absenId, setAbsenId] = useState("");
   const [pin, setPin] = useState("");
@@ -1076,6 +1076,12 @@ function LoginView({
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center py-10 px-4 overflow-x-hidden overflow-y-auto relative">
+      <WhatsappSelectionDialog
+        isOpen={showWaSelection}
+        onClose={() => setWaSelection(false)}
+        superAdmins={superAdmins}
+        userData={selectedEmployee ? { name: selectedEmployee.name, pin: selectedEmployee.pin } : null}
+      />
       <ThemeToggle
         theme={theme}
         toggleTheme={toggleTheme}

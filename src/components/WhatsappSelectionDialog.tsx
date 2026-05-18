@@ -8,22 +8,22 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { SuperAdmin, Employee } from "../types";
+import { SuperAdmin } from "../types";
 import { MessageCircle } from "lucide-react";
 
 export function WhatsappSelectionDialog({
   isOpen,
   onClose,
   superAdmins,
-  currentUser,
+  userData,
 }: {
   isOpen: boolean;
   onClose: () => void;
   superAdmins: SuperAdmin[];
-  currentUser: Employee | null;
+  userData: { name: string; pin: string } | null;
 }) {
   const handleChat = (admin: SuperAdmin) => {
-    const message = encodeURIComponent(`Hallo kak ${admin.name}, aku ${currentUser?.name || "karyawan"} (No Absen: ${currentUser?.pin || "-"}) lupa password login Jenggo 1 app ku. Minta tolong dong di atur ulang password saya. Terima kasih kakak admin yg guanteng dan cuantikk.. `);
+    const message = encodeURIComponent(`Hallo kak ${admin.name}, aku Nama: ${userData?.name || "-"}, No Absen: ${userData?.pin || "-"} lupa password login Jenggo 1 app ku. Minta tolong dong di atur ulang password saya. Terima kasih kakak admin yg guanteng dan cuantikk.. `);
     window.open(`https://wa.me/${admin.whatsappNumber.replace(/\D/g, "")}?text=${message}`, "_blank");
     onClose();
   };
