@@ -1157,11 +1157,12 @@ function LoginView({
         className="fixed top-4 right-4 z-50"
       />
       <button
-        onClick={() => fetchInitialData(true)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
+        onClick={() => window.location.reload()}
+        className="fixed top-4 left-4 z-50 p-2 rounded-xl bg-primary/20 hover:bg-primary/40 transition-colors flex flex-col items-center justify-center gap-1 shadow-md"
         title="Refresh Data"
       >
-        <RefreshCw size={20} className="text-primary" />
+        <RefreshCw size={20} className="text-foreground font-bold" />
+        <span className="text-[11px] font-bold text-foreground leading-none">refresh</span>
       </button>
       {/* Decorative atmospheric elements */}
       <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary/10 dark:bg-primary/20 blur-[120px] rounded-full animate-pulse" />
@@ -8271,6 +8272,17 @@ function AdminDashboard({
         </span>
 
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => window.location.reload()}
+            className="flex flex-col items-center justify-center gap-1 bg-white/10 hover:bg-white/20 rounded-xl p-1.5 px-3 transition-colors group mr-1 shadow-sm"
+            title="Refresh Halaman"
+          >
+            <RefreshCw size={16} className="text-white font-bold group-hover:text-primary transition-colors" />
+            <span className="text-[10px] font-bold text-white group-hover:text-primary leading-none">refresh</span>
+          </button>
+          
+          <div className="h-6 w-px bg-white/10 hidden sm:block" />
+
           <ThemeToggle
             theme={theme}
             toggleTheme={toggleTheme}

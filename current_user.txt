@@ -1,0 +1,263 @@
+476-  const [shifts, setShifts] = useState<Shift[]>([]);
+477-  const [sections, setSections] = useState<Section[]>([]);
+478-  const [divisions, setDivisions] = useState<Division[]>([]);
+479-  const [jobPositions, setJobPositions] = useState<JobPosition[]>([]);
+480-  const [jobLevels, setJobLevels] = useState<JobLevel[]>([]);
+481:  const [currentUser, setCurrentUser] = useState<Employee | null>(null);
+482-  const [isAdmin, setIsAdmin] = useState(false);
+483-  const [view, setView] = useState<"login" | "employee" | "admin">("login");
+484-  const [loading, setLoading] = useState(true);
+485-  const [quotaExceeded, setQuotaExceeded] = useState(false);
+486-  const [authError, setAuthError] = useState<string | null>(null);
+--
+661-    setView("login");
+662-    localStorage.removeItem("jg1_user");
+663-    localStorage.removeItem("jg1_isAdmin");
+664-  };
+665-
+666:  useAutoLogout(currentUser, handleLogout);
+667-
+668-  useEffect(() => {
+669:    if (!currentUser?.id) return;
+670-
+671-    const updatePresence = async () => {
+672-      try {
+673:        await updateDoc(doc(db, "employees", currentUser.id), {
+674-          lastSeen: serverTimestamp(),
+675-        });
+676-      } catch (err) {
+677-        console.error("Heartbeat error:", err);
+678-      }
+679-    };
+680-
+681-    updatePresence();
+682-    const interval = setInterval(updatePresence, 60000); // 1 minute
+683-    return () => clearInterval(interval);
+684:  }, [currentUser?.id]);
+685-
+686-  const today = format(new Date(), "yyyy-MM-dd");
+687-
+688-  // Custom Dialog State
+689-  const [dialogConfig, setDialogConfig] = useState<{
+--
+864-                  showWaSelection={showWaSelection}
+865-                  superAdmins={superAdmins}
+866-                />
+867-              </motion.div>
+868-            )}
+869:            {view === "employee" && currentUser && (
+870-              <motion.div
+871-                key="employee"
+872-                initial={{ opacity: 0 }}
+873-                animate={{ opacity: 1 }}
+874-                exit={{ opacity: 0 }}
+875-                transition={{ duration: 0.2 }}
+876-              >
+877-                <EmployeeView
+878:                  employee={currentUser}
+879-                  employees={employees}
+880-                  shifts={shifts}
+881-                  sections={sections}
+882-                  divisions={divisions}
+883-                  onLogout={handleLogout}
+--
+903-                  sections={sections}
+904-                  divisions={divisions}
+905-                  jobPositions={jobPositions}
+906-                  jobLevels={jobLevels}
+907-                  onLogout={handleLogout}
+908:                  currentUser={currentUser}
+909-                  theme={theme}
+910-                  toggleTheme={toggleTheme}
+911-                  confirm={customConfirm}
+912-                  prompt={customPrompt}
+913-                  alert={customAlert}
+--
+7823-  sections,
+7824-  divisions,
+7825-  jobPositions,
+7826-  jobLevels,
+7827-  onLogout,
+7828:  currentUser,
+7829-  theme,
+7830-  toggleTheme,
+7831-  confirm,
+7832-  prompt,
+7833-  alert,
+--
+7839-  sections: Section[];
+7840-  divisions: Division[];
+7841-  jobPositions: JobPosition[];
+7842-  jobLevels: JobLevel[];
+7843-  onLogout: () => void;
+7844:  currentUser: Employee | null;
+7845-  theme: "light" | "dark";
+7846-  toggleTheme: () => void;
+7847-  confirm: (msg: string, title?: string) => Promise<boolean>;
+7848-  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
+7849-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+7850-  activePeriodId: string;
+7851-  setActivePeriodId: (id: string) => void;
+7852-}) {
+7853:  const isSuper = currentUser?.role === "superadmin";
+7854-
+7855-  useEffect(() => {
+7856-    // Clear photoUrl for records older than 2 months (60 days)
+7857-    if (isSuper) {
+7858-      const cleanupOldData = async () => {
+--
+7907-      cleanupOldData().catch(console.error);
+7908-    }
+7909-  }, [isSuper]);
+7910-
+7911-  const [activeTab, setActiveTab] = useState(
+7912:    currentUser?.role === "spv" ? "live" : "dashboard",
+7913-  );
+7914-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+7915-  const [expandedGroup, setExpandedGroup] = useState<string | null>("Ringkasan");
+7916-
+7917-  const toggleGroup = (label: string) => {
+--
+8137-    },
+8138-  ];
+8139-
+8140-  const menuGroups = rawMenuGroups
+8141-    .map((g) => {
+8142:      if (currentUser?.role === "spv") {
+8143-        return {
+8144-          ...g,
+8145-          items: g.items.filter((i) =>
+8146-            ["dashboard", "live", "leaves", "jadwal"].includes(i.value),
+8147-          ),
+--
+8185-            <nav className="flex-1 overflow-y-auto pr-2 custom-scrollbar scroll-smooth">
+8186-              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-4 items-stretch p-0">
+8187-                {menuGroups
+8188-                  .filter(
+8189-                    (g) =>
+8190:                      !g.superAdminOnly || currentUser?.role === "superadmin",
+8191-                  )
+8192-                  .map((group) => {
+8193-                    const isExpanded = expandedGroup === group.label;
+8194-                    return (
+8195-                      <div key={group.label} className="space-y-2">
+--
+8318-                    shifts={shifts}
+8319-                    sections={sections}
+8320-                    divisions={divisions}
+8321-                    jobPositions={jobPositions}
+8322-                    jobLevels={jobLevels}
+8323:                    currentUser={currentUser}
+8324-                    confirm={confirm}
+8325-                    prompt={prompt}
+8326-                    alert={alert}
+8327-                  />
+8328-                </motion.div>
+--
+8568-                <AdminDatabaseStatus />
+8569-              </TabsContent>
+8570-              <TabsContent value="dashboard" className="mt-0 outline-none">
+8571-                <AdminOverview
+8572-                  setActiveTab={setActiveTab}
+8573:                  adminName={currentUser?.name?.split(" ")[0] || "Admin"}
+8574:                  role={currentUser?.role || "employee"}
+8575-                  confirm={confirm}
+8576-                  alert={alert}
+8577-                  employees={employees}
+8578-                  jobLevels={jobLevels}
+8579-                />
+--
+9665-  shifts,
+9666-  sections,
+9667-  divisions,
+9668-  jobPositions,
+9669-  jobLevels,
+9670:  currentUser,
+9671-  confirm,
+9672-  prompt,
+9673-  alert,
+9674-}: {
+9675-  employees: Employee[];
+9676-  shifts: Shift[];
+9677-  sections: Section[];
+9678-  divisions: Division[];
+9679-  jobPositions: JobPosition[];
+9680-  jobLevels: JobLevel[];
+9681:  currentUser: Employee | null;
+9682-  confirm: (msg: string, title?: string) => Promise<boolean>;
+9683-  prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
+9684-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+9685-}) {
+9686-  const [isEditing, setIsEditing] = useState<Employee | null>(null);
+--
+9772-            nickname: (row["Nama Panggilan"] || "").toString(),
+9773-            pin: row["No Absen"].toString(),
+9774-            division: row["Divisi"] || "Depan",
+9775-            organization: row["Organisasi"] || "Non-Executive",
+9776-            role:
+9777:              currentUser?.role === "superadmin" && row["Hak Akses"] === "admin"
+9778-                ? "admin"
+9779-                : row["Hak Akses"] === "spv" || row["Hak Akses"] === "SPV"
+9780-                  ? "spv"
+9781-                  : "employee",
+9782-            createdAt: serverTimestamp(),
+--
+9866-    });
+9867-    alert("Password telah direset ke 123456.", "success");
+9868-  };
+9869-
+9870-  const handleEmployeeDelete = async (emp: any) => {
+9871:    if (emp.role === "superadmin" && currentUser?.role !== "superadmin") {
+9872-      alert("Anda tidak memiliki akses untuk menghapus Super Admin!", "error");
+9873-      return;
+9874-    }
+9875-
+9876-    let action = await prompt(
+--
+9990-            onClick={handleExportTemplate}
+9991-            className="glass-panel text-white hover:bg-white/10 flex gap-2 border-white/10 h-10 px-4"
+9992-          >
+9993-            <Download className="w-4 h-4" /> Template
+9994-          </Button>
+9995:          {(currentUser?.role === "superadmin" ||
+9996-            !employees.some((e) => e.role === "superadmin")) && (
+9997-            <Button
+9998-              variant="outline"
+9999-              onClick={addSuperAdmin}
+10000-              className="glass-panel text-rose-500 hover:bg-rose-500/10 flex gap-2 border-rose-500/50 h-10 px-4"
+--
+10405-                  <Label className="text-white/70 text-xs">Hak Akses</Label>
+10406-                  <Select
+10407-                    value={formData.role}
+10408-                    disabled={
+10409-                      isEditing?.role === "superadmin" &&
+10410:                      currentUser?.role !== "superadmin"
+10411-                    }
+10412-                    onValueChange={async (val: any) => {
+10413-                      if (val === "superadmin") {
+10414-                        const pwd = await prompt(
+10415-                          "Masukkan password untuk akses Super Admin:",
+--
+10435-                        Karyawan
+10436-                      </SelectItem>
+10437-                      <SelectItem value="spv" className="hover:bg-white/10">
+10438-                        SPV
+10439-                      </SelectItem>
+10440:                      {currentUser?.role === "superadmin" && (
+10441-                        <>
+10442-                          <SelectItem
+10443-                            value="admin"
+10444-                            className="hover:bg-white/10"
+10445-                          >
+--
+10625-                      >
+10626-                        <LockIcon className="w-4 h-4 text-rose-500" />
+10627-                      </Button>
+10628-                    )}
+10629-
+10630:                    {!(e.role === "superadmin" && currentUser?.role !== "superadmin") && (
+10631-                      <Button
+10632-                        variant="ghost"
+10633-                        size="icon"
+10634-                        onClick={async () => {
+10635-                          const pwd = await prompt("Masukkan Password Admin untuk melanjutkan:");
