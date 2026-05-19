@@ -1,0 +1,167 @@
+1884-  setActivePeriodId?: (id: string) => void;
+1885-}) {
+1886-  const [controls, setControls] = useState<Record<string, any>>({});
+1887-
+1888-  useEffect(() => {
+1889:    const fetchControls = async () => {
+1890-      const snap = await getDocs(collection(db, "periodControls"));
+1891-      const data: Record<string, any> = {};
+1892-      snap.docs.forEach((d) => {
+1893-        data[d.id] = d.data();
+1894-      });
+--
+2343-  setActivePeriodId: (id: string) => void;
+2344-}) {
+2345-  const [controls, setControls] = useState<Record<string, any>>({});
+2346-
+2347-  useEffect(() => {
+2348:    const fetchControls = async () => {
+2349-      const snap = await getDocs(collection(db, "periodControls"));
+2350-      const data: Record<string, any> = {};
+2351-      snap.docs.forEach((d) => {
+2352-        data[d.id] = d.data();
+2353-      });
+--
+2827-  setActivePeriodId?: (id: string) => void;
+2828-}) {
+2829-  const [controls, setControls] = useState<Record<string, any>>({});
+2830-
+2831-  useEffect(() => {
+2832:    const fetchControls = async () => {
+2833-      const snap = await getDocs(collection(db, "periodControls"));
+2834-      const data: Record<string, any> = {};
+2835-      snap.docs.forEach((d) => {
+2836-        data[d.id] = d.data();
+2837-      });
+--
+3258-  setActivePeriodId?: (id: string) => void;
+3259-}) {
+3260-  const [controls, setControls] = useState<Record<string, any>>({});
+3261-
+3262-  useEffect(() => {
+3263:    const fetchControls = async () => {
+3264-      const snap = await getDocs(collection(db, "periodControls"));
+3265-      const data: Record<string, any> = {};
+3266-      snap.docs.forEach((d) => {
+3267-        data[d.id] = d.data();
+3268-      });
+--
+3839-  setActivePeriodId?: (id: string) => void;
+3840-}) {
+3841-  const [controls, setControls] = useState<Record<string, any>>({});
+3842-
+3843-  useEffect(() => {
+3844:    const fetchControls = async () => {
+3845-      const snap = await getDocs(collection(db, "periodControls"));
+3846-      const data: Record<string, any> = {};
+3847-      snap.docs.forEach((d) => {
+3848-        data[d.id] = d.data();
+3849-      });
+--
+4132-  setActivePeriodId?: (id: string) => void;
+4133-}) {
+4134-  const [controls, setControls] = useState<Record<string, any>>({});
+4135-
+4136-  useEffect(() => {
+4137:    const fetchControls = async () => {
+4138-      const snap = await getDocs(collection(db, "periodControls"));
+4139-      const data: Record<string, any> = {};
+4140-      snap.docs.forEach((d) => {
+4141-        data[d.id] = d.data();
+4142-      });
+--
+5794-  setActivePeriodId?: (id: string) => void;
+5795-}) {
+5796-  const [controls, setControls] = useState<Record<string, any>>({});
+5797-
+5798-  useEffect(() => {
+5799:    const fetchControls = async () => {
+5800-      const snap = await getDocs(collection(db, "periodControls"));
+5801-      const data: Record<string, any> = {};
+5802-      snap.docs.forEach((d) => {
+5803-        data[d.id] = d.data();
+5804-      });
+--
+6413-  setActivePeriodId?: (id: string) => void;
+6414-}) {
+6415-  const [controls, setControls] = useState<Record<string, any>>({});
+6416-
+6417-  useEffect(() => {
+6418:    const fetchControls = async () => {
+6419-      const snap = await getDocs(collection(db, "periodControls"));
+6420-      const data: Record<string, any> = {};
+6421-      snap.docs.forEach((d) => {
+6422-        data[d.id] = d.data();
+6423-      });
+--
+6752-  setActivePeriodId?: (id: string) => void;
+6753-}) {
+6754-  const [controls, setControls] = useState<Record<string, any>>({});
+6755-
+6756-  useEffect(() => {
+6757:    const fetchControls = async () => {
+6758-      const snap = await getDocs(collection(db, "periodControls"));
+6759-      const data: Record<string, any> = {};
+6760-      snap.docs.forEach((d) => {
+6761-        data[d.id] = d.data();
+6762-      });
+--
+7090-  setActivePeriodId?: (id: string) => void;
+7091-}) {
+7092-  const [controls, setControls] = useState<Record<string, any>>({});
+7093-
+7094-  useEffect(() => {
+7095:    const fetchControls = async () => {
+7096-      const snap = await getDocs(collection(db, "periodControls"));
+7097-      const data: Record<string, any> = {};
+7098-      snap.docs.forEach((d) => {
+7099-        data[d.id] = d.data();
+7100-      });
+--
+11719-      },
+11720-    }),
+11721-  );
+11722-
+11723-  useEffect(() => {
+11724:    const fetchControls = async () => {
+11725-      const snap = await getDocs(collection(db, "periodControls"));
+11726-      const data: Record<string, any> = {};
+11727-      snap.docs.forEach((d) => {
+11728-        data[d.id] = d.data();
+11729-      });
+--
+12716-  const [quotas, setQuotas] = useState<any[]>([]);
+12717-  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+12718-  const [importing, setImporting] = useState(false);
+12719-
+12720-  useEffect(() => {
+12721:    const fetchControls = async () => {
+12722-      const snap = await getDocs(collection(db, "periodControls"));
+12723-      const data: Record<string, any> = {};
+12724-      snap.docs.forEach((d) => {
+12725-        data[d.id] = d.data();
+12726-      });
+--
+14934-  const [selectedDivision, setSelectedDivision] = useState<string>(
+14935-    divisions[0]?.name || "Depan",
+14936-  );
+14937-
+14938-  useEffect(() => {
+14939:    const fetchControls = async () => {
+14940-      const snap = await getDocs(collection(db, "periodControls"));
+14941-      const data: Record<string, any> = {};
+14942-      snap.forEach((d) => {
+14943-        data[d.id] = d.data();
+14944-      });
+--
+15292-  );
+15293-  const [selectedPeriod, setSelectedPeriod] = useState("");
+15294-  const [showAdd, setShowAdd] = useState(false);
+15295-
+15296-  useEffect(() => {
+15297:    const fetchControls = async () => {
+15298-      const snap = await getDocs(collection(db, "periodControls"));
+15299-      const data: Record<string, any> = {};
+15300-      snap.forEach((d) => {
+15301-        data[d.id] = d.data();
+15302-      });

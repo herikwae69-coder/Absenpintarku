@@ -1,0 +1,38 @@
+24:   onSnapshot,
+1992:     const unsubMaster = onSnapshot(
+2003:     const unsubEstafet = onSnapshot(
+2400:     const unsub = onSnapshot(
+2930:     const unsubMaster = onSnapshot(
+2941:     const unsubJagaDepan = onSnapshot(
+3284:     const unsub = onSnapshot(
+3342:     const unsub = onSnapshot(
+3872:     const unsubJaga = onSnapshot(
+3879:     const unsubMaster = onSnapshot(
+3888:     const unsubCampuran = onSnapshot(
+4180:     const unsub = onSnapshot(
+4790:     const unsub = onSnapshot(
+4817:     const unsub = onSnapshot(
+5833:     const unsub = onSnapshot(
+6450:     const unsub = onSnapshot(
+6789:     const unsub = onSnapshot(
+7129:     const unsub = onSnapshot(
+7722:     const unsub = onSnapshot(
+8572:     const unsub = onSnapshot(
+8670:     const unsub = onSnapshot(q, (snap) => {
+11758:     const unsub = onSnapshot(
+12749:     const unsub = onSnapshot(q, (snap) =>
+12756:     const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
+13105:     const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+13793:     const unsub = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+14102:     const unsub = onSnapshot(
+14118:         onSnapshot(qGlobal, (s) => {
+14274:     const unsub = onSnapshot(
+14979:     const unsub = onSnapshot(
+15327:     const unsub1 = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+15332:     const unsub2 = onSnapshot(
+15431:     const unsub = onSnapshot(doc(db, "periodControls", selectedPeriod), (snap) => {
+15444:     const unsubEmp = onSnapshot(
+15464:     const unsubDiv = onSnapshot(
+15483:     const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
+16546:     const unsub = onSnapshot(q, (snap) => {
+17027:     const unsub = onSnapshot(

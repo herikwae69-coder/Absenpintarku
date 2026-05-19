@@ -1,0 +1,270 @@
+19-  query,
+20-  where,
+21-  getDocs,
+22-  doc,
+23-  getDoc,
+24:  getSnapshotOnce,
+25-  setDoc,
+26-  updateDoc,
+27-  serverTimestamp,
+28-  addDoc,
+29-  deleteDoc,
+--
+32-  Timestamp,
+33-  collectionGroup,
+34-  getCountFromServer,
+35-} from "firebase/firestore";
+36-
+37:const getSnapshotOnce = (ref: any, onNext: (snap: any) => void, onError?: (err: any) => void) => {
+38-  if (ref.type === "document" || ref.id) {
+39-    // It's a document reference
+40-    import("firebase/firestore").then(({ getDoc }) => {
+41-      getDoc(ref).then(onNext).catch(err => {
+42-        if (onError) onError(err);
+--
+2009-    let componentMounted = true;
+2010-    if (!selectedPeriod) return;
+2011-    setLoading(true);
+2012-
+2013-    // Fetch Bonus Master and Bonus Estafet
+2014:    const unsubMaster = getSnapshotOnce(
+2015-      doc(db, "bonusMasterConfig", selectedPeriod),
+2016-      (snap) => {
+2017-        if (componentMounted) {
+2018-          setBonusMaster(
+2019-            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+2020-          );
+2021-        }
+2022-      },
+2023-    );
+2024-
+2025:    const unsubEstafet = getSnapshotOnce(
+2026-      doc(db, "bonusEstafet", selectedPeriod),
+2027-      (snap) => {
+2028-        if (componentMounted) {
+2029-          const data = snap.exists() ? snap.data() : {};
+2030-          setDailyAssignments(data.dailyAssignments || {});
+--
+2417-    let componentMounted = true;
+2418-    if (!selectedPeriod) return;
+2419-    setLoading(true);
+2420-
+2421-    // Fetch existing settings for this period
+2422:    const unsub = getSnapshotOnce(
+2423-      doc(db, "bonusMasterConfig", selectedPeriod),
+2424-      (snap) => {
+2425-        if (componentMounted) {
+2426-          if (snap.exists()) {
+2427-            const data = snap.data();
+--
+2947-    let componentMounted = true;
+2948-    if (!selectedPeriod) return;
+2949-    setLoading(true);
+2950-
+2951-    // Fetch Bonus Master and Bonus Jaga Depan
+2952:    const unsubMaster = getSnapshotOnce(
+2953-      doc(db, "bonusMasterConfig", selectedPeriod),
+2954-      (snap) => {
+2955-        if (componentMounted) {
+2956-          setBonusMaster(
+2957-            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+2958-          );
+2959-        }
+2960-      },
+2961-    );
+2962-
+2963:    const unsubJagaDepan = getSnapshotOnce(
+2964-      doc(db, "bonusJagaDepan", selectedPeriod),
+2965-      (snap) => {
+2966-        if (componentMounted) {
+2967-          const data = snap.exists() ? snap.data() : {};
+2968-          setDailyAssignments(data.dailyAssignments || {});
+--
+3301-  const setSelectedPeriod = setActivePeriodId || (() => {});
+3302-
+3303-  const [bonusTypes, setBonusTypes] = useState<Record<string, string>>({}); // { id: name }
+3304-
+3305-  useEffect(() => {
+3306:    const unsub = getSnapshotOnce(
+3307-      doc(db, "systemConfig", "bonusLainLainTypes"),
+3308-      (snap) => {
+3309-        setBonusTypes(snap.exists() ? snap.data().types || {} : {});
+3310-      },
+3311-    );
+--
+3359-  useEffect(() => {
+3360-    let componentMounted = true;
+3361-    if (!selectedPeriod) return;
+3362-    setLoading(true);
+3363-
+3364:    const unsub = getSnapshotOnce(
+3365-      doc(db, "bonusLainLain", selectedPeriod),
+3366-      (snap) => {
+3367-        if (componentMounted) {
+3368-          const data = snap.exists() ? snap.data() : {};
+3369-          setEntries(data.entries || []);
+--
+3889-
+3890-  useEffect(() => {
+3891-    if (!selectedPeriod) return;
+3892-    setLoading(true);
+3893-
+3894:    const unsubJaga = getSnapshotOnce(
+3895-      doc(db, "bonusJagaDepan", selectedPeriod),
+3896-      (snap) => {
+3897-        setJagaDepanData(snap.exists() ? snap.data() : null);
+3898-      },
+3899-    );
+3900-
+3901:    const unsubMaster = getSnapshotOnce(
+3902-      doc(db, "bonusMasterConfig", selectedPeriod),
+3903-      (snap) => {
+3904-        setBonusMaster(
+3905-          snap.exists() ? snap.data().dailyHighestReceipt || [] : [],
+3906-        );
+3907-      },
+3908-    );
+3909-
+3910:    const unsubCampuran = getSnapshotOnce(
+3911-      doc(db, "bonusLainLain", selectedPeriod),
+3912-      (snap) => {
+3913-        setCampuranData(snap.exists() ? snap.data() : null);
+3914-      },
+3915-    );
+--
+4197-
+4198-  useEffect(() => {
+4199-    if (!selectedPeriod) return;
+4200-    setLoading(true);
+4201-
+4202:    const unsub = getSnapshotOnce(
+4203-      doc(db, "bonusOperator", selectedPeriod),
+4204-      (snap) => {
+4205-        if (snap.exists()) {
+4206-          const data = snap.data();
+4207-          setNotaRate(data.notaRate ?? 50);
+--
+5850-  useEffect(() => {
+5851-    let componentMounted = true;
+5852-    if (!selectedPeriod) return;
+5853-    setLoading(true);
+5854-
+5855:    const unsub = getSnapshotOnce(
+5856-      doc(db, "bonusNota", selectedPeriod),
+5857-      (snap) => {
+5858-        if (componentMounted) {
+5859-          if (snap.exists()) {
+5860-            const data = snap.data();
+--
+6467-  useEffect(() => {
+6468-    let componentMounted = true;
+6469-    if (!selectedPeriod) return;
+6470-    setLoading(true);
+6471-
+6472:    const unsub = getSnapshotOnce(
+6473-      doc(db, "koreksiGaji", selectedPeriod),
+6474-      (snap) => {
+6475-        if (componentMounted) {
+6476-          if (snap.exists()) {
+6477-            const data = snap.data();
+--
+6806-  useEffect(() => {
+6807-    let componentMounted = true;
+6808-    if (!selectedPeriod) return;
+6809-    setLoading(true);
+6810-
+6811:    const unsub = getSnapshotOnce(
+6812-      doc(db, "koreksiGajiMinus", selectedPeriod),
+6813-      (snap) => {
+6814-        if (componentMounted) {
+6815-          if (snap.exists()) {
+6816-            const data = snap.data();
+--
+7146-  useEffect(() => {
+7147-    let componentMounted = true;
+7148-    if (!selectedPeriod) return;
+7149-    setLoading(true);
+7150-
+7151:    const unsub = getSnapshotOnce(
+7152-      doc(db, "bonusBerat", selectedPeriod),
+7153-      (snap) => {
+7154-        if (componentMounted) {
+7155-          if (snap.exists()) {
+7156-            const data = snap.data();
+--
+7739-      <Marker position={[config.lat, config.lng]} />
+7740-    ) : null;
+7741-  }
+7742-
+7743-  useEffect(() => {
+7744:    const unsub = getSnapshotOnce(
+7745-      doc(db, "config", "office"),
+7746-      (snap) => {
+7747-        if (snap.exists()) setConfig(snap.data());
+7748-        else setConfig({ lat: -6.2088, lng: 106.8456, radius: 100 });
+7749-        setLoading(false);
+--
+8589-function AdminMusic() {
+8590-  const [musicUrl, setMusicUrl] = useState("");
+8591-  const [loading, setLoading] = useState(true);
+8592-
+8593-  useEffect(() => {
+8594:    const unsub = getSnapshotOnce(
+8595-      doc(db, "systemConfig", "musicSettings"),
+8596-      (doc) => {
+8597-        if (doc.exists()) {
+8598-          const data = doc.data();
+8599-          setMusicUrl(data.url || "");
+--
+8687-    const q = query(
+8688-      collection(db, "employees"),
+8689-      where("lastSeen", ">", Timestamp.fromDate(fiveMinsAgo)),
+8690-    );
+8691-
+8692:    const unsub = getSnapshotOnce(q, (snap) => {
+8693-      const online = snap.docs.map((doc) => ({
+8694-        id: doc.id,
+8695-        ...doc.data(),
+8696-      }));
+8697-      setOnlineUsers(online);
+--
+13816-  const [postSubmitKata, setPostSubmitKata] = useState("");
+13817-  const [postSubmitDuration, setPostSubmitDuration] = useState(7);
+13818-  const [loading, setLoading] = useState(true);
+13819-
+13820-  useEffect(() => {
+13821:    const unsub = getSnapshotOnce(doc(db, "systemConfig", "requestKata"), (doc) => {
+13822-      if (doc.exists()) {
+13823-        const data = doc.data();
+13824-        setKata(data.text || "");
+13825-        setPostSubmitKata(data.postText || "");
+13826-        setPostSubmitDuration(data.duration || 7);
+--
+15350-  const [activeHoldDate, setActiveHoldDate] = useState<string | null>(null);
+15351-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+15352-  const isPostPopupRef = React.useRef(false);
+15353-
+15354-  useEffect(() => {
+15355:    const unsub1 = getSnapshotOnce(doc(db, "systemConfig", "requestKata"), (doc) => {
+15356-      if (doc.exists()) {
+15357-        setRequestKata(doc.data().text || "");
+15358-      }
+15359-    }, (err) => console.error(err));
+15360:    const unsub2 = getSnapshotOnce(
+15361-      doc(db, "systemConfig", "musicSettings"),
+15362-      (doc) => {
+15363-        if (doc.exists()) {
+15364-          const data = doc.data();
+15365-          if (data.url) {
+--
+15454-    }
+15455-  }, [periodOptions, controls, selectedPeriod]);
+15456-
+15457-  useEffect(() => {
+15458-    if (!selectedPeriod) return;
+15459:    const unsub = getSnapshotOnce(doc(db, "periodControls", selectedPeriod), (snap) => {
+15460-      setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
+15461-    }, (err) => console.error(err));
+15462-    return unsub;
+15463-  }, [selectedPeriod]);
+15464-

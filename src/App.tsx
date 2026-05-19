@@ -33,6 +33,28 @@ import {
   collectionGroup,
   getCountFromServer,
 } from "firebase/firestore";
+
+const getSnapshotOnce = (ref: any, onNext: (snap: any) => void, onError?: (err: any) => void) => {
+  if (ref.type === "document" || ref.id) {
+    // It's a document reference
+    import("firebase/firestore").then(({ getDoc }) => {
+      getDoc(ref).then(onNext).catch(err => {
+        if (onError) onError(err);
+        else console.error(err);
+      });
+    });
+  } else {
+    // It's a query or collection
+    import("firebase/firestore").then(({ getDocs }) => {
+      getDocs(ref).then(onNext).catch(err => {
+        if (onError) onError(err);
+        else console.error(err);
+      });
+    });
+  }
+  return () => {}; // dummy unsubscribe
+};
+
 import {
   format,
   startOfDay,
@@ -1886,14 +1908,15 @@ function AdminBonusEstafet({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -1988,7 +2011,7 @@ function AdminBonusEstafet({
     setLoading(true);
 
     // Fetch Bonus Master and Bonus Estafet
-    const unsubMaster = onSnapshot(
+    const unsubMaster = getSnapshotOnce(
       doc(db, "bonusMasterConfig", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -1999,7 +2022,7 @@ function AdminBonusEstafet({
       },
     );
 
-    const unsubEstafet = onSnapshot(
+    const unsubEstafet = getSnapshotOnce(
       doc(db, "bonusEstafet", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -2344,14 +2367,15 @@ function AdminBonusMaster({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -2395,7 +2419,7 @@ function AdminBonusMaster({
     setLoading(true);
 
     // Fetch existing settings for this period
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "bonusMasterConfig", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -2827,14 +2851,15 @@ function AdminBonusJagaDepan({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -2924,7 +2949,7 @@ function AdminBonusJagaDepan({
     setLoading(true);
 
     // Fetch Bonus Master and Bonus Jaga Depan
-    const unsubMaster = onSnapshot(
+    const unsubMaster = getSnapshotOnce(
       doc(db, "bonusMasterConfig", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -2935,7 +2960,7 @@ function AdminBonusJagaDepan({
       },
     );
 
-    const unsubJagaDepan = onSnapshot(
+    const unsubJagaDepan = getSnapshotOnce(
       doc(db, "bonusJagaDepan", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -3257,14 +3282,15 @@ function AdminBonusLainLain({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -3277,7 +3303,7 @@ function AdminBonusLainLain({
   const [bonusTypes, setBonusTypes] = useState<Record<string, string>>({}); // { id: name }
 
   useEffect(() => {
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "systemConfig", "bonusLainLainTypes"),
       (snap) => {
         setBonusTypes(snap.exists() ? snap.data().types || {} : {});
@@ -3335,7 +3361,7 @@ function AdminBonusLainLain({
     if (!selectedPeriod) return;
     setLoading(true);
 
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "bonusLainLain", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -3837,14 +3863,15 @@ function AdminBonusLainLainCombined({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -3864,14 +3891,14 @@ function AdminBonusLainLainCombined({
     if (!selectedPeriod) return;
     setLoading(true);
 
-    const unsubJaga = onSnapshot(
+    const unsubJaga = getSnapshotOnce(
       doc(db, "bonusJagaDepan", selectedPeriod),
       (snap) => {
         setJagaDepanData(snap.exists() ? snap.data() : null);
       },
     );
 
-    const unsubMaster = onSnapshot(
+    const unsubMaster = getSnapshotOnce(
       doc(db, "bonusMasterConfig", selectedPeriod),
       (snap) => {
         setBonusMaster(
@@ -3880,7 +3907,7 @@ function AdminBonusLainLainCombined({
       },
     );
 
-    const unsubCampuran = onSnapshot(
+    const unsubCampuran = getSnapshotOnce(
       doc(db, "bonusLainLain", selectedPeriod),
       (snap) => {
         setCampuranData(snap.exists() ? snap.data() : null);
@@ -4129,14 +4156,15 @@ function AdminBonusOperator({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -4171,7 +4199,7 @@ function AdminBonusOperator({
     if (!selectedPeriod) return;
     setLoading(true);
 
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "bonusOperator", selectedPeriod),
       (snap) => {
         if (snap.exists()) {
@@ -5790,14 +5818,15 @@ function AdminBonusNota({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -5823,7 +5852,7 @@ function AdminBonusNota({
     if (!selectedPeriod) return;
     setLoading(true);
 
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "bonusNota", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -6408,14 +6437,15 @@ function AdminKoreksiGaji({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -6439,7 +6469,7 @@ function AdminKoreksiGaji({
     if (!selectedPeriod) return;
     setLoading(true);
 
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "koreksiGaji", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -6746,14 +6776,15 @@ function AdminKoreksiGajiMinus({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -6777,7 +6808,7 @@ function AdminKoreksiGajiMinus({
     if (!selectedPeriod) return;
     setLoading(true);
 
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "koreksiGajiMinus", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -7083,14 +7114,15 @@ function AdminBonusBerat({
   const [controls, setControls] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   const periodOptions = React.useMemo(
@@ -7116,7 +7148,7 @@ function AdminBonusBerat({
     if (!selectedPeriod) return;
     setLoading(true);
 
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "bonusBerat", selectedPeriod),
       (snap) => {
         if (componentMounted) {
@@ -7709,7 +7741,7 @@ function AdminOfficeConfig() {
   }
 
   useEffect(() => {
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "config", "office"),
       (snap) => {
         if (snap.exists()) setConfig(snap.data());
@@ -8559,7 +8591,7 @@ function AdminMusic() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(
+    const unsub = getSnapshotOnce(
       doc(db, "systemConfig", "musicSettings"),
       (doc) => {
         if (doc.exists()) {
@@ -8657,7 +8689,7 @@ function AdminOverview({
       where("lastSeen", ">", Timestamp.fromDate(fiveMinsAgo)),
     );
 
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = getSnapshotOnce(q, (snap) => {
       const online = snap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -11711,14 +11743,15 @@ function AdminJadwalLibur({
   );
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   useEffect(() => {
@@ -12707,14 +12740,15 @@ function AdminQuota({
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
-      setControls(data);
-    });
-    return unsub;
+      if(setControls) setControls(data);
+    };
+    fetchControls();
   }, []);
 
   useEffect(() => {
@@ -12741,10 +12775,15 @@ function AdminQuota({
   }, []);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
-      setQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return unsub;
+    const fetchQuotas = async () => {
+      try {
+        const snap = await getDocs(collection(db, "periodQuotas"));
+        setQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchQuotas();
   }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -13090,15 +13129,16 @@ function AdminPeriods({
   });
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+    const fetchControls = async () => {
+      const snap = await getDocs(collection(db, "periodControls"));
       const data: Record<string, any> = {};
       snap.docs.forEach((d) => {
         data[d.id] = d.data();
       });
       setControls(data);
       setLoading(false);
-    });
-    return unsub;
+    };
+    fetchControls();
   }, []);
 
   const combinedPeriods = getCombinedPeriods(controls);
@@ -13778,7 +13818,7 @@ function AdminKata() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+    const unsub = getSnapshotOnce(doc(db, "systemConfig", "requestKata"), (doc) => {
       if (doc.exists()) {
         const data = doc.data();
         setKata(data.text || "");
@@ -14925,16 +14965,12 @@ function AdminLeave({
 
   useEffect(() => {
     const fetchControls = async () => {
-      try {
-        const snap = await getDocs(collection(db, "periodControls"));
-        const data: Record<string, any> = {};
-        snap.forEach((d) => {
-          data[d.id] = d.data();
-        });
-        setControls(data);
-      } catch (err) {
-        console.error("Error fetching periodControls:", err);
-      }
+      const snap = await getDocs(collection(db, "periodControls"));
+      const data: Record<string, any> = {};
+      snap.forEach((d) => {
+        data[d.id] = d.data();
+      });
+      setControls(data);
     };
     fetchControls();
   }, []);
@@ -15287,16 +15323,12 @@ function EmployeeLeave({
 
   useEffect(() => {
     const fetchControls = async () => {
-      try {
-        const snap = await getDocs(collection(db, "periodControls"));
-        const data: Record<string, any> = {};
-        snap.forEach((d) => {
-          data[d.id] = d.data();
-        });
-        setControls(data);
-      } catch (err) {
-        console.error("Error fetching periodControls:", err);
-      }
+      const snap = await getDocs(collection(db, "periodControls"));
+      const data: Record<string, any> = {};
+      snap.forEach((d) => {
+        data[d.id] = d.data();
+      });
+      setControls(data);
     };
     fetchControls();
   }, []);
@@ -15320,15 +15352,16 @@ function EmployeeLeave({
   const isPostPopupRef = React.useRef(false);
 
   useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const docReq = await getDoc(doc(db, "systemConfig", "requestKata"));
-        if (docReq.exists()) {
-          setRequestKata(docReq.data().text || "");
-        }
-        const docMusic = await getDoc(doc(db, "systemConfig", "musicSettings"));
-        if (docMusic.exists()) {
-          const data = docMusic.data();
+    const unsub1 = getSnapshotOnce(doc(db, "systemConfig", "requestKata"), (doc) => {
+      if (doc.exists()) {
+        setRequestKata(doc.data().text || "");
+      }
+    }, (err) => console.error(err));
+    const unsub2 = getSnapshotOnce(
+      doc(db, "systemConfig", "musicSettings"),
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
           if (data.url) {
             if (audioRef.current) {
               audioRef.current.pause();
@@ -15340,11 +15373,13 @@ function EmployeeLeave({
             setMusicPopupText(data.popupText);
           }
         }
-      } catch(err) {
-        console.error("Error fetching configs:", err);
-      }
-    };
-    fetchConfig();
+      },
+      (err) => console.error(err)
+    );
+    return () => {
+      unsub1();
+      unsub2();
+    }
   }, []);
 
   const playMusic = () => {
@@ -15421,15 +15456,10 @@ function EmployeeLeave({
 
   useEffect(() => {
     if (!selectedPeriod) return;
-    const fetchPeriod = async () => {
-      try {
-        const snap = await getDoc(doc(db, "periodControls", selectedPeriod));
-        setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
-      } catch (err) {
-        console.error("Error fetching period control:", err);
-      }
-    };
-    fetchPeriod();
+    const unsub = getSnapshotOnce(doc(db, "periodControls", selectedPeriod), (snap) => {
+      setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
+    }, (err) => console.error(err));
+    return unsub;
   }, [selectedPeriod]);
 
   useEffect(() => {
@@ -15439,12 +15469,19 @@ function EmployeeLeave({
       collection(db, "leaveRequests"),
       where("employeeId", "==", employee.id),
     );
-    const unsubEmp = onSnapshot(qEmp, (snap) => {
-      const data = snap.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
-      );
-      setRequests(data);
-    });
+    const unsubEmp = onSnapshot(
+      qEmp,
+      (snap) => {
+        const data = snap.docs.map(
+          (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
+        );
+        setRequests(data);
+      },
+      (err) => {
+        console.error("Employee requests error:", err);
+        // If quota exceeded, we might want to alert, but the main app handles the blank screen for total failure
+      }
+    );
 
     // Listener for ALL requests in the CURRENT division (for popular dates / quota checks)
     const qDiv = query(
@@ -15462,7 +15499,7 @@ function EmployeeLeave({
       },
       (err) => console.error("Employee leave error:", err),
     );
-
+    
     return () => {
       unsubEmp();
       unsubDiv();
@@ -15473,15 +15510,14 @@ function EmployeeLeave({
   useEffect(() => {
     const fetchQuotas = async () => {
       try {
-        const q = query(collection(db, "periodQuotas"), where("employeeId", "==", employee.id));
-        const snap = await getDocs(q);
+        const snap = await getDocs(collection(db, "periodQuotas"));
         setAllQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
-        console.error("Error fetching employee quotas:", err);
+        console.error(err);
       }
     };
     fetchQuotas();
-  }, [employee.id]);
+  }, []);
 
   const currentRequests = requests.filter((r) => r.period === selectedPeriod);
   const currentAllRequests = allRequests.filter(

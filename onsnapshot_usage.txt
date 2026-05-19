@@ -1,0 +1,1039 @@
+14-});
+15-import { db, auth } from "./lib/firebase";
+16-import { getCachedData, setCachedData } from "./lib/cache";
+17-import {
+18-  collection,
+19-  query,
+20-  where,
+21-  getDocs,
+22-  doc,
+23-  getDoc,
+24:  onSnapshot,
+25-  setDoc,
+26-  updateDoc,
+27-  serverTimestamp,
+28-  addDoc,
+29-  deleteDoc,
+30-  orderBy,
+31-  limit,
+32-  Timestamp,
+33-  collectionGroup,
+34-  getCountFromServer,
+--
+1879-  activePeriodId,
+1880-  setActivePeriodId,
+1881-}: {
+1882-  employees: Employee[];
+1883-  activePeriodId: string;
+1884-  setActivePeriodId?: (id: string) => void;
+1885-}) {
+1886-  const [controls, setControls] = useState<Record<string, any>>({});
+1887-
+1888-  useEffect(() => {
+1889:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+1890-      const data: Record<string, any> = {};
+1891-      snap.docs.forEach((d) => {
+1892-        data[d.id] = d.data();
+1893-      });
+1894-      setControls(data);
+1895-    });
+1896-    return unsub;
+1897-  }, []);
+1898-
+1899-  const periodOptions = React.useMemo(
+--
+1981-    XLSX.utils.book_append_sheet(wb, ws, "Akumulasi Bonus");
+1982-    XLSX.writeFile(wb, `Bonus_Estafet_${currentPeriod.label}.xlsx`);
+1983-  };
+1984-
+1985-  useEffect(() => {
+1986-    let componentMounted = true;
+1987-    if (!selectedPeriod) return;
+1988-    setLoading(true);
+1989-
+1990-    // Fetch Bonus Master and Bonus Estafet
+1991:    const unsubMaster = onSnapshot(
+1992-      doc(db, "bonusMasterConfig", selectedPeriod),
+1993-      (snap) => {
+1994-        if (componentMounted) {
+1995-          setBonusMaster(
+1996-            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+1997-          );
+1998-        }
+1999-      },
+2000-    );
+2001-
+2002:    const unsubEstafet = onSnapshot(
+2003-      doc(db, "bonusEstafet", selectedPeriod),
+2004-      (snap) => {
+2005-        if (componentMounted) {
+2006-          const data = snap.exists() ? snap.data() : {};
+2007-          setDailyAssignments(data.dailyAssignments || {});
+2008-          setIsLocked(data.isLocked || false);
+2009-          setLoading(false);
+2010-        }
+2011-      },
+2012-      (error) => {
+--
+2337-function AdminBonusMaster({
+2338-  activePeriodId,
+2339-  setActivePeriodId,
+2340-}: {
+2341-  activePeriodId: string;
+2342-  setActivePeriodId: (id: string) => void;
+2343-}) {
+2344-  const [controls, setControls] = useState<Record<string, any>>({});
+2345-
+2346-  useEffect(() => {
+2347:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+2348-      const data: Record<string, any> = {};
+2349-      snap.docs.forEach((d) => {
+2350-        data[d.id] = d.data();
+2351-      });
+2352-      setControls(data);
+2353-    });
+2354-    return unsub;
+2355-  }, []);
+2356-
+2357-  const periodOptions = React.useMemo(
+--
+2388-    }
+2389-    return days;
+2390-  }, [currentPeriod]);
+2391-
+2392-  useEffect(() => {
+2393-    let componentMounted = true;
+2394-    if (!selectedPeriod) return;
+2395-    setLoading(true);
+2396-
+2397-    // Fetch existing settings for this period
+2398:    const unsub = onSnapshot(
+2399-      doc(db, "bonusMasterConfig", selectedPeriod),
+2400-      (snap) => {
+2401-        if (componentMounted) {
+2402-          if (snap.exists()) {
+2403-            const data = snap.data();
+2404-            setDailyData(data.dailyHighestReceipt || {});
+2405-            setIsLocked(data.isLocked || false);
+2406-          } else {
+2407-            setDailyData({});
+2408-            setIsLocked(false);
+--
+2820-  activePeriodId,
+2821-  setActivePeriodId,
+2822-}: {
+2823-  employees: Employee[];
+2824-  activePeriodId: string;
+2825-  setActivePeriodId?: (id: string) => void;
+2826-}) {
+2827-  const [controls, setControls] = useState<Record<string, any>>({});
+2828-
+2829-  useEffect(() => {
+2830:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+2831-      const data: Record<string, any> = {};
+2832-      snap.docs.forEach((d) => {
+2833-        data[d.id] = d.data();
+2834-      });
+2835-      setControls(data);
+2836-    });
+2837-    return unsub;
+2838-  }, []);
+2839-
+2840-  const periodOptions = React.useMemo(
+--
+2917-    XLSX.utils.book_append_sheet(wb, ws, "Akumulasi Bonus");
+2918-    XLSX.writeFile(wb, `Bonus_Jaga_Depan_${currentPeriod.label}.xlsx`);
+2919-  };
+2920-
+2921-  useEffect(() => {
+2922-    let componentMounted = true;
+2923-    if (!selectedPeriod) return;
+2924-    setLoading(true);
+2925-
+2926-    // Fetch Bonus Master and Bonus Jaga Depan
+2927:    const unsubMaster = onSnapshot(
+2928-      doc(db, "bonusMasterConfig", selectedPeriod),
+2929-      (snap) => {
+2930-        if (componentMounted) {
+2931-          setBonusMaster(
+2932-            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+2933-          );
+2934-        }
+2935-      },
+2936-    );
+2937-
+2938:    const unsubJagaDepan = onSnapshot(
+2939-      doc(db, "bonusJagaDepan", selectedPeriod),
+2940-      (snap) => {
+2941-        if (componentMounted) {
+2942-          const data = snap.exists() ? snap.data() : {};
+2943-          setDailyAssignments(data.dailyAssignments || {});
+2944-          setIsLocked(data.isLocked || false);
+2945-          setLoading(false);
+2946-        }
+2947-      },
+2948-      (error) => {
+--
+3250-  activePeriodId,
+3251-  setActivePeriodId,
+3252-}: {
+3253-  employees: Employee[];
+3254-  activePeriodId: string;
+3255-  setActivePeriodId?: (id: string) => void;
+3256-}) {
+3257-  const [controls, setControls] = useState<Record<string, any>>({});
+3258-
+3259-  useEffect(() => {
+3260:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+3261-      const data: Record<string, any> = {};
+3262-      snap.docs.forEach((d) => {
+3263-        data[d.id] = d.data();
+3264-      });
+3265-      setControls(data);
+3266-    });
+3267-    return unsub;
+3268-  }, []);
+3269-
+3270-  const periodOptions = React.useMemo(
+3271-    () => getCombinedPeriods(controls),
+3272-    [controls],
+3273-  );
+3274-  const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
+3275-  const setSelectedPeriod = setActivePeriodId || (() => {});
+3276-
+3277-  const [bonusTypes, setBonusTypes] = useState<Record<string, string>>({}); // { id: name }
+3278-
+3279-  useEffect(() => {
+3280:    const unsub = onSnapshot(
+3281-      doc(db, "systemConfig", "bonusLainLainTypes"),
+3282-      (snap) => {
+3283-        setBonusTypes(snap.exists() ? snap.data().types || {} : {});
+3284-      },
+3285-    );
+3286-    return unsub;
+3287-  }, []);
+3288-
+3289-  const [entries, setEntries] = useState<
+3290-    Array<{ id: string; pin: string; bonusTypeId: string; amount: number }>
+--
+3328-      (sum: number, val: number) => sum + val,
+3329-      0,
+3330-    );
+3331-  }, [employeeTotals]);
+3332-
+3333-  useEffect(() => {
+3334-    let componentMounted = true;
+3335-    if (!selectedPeriod) return;
+3336-    setLoading(true);
+3337-
+3338:    const unsub = onSnapshot(
+3339-      doc(db, "bonusLainLain", selectedPeriod),
+3340-      (snap) => {
+3341-        if (componentMounted) {
+3342-          const data = snap.exists() ? snap.data() : {};
+3343-          setEntries(data.entries || []);
+3344-          setIsLocked(data.isLocked || false);
+3345-          setLoading(false);
+3346-        }
+3347-      },
+3348-      (error) => {
+--
+3830-  activePeriodId,
+3831-  setActivePeriodId,
+3832-}: {
+3833-  employees: Employee[];
+3834-  activePeriodId: string;
+3835-  setActivePeriodId?: (id: string) => void;
+3836-}) {
+3837-  const [controls, setControls] = useState<Record<string, any>>({});
+3838-
+3839-  useEffect(() => {
+3840:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+3841-      const data: Record<string, any> = {};
+3842-      snap.docs.forEach((d) => {
+3843-        data[d.id] = d.data();
+3844-      });
+3845-      setControls(data);
+3846-    });
+3847-    return unsub;
+3848-  }, []);
+3849-
+3850-  const periodOptions = React.useMemo(
+--
+3857-
+3858-  const [jagaDepanData, setJagaDepanData] = useState<any>(null);
+3859-  const [bonusMaster, setBonusMaster] = useState<any[]>([]);
+3860-  const [campuranData, setCampuranData] = useState<any>(null);
+3861-  const [loading, setLoading] = useState(true);
+3862-
+3863-  useEffect(() => {
+3864-    if (!selectedPeriod) return;
+3865-    setLoading(true);
+3866-
+3867:    const unsubJaga = onSnapshot(
+3868-      doc(db, "bonusJagaDepan", selectedPeriod),
+3869-      (snap) => {
+3870-        setJagaDepanData(snap.exists() ? snap.data() : null);
+3871-      },
+3872-    );
+3873-
+3874:    const unsubMaster = onSnapshot(
+3875-      doc(db, "bonusMasterConfig", selectedPeriod),
+3876-      (snap) => {
+3877-        setBonusMaster(
+3878-          snap.exists() ? snap.data().dailyHighestReceipt || [] : [],
+3879-        );
+3880-      },
+3881-    );
+3882-
+3883:    const unsubCampuran = onSnapshot(
+3884-      doc(db, "bonusLainLain", selectedPeriod),
+3885-      (snap) => {
+3886-        setCampuranData(snap.exists() ? snap.data() : null);
+3887-      },
+3888-    );
+3889-
+3890-    return () => {
+3891-      unsubJaga();
+3892-      unsubMaster();
+3893-      unsubCampuran();
+--
+4122-  activePeriodId,
+4123-  setActivePeriodId,
+4124-}: {
+4125-  employees: Employee[];
+4126-  activePeriodId: string;
+4127-  setActivePeriodId?: (id: string) => void;
+4128-}) {
+4129-  const [controls, setControls] = useState<Record<string, any>>({});
+4130-
+4131-  useEffect(() => {
+4132:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+4133-      const data: Record<string, any> = {};
+4134-      snap.docs.forEach((d) => {
+4135-        data[d.id] = d.data();
+4136-      });
+4137-      setControls(data);
+4138-    });
+4139-    return unsub;
+4140-  }, []);
+4141-
+4142-  const periodOptions = React.useMemo(
+--
+4164-  const [selectedEmpId, setSelectedEmpId] = useState<string>("");
+4165-  const [searchTerm, setSearchTerm] = useState("");
+4166-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+4167-  const [inputNota, setInputNota] = useState<string>("");
+4168-  const [inputBalen, setInputBalen] = useState<string>("");
+4169-
+4170-  useEffect(() => {
+4171-    if (!selectedPeriod) return;
+4172-    setLoading(true);
+4173-
+4174:    const unsub = onSnapshot(
+4175-      doc(db, "bonusOperator", selectedPeriod),
+4176-      (snap) => {
+4177-        if (snap.exists()) {
+4178-          const data = snap.data();
+4179-          setNotaRate(data.notaRate ?? 50);
+4180-          setBalenRate(data.balenRate ?? 70);
+4181-          setEntries(
+4182-            (data.entries as Record<
+4183-              string,
+4184-              { notaCount: number; balenCount: number }
+--
+4774-  const [riwayatStart, setRiwayatStart] = useState("");
+4775-  const [riwayatEnd, setRiwayatEnd] = useState("");
+4776-
+4777-  useEffect(() => {
+4778-    const q = query(
+4779-      collection(db, "attendance"),
+4780-      where("employeeId", "==", employee.id),
+4781-      orderBy("date", "desc"),
+4782-    );
+4783-    // Filter by period logic will be applied in render based on start/end dates
+4784:    const unsub = onSnapshot(
+4785-      q,
+4786-      (snap) =>
+4787-        setHistory(
+4788-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Attendance),
+4789-        ),
+4790-      (err) =>
+4791-        handleFirestoreError(err, OperationType.LIST, "attendance_history"),
+4792-    );
+4793-    return unsub;
+4794-  }, [employee.id]);
+--
+4801-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+4802-    return () => clearInterval(timer);
+4803-  }, []);
+4804-
+4805-  useEffect(() => {
+4806-    const q = query(
+4807-      collection(db, "attendance"),
+4808-      where("employeeId", "==", employee.id),
+4809-      where("date", "==", today),
+4810-    );
+4811:    const unsub = onSnapshot(
+4812-      q,
+4813-      (snapshot) => {
+4814-        if (!snapshot.empty) {
+4815-          const doc = snapshot.docs[0];
+4816-          const data = doc.data() as Attendance;
+4817-          setAttendance({ id: doc.id, ...data } as Attendance);
+4818-          setSelectedShiftId(data?.shiftId || "");
+4819-        } else {
+4820-          setAttendance(null);
+4821-          // Auto-select Day Off shift on Sundays
+--
+5783-  activePeriodId,
+5784-  setActivePeriodId,
+5785-}: {
+5786-  employees: Employee[];
+5787-  activePeriodId: string;
+5788-  setActivePeriodId?: (id: string) => void;
+5789-}) {
+5790-  const [controls, setControls] = useState<Record<string, any>>({});
+5791-
+5792-  useEffect(() => {
+5793:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+5794-      const data: Record<string, any> = {};
+5795-      snap.docs.forEach((d) => {
+5796-        data[d.id] = d.data();
+5797-      });
+5798-      setControls(data);
+5799-    });
+5800-    return unsub;
+5801-  }, []);
+5802-
+5803-  const periodOptions = React.useMemo(
+--
+5816-  const [password, setPassword] = useState("");
+5817-  const [selectedEmpId, setSelectedEmpId] = useState("");
+5818-  const [inputAmount, setInputAmount] = useState("");
+5819-  const [editId, setEditId] = useState<string | null>(null);
+5820-
+5821-  useEffect(() => {
+5822-    let componentMounted = true;
+5823-    if (!selectedPeriod) return;
+5824-    setLoading(true);
+5825-
+5826:    const unsub = onSnapshot(
+5827-      doc(db, "bonusNota", selectedPeriod),
+5828-      (snap) => {
+5829-        if (componentMounted) {
+5830-          if (snap.exists()) {
+5831-            const data = snap.data();
+5832-            setEntries(data.entries || {});
+5833-            setIsLocked(data.isLocked || false);
+5834-          } else {
+5835-            setEntries({});
+5836-            setIsLocked(false);
+--
+6401-  activePeriodId,
+6402-  setActivePeriodId,
+6403-}: {
+6404-  employees: Employee[];
+6405-  activePeriodId: string;
+6406-  setActivePeriodId?: (id: string) => void;
+6407-}) {
+6408-  const [controls, setControls] = useState<Record<string, any>>({});
+6409-
+6410-  useEffect(() => {
+6411:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+6412-      const data: Record<string, any> = {};
+6413-      snap.docs.forEach((d) => {
+6414-        data[d.id] = d.data();
+6415-      });
+6416-      setControls(data);
+6417-    });
+6418-    return unsub;
+6419-  }, []);
+6420-
+6421-  const periodOptions = React.useMemo(
+--
+6432-  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+6433-  const [password, setPassword] = useState("");
+6434-  const [selectedEmpId, setSelectedEmpId] = useState("");
+6435-  const [inputAmount, setInputAmount] = useState("");
+6436-
+6437-  useEffect(() => {
+6438-    let componentMounted = true;
+6439-    if (!selectedPeriod) return;
+6440-    setLoading(true);
+6441-
+6442:    const unsub = onSnapshot(
+6443-      doc(db, "koreksiGaji", selectedPeriod),
+6444-      (snap) => {
+6445-        if (componentMounted) {
+6446-          if (snap.exists()) {
+6447-            const data = snap.data();
+6448-            setEntries(data.entries || {});
+6449-            setIsLocked(data.isLocked || false);
+6450-          } else {
+6451-            setEntries({});
+6452-            setIsLocked(false);
+--
+6739-  activePeriodId,
+6740-  setActivePeriodId,
+6741-}: {
+6742-  employees: Employee[];
+6743-  activePeriodId: string;
+6744-  setActivePeriodId?: (id: string) => void;
+6745-}) {
+6746-  const [controls, setControls] = useState<Record<string, any>>({});
+6747-
+6748-  useEffect(() => {
+6749:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+6750-      const data: Record<string, any> = {};
+6751-      snap.docs.forEach((d) => {
+6752-        data[d.id] = d.data();
+6753-      });
+6754-      setControls(data);
+6755-    });
+6756-    return unsub;
+6757-  }, []);
+6758-
+6759-  const periodOptions = React.useMemo(
+--
+6770-  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+6771-  const [password, setPassword] = useState("");
+6772-  const [selectedEmpId, setSelectedEmpId] = useState("");
+6773-  const [inputAmount, setInputAmount] = useState("");
+6774-
+6775-  useEffect(() => {
+6776-    let componentMounted = true;
+6777-    if (!selectedPeriod) return;
+6778-    setLoading(true);
+6779-
+6780:    const unsub = onSnapshot(
+6781-      doc(db, "koreksiGajiMinus", selectedPeriod),
+6782-      (snap) => {
+6783-        if (componentMounted) {
+6784-          if (snap.exists()) {
+6785-            const data = snap.data();
+6786-            setEntries(data.entries || {});
+6787-            setIsLocked(data.isLocked || false);
+6788-          } else {
+6789-            setEntries({});
+6790-            setIsLocked(false);
+--
+7076-  activePeriodId,
+7077-  setActivePeriodId,
+7078-}: {
+7079-  employees: Employee[];
+7080-  activePeriodId: string;
+7081-  setActivePeriodId?: (id: string) => void;
+7082-}) {
+7083-  const [controls, setControls] = useState<Record<string, any>>({});
+7084-
+7085-  useEffect(() => {
+7086:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+7087-      const data: Record<string, any> = {};
+7088-      snap.docs.forEach((d) => {
+7089-        data[d.id] = d.data();
+7090-      });
+7091-      setControls(data);
+7092-    });
+7093-    return unsub;
+7094-  }, []);
+7095-
+7096-  const periodOptions = React.useMemo(
+--
+7109-  const [password, setPassword] = useState("");
+7110-  const [selectedEmpId, setSelectedEmpId] = useState("");
+7111-  const [inputAmount, setInputAmount] = useState("");
+7112-  const [editId, setEditId] = useState<string | null>(null);
+7113-
+7114-  useEffect(() => {
+7115-    let componentMounted = true;
+7116-    if (!selectedPeriod) return;
+7117-    setLoading(true);
+7118-
+7119:    const unsub = onSnapshot(
+7120-      doc(db, "bonusBerat", selectedPeriod),
+7121-      (snap) => {
+7122-        if (componentMounted) {
+7123-          if (snap.exists()) {
+7124-            const data = snap.data();
+7125-            setEntries(data.entries || {});
+7126-            setIsLocked(data.isLocked || false);
+7127-          } else {
+7128-            setEntries({});
+7129-            setIsLocked(false);
+--
+7702-          lng: e.latlng.lng,
+7703-        }));
+7704-      },
+7705-    });
+7706-    return config && config.lat !== 0 ? (
+7707-      <Marker position={[config.lat, config.lng]} />
+7708-    ) : null;
+7709-  }
+7710-
+7711-  useEffect(() => {
+7712:    const unsub = onSnapshot(
+7713-      doc(db, "config", "office"),
+7714-      (snap) => {
+7715-        if (snap.exists()) setConfig(snap.data());
+7716-        else setConfig({ lat: -6.2088, lng: 106.8456, radius: 100 });
+7717-        setLoading(false);
+7718-      },
+7719-      (err) => handleFirestoreError(err, OperationType.GET, "config/office"),
+7720-    );
+7721-    return unsub;
+7722-  }, []);
+--
+8552-      </main>
+8553-    </Tabs>
+8554-  );
+8555-}
+8556-
+8557-function AdminMusic() {
+8558-  const [musicUrl, setMusicUrl] = useState("");
+8559-  const [loading, setLoading] = useState(true);
+8560-
+8561-  useEffect(() => {
+8562:    const unsub = onSnapshot(
+8563-      doc(db, "systemConfig", "musicSettings"),
+8564-      (doc) => {
+8565-        if (doc.exists()) {
+8566-          const data = doc.data();
+8567-          setMusicUrl(data.url || "");
+8568-        }
+8569-        setLoading(false);
+8570-      },
+8571-      (err) =>
+8572-        handleFirestoreError(
+--
+8650-  const [isBadDebtOpen, setIsBadDebtOpen] = useState(false);
+8651-
+8652-  useEffect(() => {
+8653-    // Listener for online users (last seen in last 5 minutes)
+8654-    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+8655-    const q = query(
+8656-      collection(db, "employees"),
+8657-      where("lastSeen", ">", Timestamp.fromDate(fiveMinsAgo)),
+8658-    );
+8659-
+8660:    const unsub = onSnapshot(q, (snap) => {
+8661-      const online = snap.docs.map((doc) => ({
+8662-        id: doc.id,
+8663-        ...doc.data(),
+8664-      }));
+8665-      setOnlineUsers(online);
+8666-    });
+8667-
+8668-    return () => unsub();
+8669-  }, []);
+8670-
+--
+11704-    useSensor(MouseSensor),
+11705-    useSensor(TouchSensor, {
+11706-      activationConstraint: {
+11707-        delay: 250,
+11708-        tolerance: 5,
+11709-      },
+11710-    }),
+11711-  );
+11712-
+11713-  useEffect(() => {
+11714:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+11715-      const data: Record<string, any> = {};
+11716-      snap.docs.forEach((d) => {
+11717-        data[d.id] = d.data();
+11718-      });
+11719-      setControls(data);
+11720-    });
+11721-    return unsub;
+11722-  }, []);
+11723-
+11724-  useEffect(() => {
+--
+11737-    if (!selectedPeriod) {
+11738-      setLoading(false);
+11739-      return;
+11740-    }
+11741-    setLoading(true);
+11742-    const q = query(
+11743-      collection(db, "leaveRequests"),
+11744-      where("status", "in", ["approved", "pending"]),
+11745-      where("period", "==", selectedPeriod),
+11746-    );
+11747:    const unsub = onSnapshot(
+11748-      q,
+11749-      (snap) => {
+11750-        setLeaveRequests(
+11751-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest),
+11752-        );
+11753-        setLoading(false);
+11754-      },
+11755-      (err) => {
+11756-        console.error("Error fetching jadwal libur:", err);
+11757-        setLoading(false);
+--
+12700-  alert: (msg: string, type?: "success" | "error" | "info") => void;
+12701-}) {
+12702-  const [controls, setControls] = useState<Record<string, any>>({});
+12703-  const periodOptions = getCombinedPeriods(controls);
+12704-  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
+12705-  const [quotas, setQuotas] = useState<any[]>([]);
+12706-  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+12707-  const [importing, setImporting] = useState(false);
+12708-
+12709-  useEffect(() => {
+12710:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+12711-      const data: Record<string, any> = {};
+12712-      snap.docs.forEach((d) => {
+12713-        data[d.id] = d.data();
+12714-      });
+12715-      setControls(data);
+12716-    });
+12717-    return unsub;
+12718-  }, []);
+12719-
+12720-  useEffect(() => {
+--
+12727-      );
+12728-      setSelectedPeriod(current ? current.value : periodOptions[0].value);
+12729-    }
+12730-  }, [periodOptions, selectedPeriod]);
+12731-
+12732-  useEffect(() => {
+12733-    const q = query(
+12734-      collection(db, "leaveRequests"),
+12735-      where("status", "in", ["approved", "pending"]),
+12736-    );
+12737:    const unsub = onSnapshot(q, (snap) =>
+12738-      setLeaveRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+12739-    );
+12740-    return unsub;
+12741-  }, []);
+12742-
+12743-  useEffect(() => {
+12744:    const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
+12745-      setQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+12746-    });
+12747-    return unsub;
+12748-  }, []);
+12749-
+12750-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+12751-    if (controls[selectedPeriod]?.isPermanentlyClosed) {
+12752-      alert(
+12753-        "Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengimpor kuota.",
+12754-      );
+--
+13083-  const [loading, setLoading] = useState(true);
+13084-  const [showAdd, setShowAdd] = useState(false);
+13085-  const [newPeriod, setNewPeriod] = useState({
+13086-    name: "",
+13087-    startDate: "",
+13088-    endDate: "",
+13089-    maxAccumulatedLeave: 6,
+13090-  });
+13091-
+13092-  useEffect(() => {
+13093:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+13094-      const data: Record<string, any> = {};
+13095-      snap.docs.forEach((d) => {
+13096-        data[d.id] = d.data();
+13097-      });
+13098-      setControls(data);
+13099-      setLoading(false);
+13100-    });
+13101-    return unsub;
+13102-  }, []);
+13103-
+--
+13771-  );
+13772-}
+13773-
+13774-function AdminKata() {
+13775-  const [kata, setKata] = useState("");
+13776-  const [postSubmitKata, setPostSubmitKata] = useState("");
+13777-  const [postSubmitDuration, setPostSubmitDuration] = useState(7);
+13778-  const [loading, setLoading] = useState(true);
+13779-
+13780-  useEffect(() => {
+13781:    const unsub = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+13782-      if (doc.exists()) {
+13783-        const data = doc.data();
+13784-        setKata(data.text || "");
+13785-        setPostSubmitKata(data.postText || "");
+13786-        setPostSubmitDuration(data.duration || 7);
+13787-      }
+13788-      setLoading(false);
+13789-    });
+13790-    return unsub;
+13791-  }, []);
+--
+14080-    const endOfDay = new Date(dateObj);
+14081-    endOfDay.setHours(23, 59, 59, 999);
+14082-
+14083-    const q = query(
+14084-      collection(db, "activityLogs"),
+14085-      where("timestamp", ">=", Timestamp.fromDate(startOfDay)),
+14086-      where("timestamp", "<=", Timestamp.fromDate(endOfDay)),
+14087-      orderBy("timestamp", "desc"),
+14088-      limit(200),
+14089-    );
+14090:    const unsub = onSnapshot(
+14091-      q,
+14092-      (snap) => {
+14093-        setLogs(
+14094-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ActivityLog),
+14095-        );
+14096-        setLoading(false);
+14097-      },
+14098-      (err) => {
+14099-        console.error("Query activityLogs failed, might need index:", err);
+14100-        // Fallback to global if filter fails due to index missing
+14101-        const qGlobal = query(
+14102-          collection(db, "activityLogs"),
+14103-          orderBy("timestamp", "desc"),
+14104-          limit(100),
+14105-        );
+14106:        onSnapshot(qGlobal, (s) => {
+14107-          setLogs(
+14108-            s.docs.map((d) => ({ id: d.id, ...d.data() }) as ActivityLog),
+14109-          );
+14110-          setLoading(false);
+14111-        });
+14112-      },
+14113-    );
+14114-    return unsub;
+14115-  }, [viewDate]);
+14116-
+--
+14252-    shiftId: "",
+14253-    status: "present" as Attendance["status"],
+14254-  });
+14255-
+14256-  useEffect(() => {
+14257-    const formattedDate = format(date, "yyyy-MM-dd");
+14258-    const q = query(
+14259-      collection(db, "attendance"),
+14260-      where("date", "==", formattedDate),
+14261-    );
+14262:    const unsub = onSnapshot(
+14263-      q,
+14264-      (snapshot) => {
+14265-        setLiveAttendance(
+14266-          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Attendance),
+14267-        );
+14268-      },
+14269-      (err) => console.error("Live attendance error:", err),
+14270-    );
+14271-    return unsub;
+14272-  }, [date]);
+--
+14917-  const periodOptions = React.useMemo(
+14918-    () => getCombinedPeriods(controls),
+14919-    [controls],
+14920-  );
+14921-  const [selectedPeriod, setSelectedPeriod] = useState("");
+14922-  const [selectedDivision, setSelectedDivision] = useState<string>(
+14923-    divisions[0]?.name || "Depan",
+14924-  );
+14925-
+14926-  useEffect(() => {
+14927:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+14928-      const data: Record<string, any> = {};
+14929-      snap.forEach((d) => {
+14930-        data[d.id] = d.data();
+14931-      });
+14932-      setControls(data);
+14933-    }, (err) => console.error(err));
+14934-    return unsub;
+14935-  }, []);
+14936-
+14937-  useEffect(() => {
+--
+14956-    }
+14957-  }, [divisions]);
+14958-
+14959-  useEffect(() => {
+14960-    const q = query(
+14961-      collection(db, "leaveRequests"),
+14962-      where("period", "==", selectedPeriod),
+14963-      where("division", "==", selectedDivision),
+14964-      orderBy("createdAt", "desc"),
+14965-    );
+14966:    const unsub = onSnapshot(
+14967-      q,
+14968-      (snap) =>
+14969-        setRequests(
+14970-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest),
+14971-        ),
+14972-      (err) => handleFirestoreError(err, OperationType.LIST, "leaveRequests"),
+14973-    );
+14974-    return unsub;
+14975-  }, [selectedPeriod, selectedDivision]);
+14976-
+--
+15274-  const [periodControl, setPeriodControl] = useState<any>(null);
+15275-  const [controls, setControls] = useState<Record<string, any>>({});
+15276-  const periodOptions = React.useMemo(
+15277-    () => getCombinedPeriods(controls),
+15278-    [controls],
+15279-  );
+15280-  const [selectedPeriod, setSelectedPeriod] = useState("");
+15281-  const [showAdd, setShowAdd] = useState(false);
+15282-
+15283-  useEffect(() => {
+15284:    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+15285-      const data: Record<string, any> = {};
+15286-      snap.forEach((d) => {
+15287-        data[d.id] = d.data();
+15288-      });
+15289-      setControls(data);
+15290-    }, (err) => console.error(err));
+15291-    return unsub;
+15292-  }, []);
+15293-  const [showMusicPopup, setShowMusicPopup] = useState(false);
+15294-  const [musicPopupText, setMusicPopupText] = useState(
+--
+15303-  }>({
+15304-    dates: [],
+15305-    reason: "",
+15306-    sectionId: "",
+15307-  });
+15308-  const [activeHoldDate, setActiveHoldDate] = useState<string | null>(null);
+15309-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+15310-  const isPostPopupRef = React.useRef(false);
+15311-
+15312-  useEffect(() => {
+15313:    const unsub1 = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+15314-      if (doc.exists()) {
+15315-        setRequestKata(doc.data().text || "");
+15316-      }
+15317-    }, (err) => console.error(err));
+15318:    const unsub2 = onSnapshot(
+15319-      doc(db, "systemConfig", "musicSettings"),
+15320-      (doc) => {
+15321-        if (doc.exists()) {
+15322-          const data = doc.data();
+15323-          if (data.url) {
+15324-            if (audioRef.current) {
+15325-              audioRef.current.pause();
+15326-            }
+15327-            audioRef.current = new Audio(data.url);
+15328-            audioRef.current.loop = true;
+--
+15407-      if (!selectedPeriod || !active.find((a) => a.value === selectedPeriod)) {
+15408-        setSelectedPeriod(active[0].value);
+15409-      }
+15410-    } else {
+15411-      setSelectedPeriod("");
+15412-    }
+15413-  }, [periodOptions, controls, selectedPeriod]);
+15414-
+15415-  useEffect(() => {
+15416-    if (!selectedPeriod) return;
+15417:    const unsub = onSnapshot(doc(db, "periodControls", selectedPeriod), (snap) => {
+15418-      setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
+15419-    }, (err) => console.error(err));
+15420-    return unsub;
+15421-  }, [selectedPeriod]);
+15422-
+15423-  useEffect(() => {
+15424-    // Listener that synchronizes request additions and Admin deletions in real-time
+15425-    // Fetch ALL requests for THIS employee (cross-division) to ensure accurate carryover
+15426-    const qEmp = query(
+15427-      collection(db, "leaveRequests"),
+15428-      where("employeeId", "==", employee.id),
+15429-    );
+15430:    const unsubEmp = onSnapshot(
+15431-      qEmp,
+15432-      (snap) => {
+15433-        const data = snap.docs.map(
+15434-          (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
+15435-        );
+15436-        setRequests(data);
+15437-      },
+15438-      (err) => {
+15439-        console.error("Employee requests error:", err);
+15440-        // If quota exceeded, we might want to alert, but the main app handles the blank screen for total failure
+15441-      }
+15442-    );
+15443-
+15444-    // Listener for ALL requests in the CURRENT division (for popular dates / quota checks)
+15445-    const qDiv = query(
+15446-      collection(db, "leaveRequests"),
+15447-      where("division", "==", employee.division || "Depan"),
+15448-      orderBy("createdAt", "desc"),
+15449-    );
+15450:    const unsubDiv = onSnapshot(
+15451-      qDiv,
+15452-      (snap) => {
+15453-        const data = snap.docs.map(
+15454-          (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
+15455-        );
+15456-        setAllRequests(data);
+15457-      },
+15458-      (err) => console.error("Employee leave error:", err),
+15459-    );
+15460-    
+15461-    return () => {
+15462-      unsubEmp();
+15463-      unsubDiv();
+15464-    };
+15465-  }, [employee.id, employee.division]);
+15466-
+15467-  const [allQuotas, setAllQuotas] = useState<any[]>([]);
+15468-  useEffect(() => {
+15469:    const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
+15470-      setAllQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+15471-    }, (err) => console.error(err));
+15472-    return unsub;
+15473-  }, []);
+15474-
+15475-  const currentRequests = requests.filter((r) => r.period === selectedPeriod);
+15476-  const currentAllRequests = allRequests.filter(
+15477-    (r) => r.period === selectedPeriod,
+15478-  );
+15479-
+--
+16522-    H: "",
+16523-  });
+16524-
+16525-  const dateStr = format(selectedDate, "yyyy-MM-dd");
+16526-
+16527-  useEffect(() => {
+16528-    const q = query(
+16529-      collection(db, "manualAttendance"),
+16530-      where("date", "==", dateStr),
+16531-    );
+16532:    const unsub = onSnapshot(q, (snap) => {
+16533-      const data: Record<string, string> = {};
+16534-      snap.docs.forEach((doc) => {
+16535-        const item = doc.data();
+16536-        data[item.employeeId] = item.status;
+16537-      });
+16538-      setManualData(data);
+16539-    });
+16540-    return unsub;
+16541-  }, [dateStr]);
+16542-
+--
+17003-  const [isEditingAttendance, setIsEditingAttendance] =
+17004-    useState<Attendance | null>(null);
+17005-
+17006-  useEffect(() => {
+17007-    const q = query(
+17008-      collection(db, "attendance"),
+17009-      where("date", ">=", format(dateRange.start, "yyyy-MM-dd")),
+17010-      where("date", "<=", format(dateRange.end, "yyyy-MM-dd")),
+17011-      orderBy("date", "desc"),
+17012-    );
+17013:    const unsub = onSnapshot(
+17014-      q,
+17015-      (snap) =>
+17016-        setAttendances(
+17017-          snap.docs
+17018-            .map((d) => ({ id: d.id, ...d.data() }) as Attendance)
+17019-            .filter(
+17020-              (a, index, self) =>
+17021-                index ===
+17022-                self.findIndex(
+17023-                  (t) => t.date === a.date && t.employeeId === a.employeeId,

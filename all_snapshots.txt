@@ -1,0 +1,871 @@
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  addDoc,
+  deleteDoc,
+  orderBy,
+  limit,
+  Timestamp,
+  collectionGroup,
+  getCountFromServer,
+} from "firebase/firestore";
+import {
+  format,
+  startOfDay,
+
+====================
+
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    // Fetch Bonus Master and Bonus Estafet
+    const unsubMaster = onSnapshot(
+      doc(db, "bonusMasterConfig", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          setBonusMaster(
+            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+          );
+        }
+      },
+    );
+
+    const unsubEstafet = onSnapshot(
+      doc(db, "bonusEstafet", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+
+====================
+
+          );
+        }
+      },
+    );
+
+    const unsubEstafet = onSnapshot(
+      doc(db, "bonusEstafet", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          const data = snap.exists() ? snap.data() : {};
+          setDailyAssignments(data.dailyAssignments || {});
+          setIsLocked(data.isLocked || false);
+          setLoading(false);
+        }
+      },
+      (error) => {
+        if (componentMounted) {
+          handleFirestoreError(
+            error,
+            OperationType.GET,
+
+====================
+
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    // Fetch existing settings for this period
+    const unsub = onSnapshot(
+      doc(db, "bonusMasterConfig", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          if (snap.exists()) {
+            const data = snap.data();
+            setDailyData(data.dailyHighestReceipt || {});
+            setIsLocked(data.isLocked || false);
+          } else {
+            setDailyData({});
+            setIsLocked(false);
+          }
+          setLoading(false);
+        }
+      },
+
+====================
+
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    // Fetch Bonus Master and Bonus Jaga Depan
+    const unsubMaster = onSnapshot(
+      doc(db, "bonusMasterConfig", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          setBonusMaster(
+            snap.exists() ? snap.data().dailyHighestReceipt || {} : {},
+          );
+        }
+      },
+    );
+
+    const unsubJagaDepan = onSnapshot(
+      doc(db, "bonusJagaDepan", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+
+====================
+
+          );
+        }
+      },
+    );
+
+    const unsubJagaDepan = onSnapshot(
+      doc(db, "bonusJagaDepan", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          const data = snap.exists() ? snap.data() : {};
+          setDailyAssignments(data.dailyAssignments || {});
+          setIsLocked(data.isLocked || false);
+          setLoading(false);
+        }
+      },
+      (error) => {
+        if (componentMounted) {
+          handleFirestoreError(
+            error,
+            OperationType.GET,
+
+====================
+
+  const setSelectedPeriod = setActivePeriodId || (() => {});
+
+  const [bonusTypes, setBonusTypes] = useState<Record<string, string>>({}); // { id: name }
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, "systemConfig", "bonusLainLainTypes"),
+      (snap) => {
+        setBonusTypes(snap.exists() ? snap.data().types || {} : {});
+      },
+    );
+    return unsub;
+  }, []);
+
+  const [entries, setEntries] = useState<
+    Array<{ id: string; pin: string; bonusTypeId: string; amount: number }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+
+====================
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(
+      doc(db, "bonusLainLain", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          const data = snap.exists() ? snap.data() : {};
+          setEntries(data.entries || []);
+          setIsLocked(data.isLocked || false);
+          setLoading(false);
+        }
+      },
+      (error) => {
+        if (componentMounted) {
+          handleFirestoreError(
+            error,
+            OperationType.GET,
+
+====================
+
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsubJaga = onSnapshot(
+      doc(db, "bonusJagaDepan", selectedPeriod),
+      (snap) => {
+        setJagaDepanData(snap.exists() ? snap.data() : null);
+      },
+    );
+
+    const unsubMaster = onSnapshot(
+      doc(db, "bonusMasterConfig", selectedPeriod),
+      (snap) => {
+        setBonusMaster(
+          snap.exists() ? snap.data().dailyHighestReceipt || [] : [],
+        );
+      },
+    );
+
+====================
+
+      (snap) => {
+        setJagaDepanData(snap.exists() ? snap.data() : null);
+      },
+    );
+
+    const unsubMaster = onSnapshot(
+      doc(db, "bonusMasterConfig", selectedPeriod),
+      (snap) => {
+        setBonusMaster(
+          snap.exists() ? snap.data().dailyHighestReceipt || [] : [],
+        );
+      },
+    );
+
+    const unsubCampuran = onSnapshot(
+      doc(db, "bonusLainLain", selectedPeriod),
+      (snap) => {
+        setCampuranData(snap.exists() ? snap.data() : null);
+      },
+    );
+
+====================
+
+          snap.exists() ? snap.data().dailyHighestReceipt || [] : [],
+        );
+      },
+    );
+
+    const unsubCampuran = onSnapshot(
+      doc(db, "bonusLainLain", selectedPeriod),
+      (snap) => {
+        setCampuranData(snap.exists() ? snap.data() : null);
+      },
+    );
+
+    return () => {
+      unsubJaga();
+      unsubMaster();
+      unsubCampuran();
+    };
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+
+====================
+
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(
+      doc(db, "bonusOperator", selectedPeriod),
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setNotaRate(data.notaRate ?? 50);
+          setBalenRate(data.balenRate ?? 70);
+          setEntries(
+            (data.entries as Record<
+              string,
+              { notaCount: number; balenCount: number }
+            >) || {},
+          );
+          setIsLocked(data.isLocked || false);
+        } else {
+
+====================
+
+      collection(db, "attendance"),
+      where("employeeId", "==", employee.id),
+      orderBy("date", "desc"),
+    );
+    // Filter by period logic will be applied in render based on start/end dates
+    const unsub = onSnapshot(
+      q,
+      (snap) =>
+        setHistory(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Attendance),
+        ),
+      (err) =>
+        handleFirestoreError(err, OperationType.LIST, "attendance_history"),
+    );
+    return unsub;
+  }, [employee.id]);
+
+  const [showChangePass, setShowChangePass] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const today = format(new Date(), "yyyy-MM-dd");
+
+====================
+
+    const q = query(
+      collection(db, "attendance"),
+      where("employeeId", "==", employee.id),
+      where("date", "==", today),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const doc = snapshot.docs[0];
+          const data = doc.data() as Attendance;
+          setAttendance({ id: doc.id, ...data } as Attendance);
+          setSelectedShiftId(data?.shiftId || "");
+        } else {
+          setAttendance(null);
+          // Auto-select Day Off shift on Sundays
+          if (currentTime.getDay() === 0) {
+            const dayOffShift = shifts.find(
+              (s) => s.name.toLowerCase().replace(/\s/g, "") === "dayoff",
+            );
+
+====================
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(
+      doc(db, "bonusNota", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          if (snap.exists()) {
+            const data = snap.data();
+            setEntries(data.entries || {});
+            setIsLocked(data.isLocked || false);
+          } else {
+            setEntries({});
+            setIsLocked(false);
+          }
+          setLoading(false);
+        }
+      },
+
+====================
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(
+      doc(db, "koreksiGaji", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          if (snap.exists()) {
+            const data = snap.data();
+            setEntries(data.entries || {});
+            setIsLocked(data.isLocked || false);
+          } else {
+            setEntries({});
+            setIsLocked(false);
+          }
+          setLoading(false);
+        }
+      },
+
+====================
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(
+      doc(db, "koreksiGajiMinus", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          if (snap.exists()) {
+            const data = snap.data();
+            setEntries(data.entries || {});
+            setIsLocked(data.isLocked || false);
+          } else {
+            setEntries({});
+            setIsLocked(false);
+          }
+          setLoading(false);
+        }
+      },
+
+====================
+
+  useEffect(() => {
+    let componentMounted = true;
+    if (!selectedPeriod) return;
+    setLoading(true);
+
+    const unsub = onSnapshot(
+      doc(db, "bonusBerat", selectedPeriod),
+      (snap) => {
+        if (componentMounted) {
+          if (snap.exists()) {
+            const data = snap.data();
+            setEntries(data.entries || {});
+            setIsLocked(data.isLocked || false);
+          } else {
+            setEntries({});
+            setIsLocked(false);
+          }
+          setLoading(false);
+        }
+      },
+
+====================
+
+      <Marker position={[config.lat, config.lng]} />
+    ) : null;
+  }
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, "config", "office"),
+      (snap) => {
+        if (snap.exists()) setConfig(snap.data());
+        else setConfig({ lat: -6.2088, lng: 106.8456, radius: 100 });
+        setLoading(false);
+      },
+      (err) => handleFirestoreError(err, OperationType.GET, "config/office"),
+    );
+    return unsub;
+  }, []);
+
+  const handleUpdate = async () => {
+    await setDoc(doc(db, "config", "office"), config);
+    alert("Konfigurasi lokasi kantor diperbarui!");
+
+====================
+
+function AdminMusic() {
+  const [musicUrl, setMusicUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      doc(db, "systemConfig", "musicSettings"),
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
+          setMusicUrl(data.url || "");
+        }
+        setLoading(false);
+      },
+      (err) =>
+        handleFirestoreError(
+          err,
+          OperationType.GET,
+          "systemConfig/musicSettings",
+        ),
+
+====================
+
+    const q = query(
+      collection(db, "employees"),
+      where("lastSeen", ">", Timestamp.fromDate(fiveMinsAgo)),
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const online = snap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setOnlineUsers(online);
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+
+====================
+
+    const q = query(
+      collection(db, "leaveRequests"),
+      where("status", "in", ["approved", "pending"]),
+      where("period", "==", selectedPeriod),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setLeaveRequests(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest),
+        );
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error fetching jadwal libur:", err);
+        setLoading(false);
+      },
+    );
+    return unsub;
+  }, [selectedPeriod]);
+
+====================
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "leaveRequests"),
+      where("status", "in", ["approved", "pending"]),
+    );
+    const unsub = onSnapshot(q, (snap) =>
+      setLeaveRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    );
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
+      setQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (controls[selectedPeriod]?.isPermanentlyClosed) {
+
+====================
+
+    );
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
+      setQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (controls[selectedPeriod]?.isPermanentlyClosed) {
+      alert(
+        "Maaf, periode ini telah DITUTUP PERMANEN oleh Admin. Tidak bisa mengimpor kuota.",
+      );
+      e.target.value = "";
+      return;
+    }
+    const file = e.target.files?.[0];
+
+====================
+
+    endDate: "",
+    maxAccumulatedLeave: 6,
+  });
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "periodControls"), (snap) => {
+      const data: Record<string, any> = {};
+      snap.docs.forEach((d) => {
+        data[d.id] = d.data();
+      });
+      setControls(data);
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const combinedPeriods = getCombinedPeriods(controls);
+
+  const updateStatus = async (periodId: string, status: string) => {
+    await setDoc(
+
+====================
+
+  const [postSubmitKata, setPostSubmitKata] = useState("");
+  const [postSubmitDuration, setPostSubmitDuration] = useState(7);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setKata(data.text || "");
+        setPostSubmitKata(data.postText || "");
+        setPostSubmitDuration(data.duration || 7);
+      }
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const handleSave = async () => {
+    await setDoc(doc(db, "systemConfig", "requestKata"), {
+      text: kata,
+
+====================
+
+      where("timestamp", ">=", Timestamp.fromDate(startOfDay)),
+      where("timestamp", "<=", Timestamp.fromDate(endOfDay)),
+      orderBy("timestamp", "desc"),
+      limit(200),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setLogs(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ActivityLog),
+        );
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Query activityLogs failed, might need index:", err);
+        // Fallback to global if filter fails due to index missing
+        const qGlobal = query(
+          collection(db, "activityLogs"),
+          orderBy("timestamp", "desc"),
+          limit(100),
+
+====================
+
+        const qGlobal = query(
+          collection(db, "activityLogs"),
+          orderBy("timestamp", "desc"),
+          limit(100),
+        );
+        onSnapshot(qGlobal, (s) => {
+          setLogs(
+            s.docs.map((d) => ({ id: d.id, ...d.data() }) as ActivityLog),
+          );
+          setLoading(false);
+        });
+      },
+    );
+    return unsub;
+  }, [viewDate]);
+
+  return (
+    <DialogContent className="glass-panel text-white border-white/20 p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col rounded-[2rem]">
+      <DialogHeader>
+        <DialogTitle className="text-white text-xl font-bold flex items-center gap-2">
+
+====================
+
+    const formattedDate = format(date, "yyyy-MM-dd");
+    const q = query(
+      collection(db, "attendance"),
+      where("date", "==", formattedDate),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        setLiveAttendance(
+          snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Attendance),
+        );
+      },
+      (err) => console.error("Live attendance error:", err),
+    );
+    return unsub;
+  }, [date]);
+
+  const handleDelete = async (id: string) => {
+    const pwd = await prompt("Masukkan Password Admin untuk menghapus:");
+    if (pwd !== "admin123") {
+
+====================
+
+      collection(db, "leaveRequests"),
+      where("period", "==", selectedPeriod),
+      where("division", "==", selectedDivision),
+      orderBy("createdAt", "desc"),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) =>
+        setRequests(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeaveRequest),
+        ),
+      (err) => handleFirestoreError(err, OperationType.LIST, "leaveRequests"),
+    );
+    return unsub;
+  }, [selectedPeriod, selectedDivision]);
+
+  const handleExport = () => {
+    setExportLoading(true);
+    try {
+      const activePeriod = periodOptions.find(
+
+====================
+
+  const [activeHoldDate, setActiveHoldDate] = useState<string | null>(null);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const isPostPopupRef = React.useRef(false);
+
+  useEffect(() => {
+    const unsub1 = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+      if (doc.exists()) {
+        setRequestKata(doc.data().text || "");
+      }
+    }, (err) => console.error(err));
+    const unsub2 = onSnapshot(
+      doc(db, "systemConfig", "musicSettings"),
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
+          if (data.url) {
+            if (audioRef.current) {
+              audioRef.current.pause();
+            }
+            audioRef.current = new Audio(data.url);
+
+====================
+
+    const unsub1 = onSnapshot(doc(db, "systemConfig", "requestKata"), (doc) => {
+      if (doc.exists()) {
+        setRequestKata(doc.data().text || "");
+      }
+    }, (err) => console.error(err));
+    const unsub2 = onSnapshot(
+      doc(db, "systemConfig", "musicSettings"),
+      (doc) => {
+        if (doc.exists()) {
+          const data = doc.data();
+          if (data.url) {
+            if (audioRef.current) {
+              audioRef.current.pause();
+            }
+            audioRef.current = new Audio(data.url);
+            audioRef.current.loop = true;
+          }
+          if (data.popupText) {
+            setMusicPopupText(data.popupText);
+          }
+
+====================
+
+    }
+  }, [periodOptions, controls, selectedPeriod]);
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    const unsub = onSnapshot(doc(db, "periodControls", selectedPeriod), (snap) => {
+      setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
+    }, (err) => console.error(err));
+    return unsub;
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    // Listener that synchronizes request additions and Admin deletions in real-time
+    // Fetch ALL requests for THIS employee (cross-division) to ensure accurate carryover
+    const qEmp = query(
+      collection(db, "leaveRequests"),
+      where("employeeId", "==", employee.id),
+    );
+    const unsubEmp = onSnapshot(
+      qEmp,
+
+====================
+
+    // Fetch ALL requests for THIS employee (cross-division) to ensure accurate carryover
+    const qEmp = query(
+      collection(db, "leaveRequests"),
+      where("employeeId", "==", employee.id),
+    );
+    const unsubEmp = onSnapshot(
+      qEmp,
+      (snap) => {
+        const data = snap.docs.map(
+          (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
+        );
+        setRequests(data);
+      },
+      (err) => {
+        console.error("Employee requests error:", err);
+        // If quota exceeded, we might want to alert, but the main app handles the blank screen for total failure
+      }
+    );
+
+    // Listener for ALL requests in the CURRENT division (for popular dates / quota checks)
+
+====================
+
+    const qDiv = query(
+      collection(db, "leaveRequests"),
+      where("division", "==", employee.division || "Depan"),
+      orderBy("createdAt", "desc"),
+    );
+    const unsubDiv = onSnapshot(
+      qDiv,
+      (snap) => {
+        const data = snap.docs.map(
+          (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
+        );
+        setAllRequests(data);
+      },
+      (err) => console.error("Employee leave error:", err),
+    );
+    
+    return () => {
+      unsubEmp();
+      unsubDiv();
+    };
+
+====================
+
+    };
+  }, [employee.id, employee.division]);
+
+  const [allQuotas, setAllQuotas] = useState<any[]>([]);
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "periodQuotas"), (snap) => {
+      setAllQuotas(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    }, (err) => console.error(err));
+    return unsub;
+  }, []);
+
+  const currentRequests = requests.filter((r) => r.period === selectedPeriod);
+  const currentAllRequests = allRequests.filter(
+    (r) => r.period === selectedPeriod,
+  );
+
+  const periodEffectiveQuota = calculateEffectiveQuota(
+    employee.id,
+    selectedPeriod,
+    periodOptions,
+
+====================
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "manualAttendance"),
+      where("date", "==", dateStr),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const data: Record<string, string> = {};
+      snap.docs.forEach((doc) => {
+        const item = doc.data();
+        data[item.employeeId] = item.status;
+      });
+      setManualData(data);
+    });
+    return unsub;
+  }, [dateStr]);
+
+  const updateStatus = async (emp: Employee, status: string) => {
+    const docId = `${dateStr}_${emp.id}`;
+    try {
+      if (status === "H") {
+
+====================
+
+      collection(db, "attendance"),
+      where("date", ">=", format(dateRange.start, "yyyy-MM-dd")),
+      where("date", "<=", format(dateRange.end, "yyyy-MM-dd")),
+      orderBy("date", "desc"),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) =>
+        setAttendances(
+          snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }) as Attendance)
+            .filter(
+              (a, index, self) =>
+                index ===
+                self.findIndex(
+                  (t) => t.date === a.date && t.employeeId === a.employeeId,
+                ),
+            ),
+        ),
+      (err) =>
