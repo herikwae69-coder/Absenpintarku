@@ -679,7 +679,7 @@ export default function App() {
     };
 
     updatePresence();
-    const interval = setInterval(updatePresence, 60000); // 1 minute
+    const interval = setInterval(updatePresence, 300000); // 5 minutes
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
