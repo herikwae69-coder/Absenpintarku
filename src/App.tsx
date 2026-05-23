@@ -34,26 +34,7 @@ import {
   getCountFromServer,
 } from "firebase/firestore";
 
-const getSnapshotOnce = (ref: any, onNext: (snap: any) => void, onError?: (err: any) => void) => {
-  if (ref.type === "document" || ref.id) {
-    // It's a document reference
-    import("firebase/firestore").then(({ getDoc }) => {
-      getDoc(ref).then(onNext).catch(err => {
-        if (onError) onError(err);
-        else console.error(err);
-      });
-    });
-  } else {
-    // It's a query or collection
-    import("firebase/firestore").then(({ getDocs }) => {
-      getDocs(ref).then(onNext).catch(err => {
-        if (onError) onError(err);
-        else console.error(err);
-      });
-    });
-  }
-  return () => {}; // dummy unsubscribe
-};
+const getSnapshotOnce = onSnapshot;
 
 import {
   format,
@@ -679,7 +660,7 @@ export default function App() {
     };
 
     updatePresence();
-    const interval = setInterval(updatePresence, 300000); // 5 minutes
+    const interval = setInterval(updatePresence, 60000); // 1 minute
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
