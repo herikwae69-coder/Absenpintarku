@@ -3928,8 +3928,9 @@ function AdminBonusLainLainCombined({
     // 1. Calculate Jaga Depan
     if (jagaDepanData?.dailyAssignments) {
       Object.entries(jagaDepanData.dailyAssignments).forEach(
-        ([date, shifts]: [string, any]) => {
-          Object.entries(shifts).forEach(([shiftId, empId]: [string, any]) => {
+        ([date, assignment]: [string, any]) => {
+          const empIds = assignment.employeeIds || [];
+          empIds.forEach((empId: string) => {
             if (!empId) return;
             const emp = employees.find((e) => e.id === empId);
             if (!emp) return;
