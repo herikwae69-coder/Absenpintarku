@@ -2004,17 +2004,16 @@ function AdminBonusEstafet({
       },
     );
 
-    const unsubEstafet = getSnapshotOnce(
-      doc(db, "bonusEstafet", selectedPeriod),
-      (snap) => {
+    const fetchEstafet = async () => {
+      try {
+        const snap = await getDoc(doc(db, "bonusEstafet", selectedPeriod));
         if (componentMounted) {
           const data = snap.exists() ? snap.data() : {};
           setDailyAssignments(data.dailyAssignments || {});
           setIsLocked(data.isLocked || false);
           setLoading(false);
         }
-      },
-      (error) => {
+      } catch (error) {
         if (componentMounted) {
           handleFirestoreError(
             error,
@@ -2023,13 +2022,16 @@ function AdminBonusEstafet({
           );
           setLoading(false);
         }
-      },
-    );
+      }
+    };
+
+    fetchEstafet();
+    const interval = setInterval(fetchEstafet, 60000); // Poll every minute
 
     return () => {
       componentMounted = false;
       unsubMaster();
-      unsubEstafet();
+      clearInterval(interval);
     };
   }, [selectedPeriod]);
 
