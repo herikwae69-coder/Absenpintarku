@@ -3945,9 +3945,14 @@ function AdminBonusLainLainCombined({
               };
             }
 
-            const config = bonusMaster.find((b) => b.date === date);
-            if (config && config.nominal) {
-              totals[empId].jagaDepan += config.nominal;
+            const val = Array.isArray(bonusMaster) 
+              ? bonusMaster.find((b) => b.date === date)?.nominal 
+              : (bonusMaster && bonusMaster[date]);
+            
+            const amount = typeof val === 'object' ? (val.nominal || val.amount) : val;
+
+            if (amount) {
+              totals[empId].jagaDepan += amount;
             }
           });
         },
