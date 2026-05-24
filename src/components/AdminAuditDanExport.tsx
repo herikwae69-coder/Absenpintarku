@@ -273,15 +273,18 @@ export default function AdminAuditDanExport({
                             if (!assignments[date] || !assignments[date].employeeIds || assignments[date].employeeIds.length === 0) {
                                 emptyDates.push(date);
                             } else {
-                                let dayHasActive = false;
-                                assignments[date].employeeIds.forEach((id: string) => {
-                                    if (employees.some(e => String(e.id) === String(id) || String(e.pin) === String(id))) {
+                                const activeAssignmentIds = assignments[date].employeeIds.filter((id: string) => 
+                                    employees.some(e => String(e.id) === String(id) || String(e.pin) === String(id))
+                                );
+                                
+                                if (activeAssignmentIds.length > 0) {
+                                    activeAssignmentIds.forEach((id: string) => {
                                         allEmpIds.add(id);
-                                        totalAmount += (Number(assignments[date].bonusAmount) || 0);
-                                        dayHasActive = true;
-                                    }
-                                });
-                                if (!dayHasActive) emptyDates.push(date);
+                                    });
+                                    totalAmount += (Number(assignments[date].bonusAmount) || 0) * activeAssignmentIds.length;
+                                } else {
+                                    emptyDates.push(date);
+                                }
                             }
                         });
                         totalEmpCount = allEmpIds.size;
@@ -292,6 +295,55 @@ export default function AdminAuditDanExport({
                     periodDates.forEach(date => emptyDates.push(date));
                 }
                 return { employeeCount: totalEmpCount, totalAmount, emptyDates, isLocked };
+            };
+
+            // Bonus Lain Lain (Jaga Depan + Campuran)
+            const getLainLainStats = async () => {
+                const [snapLainLain, snapJagaDepan, snapBonusMaster] = await Promise.all([
+                    getDoc(doc(db, 'bonusLainLain', selectedPeriod)),
+                    getDoc(doc(db, 'bonusJagaDepan', selectedPeriod)),
+                    getDoc(doc(db, 'bonusMasterConfig', selectedPeriod))
+                ]);
+                
+                let isLocked = false;
+                let total = 0;
+                const empTotals: Record<string, number> = {};
+
+                // 1. Campuran
+                if (snapLainLain.exists()) {
+                    const data = snapLainLain.data();
+                    isLocked = data.isLocked || false;
+                    if (data.entries) {
+                        const entries = Array.isArray(data.entries) ? data.entries : Object.entries(data.entries as Record<string, any>).map(([k, v]) => ({empId: k, amount: (typeof v === 'object' && v !== null ? ((v as any).amount || (v as any).nominal) : v)}));
+                        entries.forEach((entry: any) => {
+                            const empId = entry.empId || entry.pin || entry.id;
+                            const amt = Number(entry.amount) || Number(entry.nominal) || 0;
+                            if (empId) empTotals[empId] = (empTotals[empId] || 0) + amt;
+                        });
+                    }
+                }
+
+                // 2. Jaga Depan
+                const bonusMaster = snapBonusMaster.exists() ? snapBonusMaster.data().dailyHighestReceipt : {};
+                if (snapJagaDepan.exists() && snapJagaDepan.data().dailyAssignments) {
+                    Object.entries(snapJagaDepan.data().dailyAssignments).forEach(([date, assignment]: [string, any]) => {
+                        const amount = Array.isArray(bonusMaster) 
+                            ? bonusMaster.find((b: any) => b.date === date)?.nominal 
+                            : (bonusMaster && bonusMaster[date]);
+                        const finalAmount = typeof amount === 'object' ? (amount.nominal || amount.amount) : amount;
+                        
+                        if (finalAmount && assignment.employeeIds) {
+                            assignment.employeeIds.forEach((id: string) => {
+                                if (id) empTotals[id] = (empTotals[id] || 0) + finalAmount;
+                            });
+                        }
+                    });
+                }
+
+                const finalTotals = Object.values(empTotals).filter(v => v > 0);
+                total = finalTotals.reduce((s, v) => s + v, 0);
+                
+                return { employeeCount: finalTotals.length, totalAmount: total, isLocked };
             };
 
             const [
@@ -314,7 +366,7 @@ export default function AdminAuditDanExport({
                 getEstafetStats(),
                 getEntriesStats('koreksiGaji'),
                 getEntriesStats('koreksiGajiMinus'),
-                getEntriesStats('bonusLainLain'),
+                getLainLainStats(),
                 getEntriesStats('potonganSeragam'),
                 getPotonganStats('payments', 'debts', 'potonganKehilanganConfig'),
                 getPotonganStats('paymentsBersama', 'debtsBersama', 'potonganKehilanganBersamaConfig')
@@ -495,9 +547,16 @@ export default function AdminAuditDanExport({
                 Object.values(assignments).forEach((dayData: any) => {
                     const amount = Number(dayData.bonusAmount) || 0;
                     if (dayData.employeeIds && Array.isArray(dayData.employeeIds)) {
-                        dayData.employeeIds.forEach((id: string) => {
-                            empTotals[id] = (empTotals[id] || 0) + amount;
-                        });
+                        const activeIds = dayData.employeeIds.filter((id: string) => 
+                            employees.some(e => String(e.id) === String(id) || String(e.pin) === String(id))
+                        );
+                        
+                        if (activeIds.length > 0) {
+                            const amountPerEmp = amount / activeIds.length;
+                            activeIds.forEach((id: string) => {
+                                empTotals[id] = (empTotals[id] || 0) + amountPerEmp;
+                            });
+                        }
                     }
                 });
                 Object.entries(empTotals).forEach(([id, amt]) => {
