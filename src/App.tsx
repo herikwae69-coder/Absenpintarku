@@ -2026,7 +2026,7 @@ function AdminBonusEstafet({
     };
 
     fetchEstafet();
-    const interval = setInterval(fetchEstafet, 60000); // Poll every minute
+    const interval = setInterval(fetchEstafet, 600000); // Poll every 10 minutes
 
     return () => {
       componentMounted = false;
