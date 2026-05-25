@@ -954,6 +954,7 @@ export default function App() {
                   alert={customAlert}
                   activePeriodId={activePeriodId}
                   setActivePeriodId={setActivePeriodId}
+                  onRefresh={fetchInitialData}
                 />
               </motion.div>
             )}
@@ -8275,6 +8276,7 @@ function AdminDashboard({
   alert,
   activePeriodId,
   setActivePeriodId,
+  onRefresh,
 }: {
   employees: Employee[];
   shifts: Shift[];
@@ -8291,6 +8293,7 @@ function AdminDashboard({
   alert: (msg: string, type?: "success" | "error" | "info") => void;
   activePeriodId: string;
   setActivePeriodId: (id: string) => void;
+  onRefresh?: (force?: boolean) => Promise<void>;
 }) {
   const isSuper = currentUser?.role === "superadmin";
 
@@ -8783,6 +8786,7 @@ function AdminDashboard({
                     confirm={confirm}
                     prompt={prompt}
                     alert={alert}
+                    onRefresh={onRefresh}
                   />
                 </motion.div>
               </TabsContent>
@@ -8797,6 +8801,7 @@ function AdminDashboard({
                     confirm={confirm}
                     prompt={prompt}
                     alert={alert}
+                    onRefresh={onRefresh}
                   />
                 </motion.div>
               </TabsContent>
@@ -8811,6 +8816,7 @@ function AdminDashboard({
                     confirm={confirm}
                     prompt={prompt}
                     alert={alert}
+                    onRefresh={onRefresh}
                   />
                 </motion.div>
               </TabsContent>
@@ -8821,6 +8827,7 @@ function AdminDashboard({
                   confirm={confirm}
                   prompt={prompt}
                   alert={alert}
+                  onRefresh={onRefresh}
                 />
               </TabsContent>
               <TabsContent value="live" className="mt-0 outline-none">
@@ -8845,6 +8852,7 @@ function AdminDashboard({
                   confirm={confirm}
                   prompt={prompt}
                   alert={alert}
+                  onRefresh={onRefresh}
                 />
               </TabsContent>
               <TabsContent value="bonus-master" className="mt-0 outline-none">
@@ -10137,6 +10145,7 @@ function AdminEmployees({
   confirm,
   prompt,
   alert,
+  onRefresh,
 }: {
   employees: Employee[];
   shifts: Shift[];
@@ -10148,6 +10157,7 @@ function AdminEmployees({
   confirm: (msg: string, title?: string) => Promise<boolean>;
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
+  onRefresh?: (force?: boolean) => Promise<void>;
 }) {
   const [isEditing, setIsEditing] = useState<Employee | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -10250,6 +10260,7 @@ function AdminEmployees({
           });
         }
         alert("Berhasil mengimpor karyawan!");
+        if (onRefresh) await onRefresh(true);
       } catch (err) {
         console.error(err);
         alert("Gagal mengimpor data. Pastikan format benar.");
@@ -10279,6 +10290,7 @@ function AdminEmployees({
     });
     setShowAdd(false);
     resetForm();
+    if (onRefresh) await onRefresh(true);
   };
 
   const addSuperAdmin = async () => {
@@ -10297,6 +10309,7 @@ function AdminEmployees({
       isActive: true,
     });
     alert(`Super Admin ${adminName} Berhasil Dibuat`, "success");
+    if (onRefresh) await onRefresh(true);
   };
 
   const handleEdit = async () => {
@@ -10318,6 +10331,7 @@ function AdminEmployees({
     });
     setIsEditing(null);
     resetForm();
+    if (onRefresh) await onRefresh(true);
   };
 
   const handleResetPassword = async () => {
@@ -10331,6 +10345,7 @@ function AdminEmployees({
       updatedAt: serverTimestamp(),
     });
     alert("Password telah direset ke 123456.", "success");
+    if (onRefresh) await onRefresh(true);
   };
 
   const handleEmployeeDelete = async (emp: any) => {
@@ -10368,6 +10383,7 @@ function AdminEmployees({
       if (isConfirmed) {
         await deleteDoc(doc(db, "employees", emp.id));
         alert("Karyawan dihapus permanen.", "success");
+        if (onRefresh) await onRefresh(true);
       }
     } else {
       const reason = await prompt("Masukkan alasan nonaktif (misal: Resign, dll):", "Resign");
@@ -10386,6 +10402,7 @@ function AdminEmployees({
           deactivationDate: deactivationDate
         });
         alert("Karyawan dinonaktifkan.", "success");
+        if (onRefresh) await onRefresh(true);
       }
     }
   };
@@ -10551,6 +10568,7 @@ function AdminEmployees({
                       setShowDeactivateDialog(false);
                       setDeactivateReason("");
                       setSelectedEmployee(null);
+                      if (onRefresh) await onRefresh(true);
                 }} className="bg-rose-600 hover:bg-rose-500">Konfirmasi Nonaktif</Button>
               </DialogFooter>
             </DialogContent>
@@ -10589,6 +10607,7 @@ function AdminEmployees({
                       alert("Karyawan berhasil diaktifkan kembali.", "success");
                       setShowReactivateDialog(false);
                       setSelectedEmployee(null);
+                      if (onRefresh) await onRefresh(true);
                 }} className="bg-emerald-600 hover:bg-emerald-500">Aktifkan Kembali</Button>
               </DialogFooter>
             </DialogContent>
@@ -11133,12 +11152,14 @@ function AdminJobConfig({
   confirm,
   prompt,
   alert,
+  onRefresh,
 }: {
   jobPositions: JobPosition[];
   jobLevels: JobLevel[];
   confirm: (msg: string, title?: string) => Promise<boolean>;
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
+  onRefresh?: (force?: boolean) => Promise<void>;
 }) {
   const [activeSubTab, setActiveSubTab] = useState<"positions" | "levels">(
     "positions",
@@ -11194,6 +11215,7 @@ function AdminJobConfig({
     setShowAddPosition(false);
     setPositionForm({ name: "", description: "" });
     setEditingPosition(null);
+    if (onRefresh) await onRefresh(true);
   };
 
   const handleSaveLevel = async () => {
@@ -11219,12 +11241,14 @@ function AdminJobConfig({
       description: "",
     });
     setEditingLevel(null);
+    if (onRefresh) await onRefresh(true);
   };
 
   const handleDeletePosition = async (id: string) => {
     if (await confirm("Hapus jabatan ini?")) {
       await deleteDoc(doc(db, "jobPositions", id));
       alert("Jabatan dihapus", "success");
+      if (onRefresh) await onRefresh(true);
     }
   };
 
@@ -11232,6 +11256,7 @@ function AdminJobConfig({
     if (await confirm("Hapus level ini?")) {
       await deleteDoc(doc(db, "jobLevels", id));
       alert("Level dihapus", "success");
+      if (onRefresh) await onRefresh(true);
     }
   };
 
@@ -11711,11 +11736,13 @@ function AdminDivisions({
   confirm,
   prompt,
   alert,
+  onRefresh,
 }: {
   divisions: Division[];
   confirm: (msg: string, title?: string) => Promise<boolean>;
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
+  onRefresh?: (force?: boolean) => Promise<void>;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -11731,6 +11758,7 @@ function AdminDivisions({
     setShowAdd(false);
     setName("");
     setIsEditing(null);
+    if (onRefresh) await onRefresh(true);
   };
 
   const triggerEdit = (d: Division) => {
@@ -11751,6 +11779,7 @@ function AdminDivisions({
     if (isConfirmed) {
       await deleteDoc(doc(db, "divisions", id));
       alert("Divisi berhasil dihapus.", "success");
+      if (onRefresh) await onRefresh(true);
     }
   };
 
@@ -11870,12 +11899,14 @@ function AdminSections({
   confirm,
   prompt,
   alert,
+  onRefresh,
 }: {
   sections: Section[];
   divisions: Division[];
   confirm: (msg: string, title?: string) => Promise<boolean>;
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
+  onRefresh?: (force?: boolean) => Promise<void>;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
@@ -11894,6 +11925,7 @@ function AdminSections({
     await addDoc(collection(db, "sections"), { name, division });
     setShowAdd(false);
     setName("");
+    if (onRefresh) await onRefresh(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -11906,6 +11938,7 @@ function AdminSections({
     if (isConfirmed) {
       await deleteDoc(doc(db, "sections", id));
       alert("Bagian berhasil dihapus.", "success");
+      if (onRefresh) await onRefresh(true);
     }
   };
 
@@ -14393,11 +14426,13 @@ function AdminShifts({
   confirm,
   prompt,
   alert,
+  onRefresh,
 }: {
   shifts: Shift[];
   confirm: (msg: string, title?: string) => Promise<boolean>;
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
+  onRefresh?: (force?: boolean) => Promise<void>;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [formData, setFormData] = useState({
@@ -14419,6 +14454,7 @@ function AdminShifts({
       breakStart: "12:00",
       breakEnd: "13:00",
     });
+    if (onRefresh) await onRefresh(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -14431,6 +14467,7 @@ function AdminShifts({
     if (isConfirmed) {
       await deleteDoc(doc(db, "shifts", id));
       alert("Shift berhasil dihapus.", "success");
+      if (onRefresh) await onRefresh(true);
     }
   };
 
