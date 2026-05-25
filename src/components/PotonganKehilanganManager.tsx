@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Lock, Plus, Search, Trash2, Edit3, Download, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { PasswordInput } from './PasswordInput';
 import { Employee, PeriodControl } from '../types';
 import { auth } from '../lib/firebase';
 
@@ -120,12 +121,12 @@ const getPeriodOptions = (monthsBefore: number = 24, monthsAfter: number = 12) =
 
 const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
   return Object.entries(firestoreControls)
-    .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate)
+    .filter(([id, data]) => !data.hidden && data.name && data.active)
     .map(([id, data]) => ({
       label: data.name,
       value: id,
-      start: new Date(data.startDate),
-      end: new Date(data.endDate)
+      start: new Date(data.startDate || 0),
+      end: new Date(data.endDate || 0)
     }))
     .sort((a,b) => b.start.getTime() - a.start.getTime());
 };
@@ -150,15 +151,21 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = useMemo(() => getCombinedPeriods(controls), [controls]);
 
+  const [activePeriodIdFromConfig, setActivePeriodIdFromConfig] = useState<string>('');
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "systemConfig", "activePeriod"), (snap) => {
+        if(snap.exists()) setActivePeriodIdFromConfig(snap.data().periodId);
+    });
+    return unsub;
+  }, []);
+
   useEffect(() => {
      if (periodOptions.length > 0) {
         if (!selectedPeriodId || !periodOptions.find(p => p.value === selectedPeriodId)) {
-            const now = new Date();
-            const runningPeriod = periodOptions.find(p => now >= p.start && now <= p.end);
-            setSelectedPeriodId(runningPeriod ? runningPeriod.value : periodOptions[0].value);
+            setSelectedPeriodId(activePeriodIdFromConfig || periodOptions[0].value);
         }
      }
-  }, [periodOptions]);
+  }, [periodOptions, activePeriodIdFromConfig]);
 
   useEffect(() => {
     if (!selectedPeriodId) return;
@@ -172,19 +179,13 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
     return unsub;
   }, [selectedPeriodId]);
 
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [unlockAction, setUnlockAction] = useState<{ type: string; data?: any } | null>(null);
+
   const toggleLock = async () => {
     if (isLocked) {
-        const pass = prompt("Masukkan password untuk buka kunci:");
-        if (pass === 'admin123') {
-            try {
-                await setDoc(doc(db, 'potonganKehilanganConfig', selectedPeriodId), { isLocked: false }, { merge: true });
-                toast.success("Kunci dibuka");
-            } catch (e) {
-                handleFirestoreError(e, OperationType.WRITE, `potonganKehilanganConfig/${selectedPeriodId}`);
-            }
-        } else {
-            toast.error("Password salah");
-        }
+        setUnlockAction({ type: 'TOGGLE_LOCK' });
+        setShowUnlockDialog(true);
     } else {
         try {
             await setDoc(doc(db, 'potonganKehilanganConfig', selectedPeriodId), { isLocked: true }, { merge: true });
@@ -203,14 +204,17 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
   }
 
   useEffect(() => {
-     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
-       const data: Record<string, any> = {};
-       snap.docs.forEach(d => { data[d.id] = d.data(); });
-       setControls(data);
-     }, (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'periodControls');
-     });
-     return unsub;
+    const fetchControls = async () => {
+        try {
+            const snap = await getDocs(collection(db, "periodControls"));
+            const data: Record<string, any> = {};
+            snap.docs.forEach(d => { data[d.id] = d.data(); });
+            setControls(data);
+        } catch (error) {
+            handleFirestoreError(error, OperationType.LIST, 'periodControls');
+        }
+    };
+    fetchControls();
   }, []);
 
   useEffect(() => {
@@ -282,14 +286,8 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
   };
 
   const handleDeleteDebt = async (debt: Debt) => {
-      const pass = prompt("Masukkan password untuk hapus:");
-      if (pass !== 'admin123') { toast.error("Password salah"); return; }
-      try {
-          await deleteDoc(doc(db, 'potonganKehilangan', debt.empId, 'debts', debt.id));
-          toast.success("Hutang dihapus");
-      } catch (e) {
-          handleFirestoreError(e, OperationType.DELETE, 'potonganKehilangan/' + debt.empId + '/debts/' + debt.id);
-      }
+      setUnlockAction({ type: 'DELETE_DEBT', data: debt });
+      setShowUnlockDialog(true);
   };
 
   const handleInstallmentClick = (debt: Debt) => {
@@ -333,58 +331,83 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
   };
 
   const handleEditDebt = async (debt: Debt) => {
-      const pass = prompt("Masukkan password untuk edit:");
-      if (pass !== 'admin123') { toast.error("Password salah"); return; }
-      const newDesc = prompt("Keterangan baru:", debt.description);
-      if (newDesc === null) return;
-      try {
-          await setDoc(doc(db, 'potonganKehilangan', debt.empId, 'debts', debt.id), { description: newDesc }, { merge: true });
-          toast.success("Hutang diupdate");
-      } catch (e) {
-          handleFirestoreError(e, OperationType.UPDATE, 'potonganKehilangan/' + debt.empId + '/debts/' + debt.id);
-      }
+      setUnlockAction({ type: 'EDIT_DEBT', data: debt });
+      setShowUnlockDialog(true);
   };
 
   const handleEditPayment = async (payment: any) => {
-      const pass = prompt("Masukkan password untuk edit cicilan:");
-      if (pass !== 'admin123') { toast.error("Password salah"); return; }
-      
-      const newAmountStr = prompt("Masukkan besaran cicilan baru:", payment.amount.toString());
-      if (newAmountStr === null) return;
-      const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
-      
-      if (newAmount < 0) {
-          toast.error("Nominal tidak valid");
-          return;
-      }
-  
-      if (!historyDebt) return;
-  
-      const difference = newAmount - payment.amount;
-      const newRemaining = historyDebt.remainingAmount - difference;
-  
-      if (newRemaining < 0) {
-          toast.error("Total cicilan melebihi pokok hutang");
-          return;
-      }
-  
-      try {
-          await setDoc(doc(db, 'potonganKehilangan', historyDebt.empId, 'debts', historyDebt.id, 'payments', payment.id), { amount: newAmount }, { merge: true });
-          
-          const updateData: any = { remainingAmount: newRemaining };
-          if (newRemaining === 0) {
-              updateData.paidOffPeriodId = payment.periodId;
-          } else if (historyDebt.remainingAmount === 0 && newRemaining > 0) {
-               updateData.paidOffPeriodId = null; 
-          }
-          await setDoc(doc(db, 'potonganKehilangan', historyDebt.empId, 'debts', historyDebt.id), updateData, { merge: true });
-          
-          setHistoryDebt({...historyDebt, remainingAmount: newRemaining});
-          setPayments(payments.map(p => p.id === payment.id ? {...p, amount: newAmount} : p));
-          toast.success("Cicilan berhasil diubah");
-      } catch (e) {
-          handleFirestoreError(e, OperationType.UPDATE, 'potonganKehilangan/' + historyDebt.empId + '/debts/' + historyDebt.id + '/payments');
-      }
+       setUnlockAction({ type: 'EDIT_PAYMENT', data: payment });
+       setShowUnlockDialog(true);
+  };
+
+  const handlePasswordConfirm = async () => {
+    if (password === 'admin123') {
+        if (!unlockAction) return;
+
+        try {
+            switch (unlockAction.type) {
+                case 'TOGGLE_LOCK':
+                    await setDoc(doc(db, 'potonganKehilanganConfig', selectedPeriodId), { isLocked: false }, { merge: true });
+                    toast.success("Kunci dibuka");
+                    break;
+                case 'DELETE_DEBT':
+                    await deleteDoc(doc(db, 'potonganKehilangan', unlockAction.data.empId, 'debts', unlockAction.data.id));
+                    toast.success("Hutang dihapus");
+                    break;
+                case 'EDIT_DEBT': {
+                    const newDesc = prompt("Keterangan baru:", unlockAction.data.description);
+                    if (newDesc) {
+                        await setDoc(doc(db, 'potonganKehilangan', unlockAction.data.empId, 'debts', unlockAction.data.id), { description: newDesc }, { merge: true });
+                        toast.success("Hutang diupdate");
+                    }
+                    break;
+                }
+                case 'EDIT_PAYMENT': {
+                    const payment = unlockAction.data;
+                    const newAmountStr = prompt("Masukkan besaran cicilan baru:", payment.amount.toString());
+                    if (newAmountStr === null) break;
+                    const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
+                    
+                    if (newAmount < 0) {
+                        toast.error("Nominal tidak valid");
+                        break;
+                    }
+                
+                    if (!historyDebt) break;
+                
+                    const difference = newAmount - payment.amount;
+                    const newRemaining = historyDebt.remainingAmount - difference;
+                
+                    if (newRemaining < 0) {
+                        toast.error("Total cicilan melebihi pokok hutang");
+                        break;
+                    }
+                
+                    await setDoc(doc(db, 'potonganKehilangan', historyDebt.empId, 'debts', historyDebt.id, 'payments', payment.id), { amount: newAmount }, { merge: true });
+                    
+                    const updateData: any = { remainingAmount: newRemaining };
+                    if (newRemaining === 0) {
+                        updateData.paidOffPeriodId = payment.periodId;
+                    } else if (historyDebt.remainingAmount === 0 && newRemaining > 0) {
+                         updateData.paidOffPeriodId = null; 
+                    }
+                    await setDoc(doc(db, 'potonganKehilangan', historyDebt.empId, 'debts', historyDebt.id), updateData, { merge: true });
+                    
+                    setHistoryDebt({...historyDebt, remainingAmount: newRemaining});
+                    setPayments(payments.map(p => p.id === payment.id ? {...p, amount: newAmount} : p));
+                    toast.success("Cicilan berhasil diubah");
+                    break;
+                }
+            }
+            setShowUnlockDialog(false);
+            setPassword('');
+            setUnlockAction(null);
+        } catch (e) {
+            handleFirestoreError(e, OperationType.WRITE, 'potonganKehilangan');
+        }
+    } else {
+        toast.error("Password salah");
+    }
   };
 
   const handleExportCurrentPeriod = async () => {
@@ -752,6 +775,35 @@ export function PotonganKehilanganManager({ employees, activePeriodId, isEmploye
             )}
           </>
       )}
+      <Dialog open={showUnlockDialog} onOpenChange={(val) => {
+        setShowUnlockDialog(val);
+        if(!val) {
+          setPassword('');
+          setUnlockAction(null);
+        }
+      }}>
+        <DialogContent className="glass-panel border-none bg-black/95 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold uppercase tracking-widest">Konfirmasi Admin</DialogTitle>
+            <DialogDescription className="text-white/40">
+              Masukkan password admin untuk melanjutkan tindakan ini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6">
+            <PasswordInput 
+              placeholder="Password Admin" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="bg-white/5 border-white/10 text-white"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowUnlockDialog(false)} className="text-white/50 hover:text-white">Batal</Button>
+            <Button onClick={handlePasswordConfirm} className="bg-rose-600 hover:bg-rose-500 text-white font-bold px-6">Konfirmasi</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

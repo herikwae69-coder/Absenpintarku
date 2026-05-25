@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestoreUtils';
-import { collection, doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Lock, Plus, Search, Trash2, Edit3, Download, Check, Shirt } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { PasswordInput } from './PasswordInput';
 import { Employee } from '../types';
 import * as XLSX from 'xlsx';
 
@@ -27,24 +28,31 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
   const [allPeriodData, setAllPeriodData] = useState<any[]>([]);
   
   useEffect(() => {
-     const unsub = onSnapshot(collection(db, 'periodControls'), (snap) => {
-       const data: Record<string, any> = {};
-       snap.docs.forEach(d => { data[d.id] = d.data(); });
-       setControls(data);
-     });
-     return unsub;
+    const fetchControls = async () => {
+      try {
+        const snap = await getDocs(collection(db, "periodControls"));
+        const data: Record<string, any> = {};
+        snap.docs.forEach((d) => {
+          data[d.id] = d.data();
+        });
+        setControls(data);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, "periodControls");
+      }
+    };
+    fetchControls();
   }, []);
 
   const getCombinedPeriods = (ctrls: Record<string, any>) => {
-      const periods = Object.entries(ctrls)
-        .filter(([id, data]) => !data.hidden && data.name && data.startDate && data.endDate)
-        .map(([id, c]) => ({
-          value: id,
-          label: c.name || id,
-          start: c.startDate ? new Date(c.startDate) : new Date(0)
-        }))
-        .sort((a, b) => b.start.getTime() - a.start.getTime()); // Newest first
-      return periods;
+    const periods = Object.entries(ctrls)
+      .filter(([id, data]) => !data.hidden && data.name && data.active)
+      .map(([id, c]) => ({
+        value: id,
+        label: c.name || id,
+        start: c.startDate ? new Date(c.startDate) : new Date(0),
+      }))
+      .sort((a, b) => b.start.getTime() - a.start.getTime()); // Newest first
+    return periods;
   };
 
   const periodOptions = React.useMemo(() => getCombinedPeriods(controls), [controls]);
@@ -53,13 +61,14 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
   
   useEffect(() => {
     if (!activePeriodId && periodOptions.length > 0) {
-      const now = new Date();
-      const runningPeriod = periodOptions.find(p => now >= p.start && now <= p.end);
-      const newestPeriod = periodOptions[0];
-      const targetPeriod = runningPeriod || newestPeriod;
-      if (targetPeriod) {
-        setSelectedPeriod(targetPeriod.value);
-      }
+      // Find the active period ID from systemConfig if possible
+      const fetchActive = async () => {
+         const snap = await getDoc(doc(db, "systemConfig", "activePeriod"));
+         const activeId = snap.exists() ? snap.data().periodId : null;
+         const targetId = activeId || periodOptions[0].value;
+         if (targetId) setSelectedPeriod(targetId);
+      };
+      fetchActive();
     }
   }, [periodOptions, activePeriodId, setSelectedPeriod]);
 
@@ -247,20 +256,15 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
     toast.success("Data ditambahkan");
   };
 
+  const [unlockAction, setUnlockAction] = useState<{ type: string; data?: any } | null>(null);
+
   const handleRemove = (entryId: string) => {
     if (isLocked) {
       toast.error("Periode dikunci");
       return;
     }
-    const pass = prompt("Masukkan password untuk hapus potongan seragam:");
-    if (pass !== 'admin123') {
-        toast.error("Password salah");
-        return;
-    }
-    const updated = entries.filter(e => e.id !== entryId);
-    setEntries(updated);
-    saveEntries(updated);
-    toast.success("Data dihapus");
+    setUnlockAction({ type: 'REMOVE', data: entryId });
+    setShowUnlockDialog(true);
   };
   
   const handleEdit = (entry: any) => {
@@ -268,28 +272,8 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
       toast.error("Periode dikunci");
       return;
     }
-    const pass = prompt("Masukkan password untuk edit potongan seragam:");
-    if (pass !== 'admin123') {
-        toast.error("Password salah");
-        return;
-    }
-    
-    const newDesc = prompt("Keterangan seragam baru:", entry.description);
-    if (newDesc === null) return;
-    
-    const newAmountStr = prompt("Harga baru:", entry.amount.toString());
-    if (newAmountStr === null) return;
-    
-    const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
-    if (newAmount < 0) {
-        toast.error("Nominal tidak valid");
-        return;
-    }
-
-    const updated = entries.map(e => e.id === entry.id ? { ...e, amount: newAmount, description: newDesc || e.description } : e);
-    setEntries(updated);
-    saveEntries(updated);
-    toast.success("Data diubah");
+    setUnlockAction({ type: 'EDIT', data: entry });
+    setShowUnlockDialog(true);
   };
 
   const handleDownload = () => {
@@ -320,10 +304,33 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
 
   const handleUnlock = async () => {
     if (password === 'admin123') { 
-       await setDoc(doc(db, 'potonganSeragam', selectedPeriod), { isLocked: false }, { merge: true });
+       if (unlockAction) {
+           if (unlockAction.type === 'REMOVE') {
+               const updated = entries.filter(e => e.id !== unlockAction.data);
+               setEntries(updated);
+               saveEntries(updated);
+               toast.success("Data dihapus");
+           } else if (unlockAction.type === 'EDIT') {
+               const entry = unlockAction.data;
+               const newDesc = prompt("Keterangan seragam baru:", entry.description);
+               if (newDesc !== null) {
+                   const newAmountStr = prompt("Harga baru:", entry.amount.toString());
+                   if (newAmountStr !== null) {
+                       const newAmount = parseInt(newAmountStr.replace(/\D/g, '')) || 0;
+                       const updated = entries.map(e => e.id === entry.id ? { ...e, amount: newAmount, description: newDesc || e.description } : e);
+                       setEntries(updated);
+                       saveEntries(updated);
+                       toast.success("Data diubah");
+                   }
+               }
+           }
+           setUnlockAction(null);
+       } else {
+           await setDoc(doc(db, 'potonganSeragam', selectedPeriod), { isLocked: false }, { merge: true });
+           toast.success("Periode dibuka");
+       }
        setShowUnlockDialog(false);
        setPassword('');
-       toast.success("Periode dibuka");
     } else {
        toast.error("Password salah");
     }
@@ -436,8 +443,7 @@ export function PotonganSeragamManager({ employees, activePeriodId, setActivePer
             <DialogTitle className="text-xl font-bold">Buka Kunci Periode</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <Input 
-              type="password" 
+            <PasswordInput
               placeholder="Masukkan password..." 
               value={password}
               onChange={(e) => setPassword(e.target.value)}

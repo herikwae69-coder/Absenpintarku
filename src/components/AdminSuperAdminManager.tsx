@@ -9,6 +9,7 @@ import { Trash2, Plus } from "lucide-react";
 import { SuperAdmin } from "../types";
 import { toast } from "sonner";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
+import { MasterPeriodManager } from "./MasterPeriodManager";
 
 export function AdminSuperAdminManager() {
   const [superAdmins, setSuperAdmins] = useState<SuperAdmin[]>([]);
@@ -44,6 +45,7 @@ export function AdminSuperAdminManager() {
   }
 
   return (
+    <div className="space-y-6">
     <Card className="glass-panel border-none shadow-lg">
       <CardHeader>
         <CardTitle className="text-white">Kelola SuperAdmin</CardTitle>
@@ -67,5 +69,7 @@ export function AdminSuperAdminManager() {
         </div>
       </CardContent>
     </Card>
+    <MasterPeriodManager />
+    </div>
   );
 }

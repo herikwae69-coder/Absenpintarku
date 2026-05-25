@@ -30,6 +30,14 @@ export function AdminShiftPeriode({
   const hd = useMemo(() => new Holidays("ID"), []);
   const [periodOptions, setPeriodOptions] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [activePeriodIdFromConfig, setActivePeriodIdFromConfig] = useState<string>('');
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "systemConfig", "activePeriod"), (snap) => {
+        if(snap.exists()) setActivePeriodIdFromConfig(snap.data().periodId);
+    });
+    return unsub;
+  }, []);
 
   const fetchPeriods = async () => {
     try {
@@ -44,10 +52,12 @@ export function AdminShiftPeriode({
               end: data.endDate ? new Date(data.endDate) : new Date(),
               ...data
           };
-      }).filter((p: any) => !!p.label).sort((a,b) => b.start.getTime() - a.start.getTime()); // fallback
+      }).filter((p: any) => !!p.label && !!p.active).sort((a,b) => b.start.getTime() - a.start.getTime()); // fallback
       setPeriodOptions(opts);
-      if (opts.length > 0 && !selectedPeriod) {
-          setSelectedPeriod(opts[0].value);
+      if (opts.length > 0) {
+          if(!selectedPeriod || !opts.find(o => o.value === selectedPeriod)) {
+              setSelectedPeriod(activePeriodIdFromConfig || opts[0].value);
+          }
       }
     } catch(err) {
       console.error("Error fetching periods:", err);
@@ -56,7 +66,7 @@ export function AdminShiftPeriode({
 
   useEffect(() => {
     fetchPeriods();
-  }, [db]);
+  }, [db, activePeriodIdFromConfig]);
 
   const [selectedDivision, setSelectedDivision] = useState(divisions?.[0]?.name || "");
   const [numGroups, setNumGroups] = useState<"2" | "3">("3");
