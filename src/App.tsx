@@ -498,7 +498,7 @@ export default function App() {
           }
       }
 
-      const [empSnap, shiftSnap, secSnap, divSnap, posSnap, lvlSnap, saSnap] = await Promise.all([
+      const [empSnap, shiftSnap, secSnap, divSnap, posSnap, lvlSnap, saSnap, activePeriodSnap] = await Promise.all([
         getDocs(collection(db, "employees")),
         getDocs(collection(db, "shifts")),
         getDocs(collection(db, "sections")),
@@ -506,6 +506,7 @@ export default function App() {
         getDocs(collection(db, "jobPositions")),
         getDocs(collection(db, "jobLevels")),
         getDocs(collection(db, "superAdmins")),
+        getDoc(doc(db, "systemConfig", "activePeriod")),
       ]);
 
       const employees = empSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Employee);
@@ -517,6 +518,10 @@ export default function App() {
       
       const levels = lvlSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as JobLevel);
       const sortedLevels = levels.sort((a, b) => a.rank - b.rank);
+
+      if (activePeriodSnap.exists()) {
+        setActivePeriodId(activePeriodSnap.data().periodId);
+      }
       
       setEmployees(employees);
       setShifts(shifts);
@@ -2043,7 +2048,6 @@ function AdminBonusEstafet({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     // Fetch Bonus Master and Bonus Estafet
@@ -2498,7 +2502,6 @@ function AdminBonusMaster({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     // Fetch existing settings for this period
@@ -3021,7 +3024,6 @@ function AdminBonusJagaDepan({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     // Fetch Bonus Master and Bonus Jaga Depan
@@ -3479,7 +3481,6 @@ function AdminBonusLainLain({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     const unsub = getSnapshotOnce(
@@ -4054,7 +4055,6 @@ function AdminBonusLainLainCombined({
 
   useEffect(() => {
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     const unsubJaga = getSnapshotOnce(
@@ -6091,7 +6091,6 @@ function AdminBonusNota({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     const unsub = getSnapshotOnce(
@@ -6761,7 +6760,6 @@ function AdminKoreksiGaji({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     const unsub = getSnapshotOnce(
@@ -7150,7 +7148,6 @@ function AdminKoreksiGajiMinus({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     const unsub = getSnapshotOnce(
@@ -7540,7 +7537,6 @@ function AdminBonusBerat({
   useEffect(() => {
     let componentMounted = true;
     if (!selectedPeriod) return;
-    if (!isEditingData) return;
     setLoading(true);
 
     const unsub = getSnapshotOnce(
@@ -8767,7 +8763,10 @@ function AdminDashboard({
 
             <div className="focus-visible:outline-none min-h-[500px]">
               <TabsContent value="superadmin-manager" className="mt-0 outline-none">
-                <AdminSuperAdminManager />
+                <AdminSuperAdminManager 
+                  activePeriodId={activePeriodId}
+                  setActivePeriodId={setActivePeriodId}
+                />
               </TabsContent>
               <TabsContent value="employees" className="mt-0 outline-none">
                 <motion.div

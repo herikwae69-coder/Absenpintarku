@@ -11,7 +11,13 @@ import { toast } from "sonner";
 import { handleFirestoreError, OperationType } from "../lib/firestoreUtils";
 import { MasterPeriodManager } from "./MasterPeriodManager";
 
-export function AdminSuperAdminManager() {
+export function AdminSuperAdminManager({ 
+  activePeriodId, 
+  setActivePeriodId 
+}: { 
+  activePeriodId: string; 
+  setActivePeriodId: (id: string) => void;
+}) {
   const [superAdmins, setSuperAdmins] = useState<SuperAdmin[]>([]);
   const [name, setName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
@@ -69,7 +75,10 @@ export function AdminSuperAdminManager() {
         </div>
       </CardContent>
     </Card>
-    <MasterPeriodManager />
+    <MasterPeriodManager 
+      activePeriodId={activePeriodId} 
+      setActivePeriodId={setActivePeriodId} 
+    />
     </div>
   );
 }
