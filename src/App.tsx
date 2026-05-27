@@ -16807,6 +16807,7 @@ function EmployeeLeave({
     const period = periodOptions.find((p) => p.value === selectedPeriod);
     if (period) {
       for (const d of selectedDates) {
+        if (d.startsWith("BEBAS")) continue;
         const dateObj = d ? new Date(d) : new Date();
         if (
           isBefore(dateObj, startOfDay(period.start)) ||
@@ -17161,31 +17162,48 @@ function EmployeeLeave({
                           Libur Ke-{index + 1}
                         </Label>
                         <div className="relative">
-                          <Input
-                            type="date"
-                            value={d}
-                            onChange={(e) => {
-                              const newDates = [...formData.dates];
-                              newDates[index] = e.target.value;
-                              setFormData({ ...formData, dates: newDates });
-                            }}
-                            className="field-input text-xs w-full pr-10"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full w-10 text-white/50 hover:text-white"
-                            onClick={() => {
-                              if (d) {
-                                const newDates = [...formData.dates];
-                                newDates[index] = "";
-                                setFormData({ ...formData, dates: newDates });
-                              }
-                            }}
-                          >
-                             {d ? <Trash2 className="h-4 w-4" /> : <CalendarIcon className="h-4 w-4" />}
-                          </Button>
+                          {d ? (
+                            <div className="flex items-center justify-between field-input text-xs w-full pr-2 text-white">
+                              {d.startsWith('BEBAS') ? 'TGL BEBAS' : d}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => {
+                                  const newDates = [...formData.dates];
+                                  newDates[index] = "";
+                                  setFormData({ ...formData, dates: newDates });
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              type="button"
+                              className="field-input text-xs w-full text-white/50 justify-start"
+                              onClick={() => {
+                                // Logic to open a selection modal (to be implemented next)
+                                const choice = prompt("Pilih tipe libur: 1 untuk Tgl Sendiri, 2 untuk Tgl Bebas");
+                                if (choice === "1") {
+                                  const date = prompt("Masukkan tanggal (YYYY-MM-DD):");
+                                  if (date) {
+                                    const newDates = [...formData.dates];
+                                    newDates[index] = date;
+                                    setFormData({ ...formData, dates: newDates });
+                                  }
+                                } else if (choice === "2") {
+                                  // Mark as BEBAS
+                                  const newDates = [...formData.dates];
+                                  newDates[index] = "BEBAS_" + Date.now() + "_" + index;
+                                  setFormData({ ...formData, dates: newDates });
+                                }
+                              }}
+                            >
+                              Pilih Tanggal
+                            </Button>
+                          )}
                         </div>
                       </div>
                     ))}
