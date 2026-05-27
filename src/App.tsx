@@ -439,9 +439,9 @@ const getPeriodOptions = (
   return options;
 };
 
-const getCombinedPeriods = (firestoreControls: Record<string, any>) => { console.log("DEBUG: firestoreControls:", firestoreControls);
+const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
   return Object.entries(firestoreControls)
-    .filter(([id, data]) => !!data.name)
+    .filter(([id, data]) => !data.hidden && data.name && data.active)
     .map(([id, data]) => ({
       label: data.name,
       value: id,
@@ -12378,6 +12378,7 @@ function AdminJadwalLibur({
 const [selectedDivision, setSelectedDivision] = useState<string>(
     divisions?.[0]?.name || "Marketing",
   );
+  const [activeHoldDate, setActiveHoldDate] = useState<string | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
@@ -16562,6 +16563,7 @@ function EmployeeLeave({
     sectionId: "",
   });
   const [showDateSelector, setShowDateSelector] = useState<{index: number | null}>({index: null});
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
 
   useEffect(() => {
