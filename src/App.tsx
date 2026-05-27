@@ -16561,9 +16561,8 @@ function EmployeeLeave({
     reason: "",
     sectionId: "",
   });
-  const [activeHoldDate, setActiveHoldDate] = useState<string | null>(null);
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
-  const isPostPopupRef = React.useRef(false);
+  const [showDateSelector, setShowDateSelector] = useState<{index: number | null}>({index: null});
+
 
   useEffect(() => {
     const unsub1 = getSnapshotOnce(doc(db, "systemConfig", "requestKata"), (doc) => {
