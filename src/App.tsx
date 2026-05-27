@@ -37,6 +37,43 @@ import {
 
 const getSnapshotOnce = onSnapshot;
 
+let sharedPeriodControlsCache: Record<string, any> = {};
+let controlsReadyPromise: Promise<Record<string, any>> | null = null;
+type PeriodListener = (data: Record<string, any>) => void;
+const periodListeners: PeriodListener[] = [];
+
+export const getSharedPeriodControls = async () => {
+  if (!controlsReadyPromise) {
+    controlsReadyPromise = new Promise((resolve) => {
+      onSnapshot(collection(db, "periodControls"), (snap) => {
+        const data: Record<string, any> = {};
+        snap.docs.forEach((d) => {
+          data[d.id] = d.data();
+        });
+        sharedPeriodControlsCache = data;
+        resolve(data);
+        periodListeners.forEach(fn => fn(data));
+      });
+    });
+  }
+  await controlsReadyPromise;
+  return sharedPeriodControlsCache;
+};
+
+export const subscribePeriodControls = (fn: PeriodListener) => {
+  periodListeners.push(fn);
+  if (controlsReadyPromise) {
+    controlsReadyPromise.then(() => fn(sharedPeriodControlsCache));
+  } else {
+    getSharedPeriodControls();
+  }
+  return () => {
+    const idx = periodListeners.indexOf(fn);
+    if (idx > -1) periodListeners.splice(idx, 1);
+  };
+};
+
+
 import {
   format,
   startOfDay,
@@ -1948,15 +1985,10 @@ function AdminBonusEstafet({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -2253,9 +2285,9 @@ function AdminBonusEstafet({
           ) : (
             <Button
               onClick={() => setIsEditingData?.(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -2453,15 +2485,10 @@ function AdminBonusMaster({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -2765,9 +2792,9 @@ function AdminBonusMaster({
           ) : (
             <Button
               onClick={() => setIsEditingData(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-12 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -2929,15 +2956,10 @@ function AdminBonusJagaDepan({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -3202,9 +3224,9 @@ function AdminBonusJagaDepan({
           ) : (
             <Button
               onClick={() => setIsEditingData?.(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -3404,15 +3426,10 @@ function AdminBonusLainLain({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -3745,9 +3762,9 @@ function AdminBonusLainLain({
           ) : (
             <Button
               onClick={() => setIsEditingData?.(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -4029,15 +4046,10 @@ function AdminBonusLainLainCombined({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -4350,15 +4362,10 @@ function AdminBonusOperator({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -4666,9 +4673,9 @@ function AdminBonusOperator({
               ) : (
                 <Button
                   onClick={() => setIsEditingData?.(true)}
-                  disabled={loading || isLocked}
+                  disabled={loading}
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-                >Lihat Tabel</Button>
+>Lihat Tabel</Button>
               )}
               <Button
                 onClick={toggleLock}
@@ -6059,15 +6066,10 @@ function AdminBonusNota({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -6467,9 +6469,9 @@ function AdminBonusNota({
           ) : (
             <Button
               onClick={() => setIsEditingData?.(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -6730,15 +6732,10 @@ function AdminKoreksiGaji({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -6966,9 +6963,9 @@ function AdminKoreksiGaji({
           ) : (
             <Button
               onClick={() => setIsEditingData?.(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -7118,15 +7115,10 @@ function AdminKoreksiGajiMinus({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -7354,9 +7346,9 @@ function AdminKoreksiGajiMinus({
           ) : (
             <Button
               onClick={() => setIsEditingData?.(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -7505,15 +7497,10 @@ function AdminBonusBerat({
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const periodOptions = React.useMemo(
@@ -7913,9 +7900,9 @@ function AdminBonusBerat({
           ) : (
             <Button
               onClick={() => setIsEditingData?.(true)}
-              disabled={loading || isLocked}
+              disabled={loading}
               className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 h-11 rounded-xl"
-            >Lihat Tabel</Button>
+>Lihat Tabel</Button>
           )}
           <Button
             onClick={toggleLock}
@@ -12240,15 +12227,10 @@ function AdminJadwalLibur({
   );
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   useEffect(() => {
@@ -13238,15 +13220,10 @@ function AdminQuota({
   const [importing, setImporting] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       if(setControls) setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   useEffect(() => {
@@ -13651,16 +13628,11 @@ function AdminPeriods({
   });
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.docs.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       setControls(data);
       setLoading(false);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   const combinedPeriods = getCombinedPeriods(controls);
@@ -15664,15 +15636,10 @@ function AdminLeave({
   };
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
 
   useEffect(() => {
@@ -16385,15 +16352,10 @@ function EmployeeLeave({
   const [showAdd, setShowAdd] = useState(false);
 
   useEffect(() => {
-    const fetchControls = async () => {
-      const snap = await getDocs(collection(db, "periodControls"));
-      const data: Record<string, any> = {};
-      snap.forEach((d) => {
-        data[d.id] = d.data();
-      });
+    const unsub = subscribePeriodControls((data) => {
       setControls(data);
-    };
-    fetchControls();
+    });
+    return unsub;
   }, []);
   const [showMusicPopup, setShowMusicPopup] = useState(false);
   const [musicPopupText, setMusicPopupText] = useState(

@@ -1,0 +1,15 @@
+1952:      const snap = await getDocs(collection(db, "periodControls"));
+2457:      const snap = await getDocs(collection(db, "periodControls"));
+2933:      const snap = await getDocs(collection(db, "periodControls"));
+3408:      const snap = await getDocs(collection(db, "periodControls"));
+4033:      const snap = await getDocs(collection(db, "periodControls"));
+4354:      const snap = await getDocs(collection(db, "periodControls"));
+6063:      const snap = await getDocs(collection(db, "periodControls"));
+6734:      const snap = await getDocs(collection(db, "periodControls"));
+7122:      const snap = await getDocs(collection(db, "periodControls"));
+7509:      const snap = await getDocs(collection(db, "periodControls"));
+12244:      const snap = await getDocs(collection(db, "periodControls"));
+13242:      const snap = await getDocs(collection(db, "periodControls"));
+13655:      const snap = await getDocs(collection(db, "periodControls"));
+15668:      const snap = await getDocs(collection(db, "periodControls"));
+16389:      const snap = await getDocs(collection(db, "periodControls"));
