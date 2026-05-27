@@ -12366,6 +12366,8 @@ function AdminJadwalLibur({
   prompt: (msg: string, def?: string, title?: string) => Promise<string | null>;
   alert: (msg: string, type?: "success" | "error" | "info") => void;
 }) {
+  console.log("AdminJadwalLibur rendered");
+  const [holdDate, setHoldDate] = useState<string | null>(null);
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = React.useMemo(
     () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
@@ -12378,7 +12380,6 @@ function AdminJadwalLibur({
 const [selectedDivision, setSelectedDivision] = useState<string>(
     divisions?.[0]?.name || "Marketing",
   );
-  const [activeHoldDate, setActiveHoldDate] = useState<string | null>(null);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
@@ -17570,7 +17571,7 @@ function EmployeeLeave({
                           key={dateStr}
                           onClick={() => {
                             if (isFull || count > 0) {
-                              setActiveHoldDate((prev) =>
+                              setHoldDate((prev) =>
                                 prev === dateStr ? null : dateStr,
                               );
                             }
@@ -17579,10 +17580,10 @@ function EmployeeLeave({
                             aspect-square rounded-xl flex flex-col items-center justify-center relative transition-all duration-300 cursor-pointer
                             ${isFull ? "bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)] scale-105 z-10" : "bg-white/5 border border-white/5 hover:bg-white/10"}
                             ${isToday ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}
-                            ${activeHoldDate === dateStr ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-background z-20" : ""}
+                            ${holdDate === dateStr ? "ring-2 ring-blue-500 ring-offset-2 ring-offset-background z-20" : ""}
                           `}
                         >
-                          {activeHoldDate === dateStr &&
+                          {holdDate === dateStr &&
                             usersPerDate[dateStr] && (
                               <motion.div
                                 initial={{ opacity: 0, y: 10, scale: 0.9 }}
