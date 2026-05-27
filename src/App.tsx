@@ -441,7 +441,7 @@ const getPeriodOptions = (
 
 const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
   return Object.entries(firestoreControls)
-    .filter(([id, data]) => !data.hidden && data.name && data.active)
+    .filter(([id, data]) => !data.hidden && data.name)
     .map(([id, data]) => ({
       label: data.name,
       value: id,
@@ -1241,7 +1241,7 @@ function LoginView({
         className="fixed top-4 right-4 z-50"
       />
       <button
-        onClick={() => window.location.reload()}
+        onClick={() => fetchInitialData(true)}
         className="fixed top-4 left-4 z-50 p-2 rounded-xl bg-primary/20 hover:bg-primary/40 transition-colors flex flex-col items-center justify-center gap-1 shadow-md"
         title="Refresh Data"
       >
@@ -8706,7 +8706,9 @@ function AdminDashboard({
 
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={() => window.location.reload()}
+            onClick={async () => {
+              if (onRefresh) await onRefresh(true);
+            }}
             className="flex flex-col items-center justify-center gap-1 bg-white/10 hover:bg-white/20 rounded-xl p-1.5 px-3 transition-colors group mr-1 shadow-sm"
             title="Refresh Halaman"
           >
