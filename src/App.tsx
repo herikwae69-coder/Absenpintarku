@@ -439,9 +439,9 @@ const getPeriodOptions = (
   return options;
 };
 
-const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
+const getCombinedPeriods = (firestoreControls: Record<string, any>) => { console.log("DEBUG: firestoreControls:", firestoreControls);
   return Object.entries(firestoreControls)
-    .filter(([id, data]) => !data.hidden && data.name)
+    .filter(([id, data]) => !!data.name)
     .map(([id, data]) => ({
       label: data.name,
       value: id,
@@ -1992,7 +1992,7 @@ function AdminBonusEstafet({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
@@ -2008,6 +2008,10 @@ function AdminBonusEstafet({
   const [unlockPassword, setUnlockPassword] = useState("");
 
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  console.log('PERIOD OPTIONS:', periodOptions, 'CONTROLS:', controls);
+  
+
 
   const dates = React.useMemo(() => {
     if (!currentPeriod) return [];
@@ -2222,6 +2226,19 @@ function AdminBonusEstafet({
     });
   };
 
+  if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA". <br/>DEBUG: {JSON.stringify(Object.keys(controls))} <br/> STATUS: {JSON.stringify(Object.values(controls).map(c => c.status))}
+        </p>
+      </div>
+    );
+  }
   if (!currentPeriod) return null;
 
   return (
@@ -2492,7 +2509,7 @@ function AdminBonusMaster({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
@@ -2513,6 +2530,9 @@ function AdminBonusMaster({
   const [password, setPassword] = useState("");
 
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   // Generate list of dates for the period
   const dates = React.useMemo(() => {
@@ -2713,6 +2733,19 @@ function AdminBonusMaster({
     if (onDirtyChange) onDirtyChange(true);
   };
 
+  if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
   if (!currentPeriod) return null;
 
   return (
@@ -2963,7 +2996,7 @@ function AdminBonusJagaDepan({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
@@ -2979,6 +3012,9 @@ function AdminBonusJagaDepan({
   const [unlockPassword, setUnlockPassword] = useState("");
 
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const dates = React.useMemo(() => {
     if (!currentPeriod) return [];
@@ -3160,6 +3196,19 @@ function AdminBonusJagaDepan({
     }
   };
 
+  if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
   if (!currentPeriod) return null;
 
   return (
@@ -3433,7 +3482,7 @@ function AdminBonusLainLain({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
@@ -3476,6 +3525,9 @@ function AdminBonusLainLain({
   }, [entryPin, employees]);
 
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const employeeTotals = React.useMemo(() => {
     const totals: Record<string, number> = {};
@@ -3700,7 +3752,20 @@ function AdminBonusLainLain({
       toast.error("Gagal menghapus entri");
     }
   };
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -4053,12 +4118,15 @@ function AdminBonusLainLainCombined({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const [jagaDepanData, setJagaDepanData] = useState<any>(null);
   const [bonusMaster, setBonusMaster] = useState<any[]>([]);
@@ -4206,7 +4274,20 @@ function AdminBonusLainLainCombined({
       `Bonus_Lain_Lain_Combined_${currentPeriod?.label || selectedPeriod || "All"}.xlsx`,
     );
   };
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -4369,12 +4450,15 @@ function AdminBonusOperator({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const [notaRate, setNotaRate] = useState<number>(50);
   const [balenRate, setBalenRate] = useState<number>(70);
@@ -4619,7 +4703,20 @@ function AdminBonusOperator({
       e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       e.pin.toLowerCase().includes(searchTerm.toLowerCase()),
   );
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -6073,12 +6170,15 @@ function AdminBonusNota({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
   const [isLocked, setIsLocked] = useState(false);
@@ -6400,7 +6500,20 @@ function AdminBonusNota({
     (a: number, b: number) => a + b,
     0,
   );
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -6739,12 +6852,15 @@ function AdminKoreksiGaji({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
   const [isLocked, setIsLocked] = useState(false);
@@ -6904,7 +7020,20 @@ function AdminKoreksiGaji({
       toast.error("Password salah");
     }
   };
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -7122,12 +7251,15 @@ function AdminKoreksiGajiMinus({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
   const [isLocked, setIsLocked] = useState(false);
@@ -7287,7 +7419,20 @@ function AdminKoreksiGajiMinus({
       toast.error("Password salah");
     }
   };
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -7504,12 +7649,15 @@ function AdminBonusBerat({
   }, []);
 
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const selectedPeriod = activePeriodId || periodOptions[0]?.value || "";
   const setSelectedPeriod = setActivePeriodId || (() => {});
   const currentPeriod = periodOptions.find((p) => p.value === selectedPeriod);
+
+  
+
 
   const [entries, setEntries] = useState<Record<string, number>>({}); // { empId: amount }
   const [isLocked, setIsLocked] = useState(false);
@@ -7831,7 +7979,20 @@ function AdminBonusBerat({
     (a: number, b: number) => a + b,
     0,
   );
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -8358,6 +8519,16 @@ function AdminDashboard({
   };
 
   const rawMenuGroups = [
+    {
+      label: "Master Data",
+      items: [
+        {
+          value: "periods",
+          label: "Manajemen Periode",
+          icon: <CalendarIcon className="w-4 h-4 text-emerald-400" />,
+        },
+      ],
+    },
     {
       label: "Ringkasan",
       items: [
@@ -12197,11 +12368,14 @@ function AdminJadwalLibur({
 }) {
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = React.useMemo(
-    () => getCombinedPeriods(controls),
+    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
     [controls],
   );
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
-  const [selectedDivision, setSelectedDivision] = useState<string>(
+  
+
+  
+const [selectedDivision, setSelectedDivision] = useState<string>(
     divisions?.[0]?.name || "Marketing",
   );
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -12780,7 +12954,20 @@ function AdminJadwalLibur({
     (dateMap["TRASH"] && dateMap["TRASH"].length > 0);
 
   const activePeriod = periodOptions.find((p) => p.value === selectedPeriod);
-
+if (periodOptions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 glass-panel border-white/5 rounded-3xl mt-8">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mb-4">
+          <CalendarIcon className="w-8 h-8 text-rose-400" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
+        <p className="text-white/50 text-center max-w-md">
+          Belum ada periode yang berstatus "BUKA".
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6" id="jadwal-libur-section">
       <Card className="glass-panel border-none shadow-lg text-white">
