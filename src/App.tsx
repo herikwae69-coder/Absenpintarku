@@ -60,6 +60,12 @@ export const getSharedPeriodControls = async () => {
   return sharedPeriodControlsCache;
 };
 
+export const resetSharedPeriodControls = () => {
+    sharedPeriodControlsCache = {};
+    controlsReadyPromise = null;
+    getSharedPeriodControls();
+};
+
 export const subscribePeriodControls = (fn: PeriodListener) => {
   periodListeners.push(fn);
   if (controlsReadyPromise) {
@@ -894,7 +900,7 @@ export default function App() {
     );
   }
 
-  if (loading)
+  if (loading && view === "login")
     return (
       <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50">
         <div className="mesh-bg" />
@@ -8512,6 +8518,7 @@ function AdminDashboard({
   };
 
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>("Ringkasan");
 
   const toggleGroup = (label: string) => {
@@ -8878,13 +8885,32 @@ function AdminDashboard({
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={async () => {
-              if (onRefresh) await onRefresh(true);
+              if (isRefreshing) return;
+              setIsRefreshing(true);
+              try {
+                // 1. Clear LocalStorage caches
+                localStorage.removeItem("initialData");
+                // 2. Clear memory cache for shared controls
+                resetSharedPeriodControls();
+                // 3. Re-fetch all initial data
+                if (onRefresh) await onRefresh(true);
+                
+                alert("Data berhasil diperbarui!", "success");
+              } catch (e) {
+                console.error(e);
+                alert("Gagal memperbarui data", "error");
+              } finally {
+                setIsRefreshing(false);
+              }
             }}
-            className="flex flex-col items-center justify-center gap-1 bg-white/10 hover:bg-white/20 rounded-xl p-1.5 px-3 transition-colors group mr-1 shadow-sm"
-            title="Refresh Halaman"
+            disabled={isRefreshing}
+            className={`flex flex-col items-center justify-center gap-1 bg-white/10 hover:bg-white/20 rounded-xl p-1.5 px-3 transition-colors group mr-1 shadow-sm ${isRefreshing ? "opacity-50 cursor-not-allowed" : ""}`}
+            title="Refresh Data & Hapus Cache"
           >
-            <RefreshCw size={16} className="text-white font-bold group-hover:text-primary transition-colors" />
-            <span className="text-[10px] font-bold text-white group-hover:text-primary leading-none">refresh</span>
+            <RefreshCw size={16} className={`text-white font-bold group-hover:text-primary transition-colors ${isRefreshing ? "animate-spin text-primary" : ""}`} />
+            <span className="text-[10px] font-bold text-white group-hover:text-primary leading-none">
+              {isRefreshing ? "loading..." : "refresh"}
+            </span>
           </button>
           
           <div className="h-6 w-px bg-white/10 hidden sm:block" />
