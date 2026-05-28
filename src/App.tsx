@@ -1,4 +1,5 @@
 import { AdminShiftPeriode } from "./components/AdminShiftPeriode";
+import { LiburPeriodManager } from "./components/LiburPeriodManager";
 import "leaflet/dist/leaflet.css";
 import React, { useState, useEffect, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
@@ -79,6 +80,15 @@ export const subscribePeriodControls = (fn: PeriodListener) => {
   };
 };
 
+export const getMostRecentResetPoint = () => {
+  const d = new Date();
+  if (d.getHours() < 14) {
+    d.setDate(d.getDate() - 1);
+  }
+  d.setHours(14, 0, 0, 0);
+  return d.getTime();
+};
+
 
 import {
   format,
@@ -137,6 +147,7 @@ import {
   ClipboardList,
   BadgeCheck,
   AlertCircle,
+  AlertTriangle,
   Menu,
   History,
   Crown,
@@ -195,7 +206,6 @@ import { PotonganKehilanganManager } from "./components/PotonganKehilanganManage
 import { PotonganKehilanganBersamaManager } from "./components/PotonganKehilanganBersamaManager";
 import { PotonganSeragamManager } from "./components/PotonganSeragamManager";
 import { AdminSuperAdminManager } from "./components/AdminSuperAdminManager";
-import { MasterPeriodManager } from "./components/MasterPeriodManager";
 import AdminAuditDanExport from "./components/AdminAuditDanExport";
 import { WhatsappSelectionDialog } from "./components/WhatsappSelectionDialog";
 import {
@@ -510,6 +520,19 @@ export default function App() {
   const [activePeriodId, setActivePeriodId] = useState<string>("");
   const [superAdmins, setSuperAdmins] = useState<SuperAdmin[]>([]);
   const [showWaSelection, setShowWaSelection] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Maintenance Listener
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "systemConfig", "maintenance"), (doc) => {
+      if (doc.exists()) {
+        setIsUpdating(!!doc.data()?.isUpdating);
+      } else {
+        setIsUpdating(false);
+      }
+    });
+    return unsub;
+  }, []);
 
   // Initialize Data Fetching
   const fetchInitialData = async (forceRefresh: boolean = false) => {
@@ -612,6 +635,49 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, "initialLoad");
     }
   };
+
+  if (isUpdating && view !== "login" && !isAdmin) {
+    return (
+      <div className="min-h-screen bg-[#0a0f1a] flex flex-col items-center justify-center p-6 text-center overflow-hidden font-sans">
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[100px] animate-pulse" />
+              <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse delay-1000" />
+          </div>
+
+          <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-xl w-full glass-panel p-10 rounded-3xl border border-white/10 relative z-10"
+          >
+              <div className="w-24 h-24 bg-amber-500/20 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-amber-500/30">
+                  <RefreshCw className="w-12 h-12 text-amber-500 animate-spin-slow" />
+              </div>
+              
+              <h1 className="text-3xl font-black text-white mb-6 uppercase tracking-tighter">
+                  Sedang proses update,<br/>aplikasi tidak bisa di buka.
+              </h1>
+              
+              <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl mb-8">
+                  <p className="text-rose-400 font-bold text-lg mb-1 uppercase tracking-wider">
+                      PENGUMUMAN PENTING
+                  </p>
+                  <p className="text-rose-300/80 leading-relaxed font-bold">
+                      PROSES ABSEN MOHON UNTUK MANUAL DULU
+                  </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 text-white/30 text-sm font-medium">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  Harap tunggu sampai proses pemeliharaan selesai
+              </div>
+          </motion.div>
+          
+          <div className="mt-12 text-white/10 text-[100px] font-black select-none pointer-events-none uppercase tracking-tighter italic">
+              MAINTENANCE
+          </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     // Check for persisted login
@@ -952,6 +1018,7 @@ export default function App() {
                   setWaSelection={setShowWaSelection}
                   showWaSelection={showWaSelection}
                   superAdmins={superAdmins}
+                  isUpdating={isUpdating}
                 />
               </motion.div>
             )}
@@ -1127,6 +1194,7 @@ function LoginView({
   showWaSelection,
   superAdmins,
   jobPositions = [],
+  isUpdating,
   fetchInitialData,
 }: {
   employees: Employee[];
@@ -1139,6 +1207,7 @@ function LoginView({
   setWaSelection: (show: boolean) => void;
   showWaSelection: boolean;
   superAdmins: SuperAdmin[];
+  isUpdating: boolean;
   fetchInitialData: (force?: boolean) => void;
 }) {
   const [absenId, setAbsenId] = useState("");
@@ -1327,6 +1396,30 @@ function LoginView({
             </p>
           </motion.div>
         </div>
+
+        {isUpdating && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 glass-panel border-amber-500/30 bg-amber-500/10 p-5 rounded-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 p-1">
+              <RefreshCw className="w-12 h-12 text-amber-500/10 animate-spin-slow" />
+            </div>
+            <div className="flex items-start gap-4 relative z-10">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 border border-amber-500/30">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-amber-500 font-bold text-sm uppercase tracking-tight">System Maintenance</h4>
+                <p className="text-white/60 text-xs leading-relaxed font-medium">
+                  Sedang proses update, aplikasi tidak bisa di buka. <br/>
+                  <span className="text-amber-400 font-bold">PROSES ABSEN MOHON UNTUK MANUAL DULU</span>
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <div style={{ perspective: 1200 }} className="w-full">
           <AnimatePresence mode="wait">
@@ -1693,7 +1786,7 @@ function CameraDialog({
   useEffect(() => {
     async function loadModels() {
       try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/');
+        await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/');
         setModelsLoaded(true);
       } catch(e) {
         console.error("Model loading failed", e);
@@ -2240,7 +2333,7 @@ function AdminBonusEstafet({
         </div>
         <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center">TIDAK ADA PERIODE AKTIF</h3>
         <p className="text-white/50 text-center max-w-md">
-          Belum ada periode yang berstatus "BUKA". <br/>DEBUG: {JSON.stringify(Object.keys(controls))} <br/> STATUS: {JSON.stringify(Object.values(controls).map(c => c.status))}
+          Belum ada periode yang berstatus "BUKA". <br/>DEBUG: {JSON.stringify(Object.keys(controls))} <br/> STATUS: {JSON.stringify(Object.values(controls).map((c: any) => c.status))}
         </p>
       </div>
     );
@@ -5620,18 +5713,18 @@ function EmployeeView({
               <span className="text-xs">Libur</span>
             </TabsTrigger>
             <TabsTrigger
-              value="bonus"
-              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
+              value="pengaturan-libur"
+              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
-              <Zap className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Bonus</span>
+              <Settings className="w-3.5 h-3.5" />{" "}
+              <span className="text-xs">Pengaturan Libur</span>
             </TabsTrigger>
             <TabsTrigger
-              value="ristan"
-              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-orange-500 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
+              value="payroll"
+              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
-              <ClipboardList className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Ristan</span>
+              <DollarSign className="w-3.5 h-3.5" />{" "}
+              <span className="text-xs">Payroll</span>
             </TabsTrigger>
           </TabsList>
 
@@ -6072,77 +6165,101 @@ function EmployeeView({
               employee={employee}
               employees={employees}
               sections={sections}
+              setActiveTab={setActiveTab}
             />
           </TabsContent>
 
           <TabsContent
-            value="bonus"
+            value="pengaturan-libur"
             className="mt-0 focus-visible:outline-none focus-visible:ring-0"
           >
-            <Card className="glass-panel border-none py-20 bg-emerald-500/5 border-dashed border-emerald-500/20">
-              <CardContent className="flex flex-col items-center justify-center text-center">
-                <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/30 animate-pulse">
-                  <Zap className="w-10 h-10 text-emerald-400" />
-                </div>
-                <h3 className="text-2xl font-bold text-white mb-2">
-                  Menu Bonus
-                </h3>
-                <p className="text-white/40 max-w-sm">
-                  Dalam proses tunggu update selanjutnya. Fitur ini akan
-                  tersedia pada versi aplikasi mendatang.
-                </p>
-                <Badge className="mt-6 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border-none px-4 py-1">
-                  SOON
-                </Badge>
-              </CardContent>
-            </Card>
+            <LiburPeriodManager />
           </TabsContent>
 
           <TabsContent
-            value="ristan"
+            value="payroll"
             className="mt-0 focus-visible:outline-none focus-visible:ring-0"
           >
-            <Tabs defaultValue="ristan-100" className="w-full">
-              <TabsList className="grid grid-cols-3 w-full glass-panel p-1 bg-white/5 border-white/5 mb-6 rounded-xl">
+            <Tabs defaultValue="payroll-bonus" className="w-full">
+              <TabsList className="grid grid-cols-2 w-full glass-panel p-1 bg-white/5 border-white/5 mb-6 rounded-xl">
                 <TabsTrigger
-                  value="ristan-100"
-                  className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-xs font-bold py-2"
+                  value="payroll-bonus"
+                  className="rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white text-xs font-bold py-2"
                 >
-                  Ristan 100%
+                  <Zap className="w-3 h-3 mr-2" /> Bonus
                 </TabsTrigger>
                 <TabsTrigger
-                  value="ristan-bersama"
-                  className="rounded-lg data-[state=active]:bg-rose-500 data-[state=active]:text-white text-xs font-bold py-2"
+                  value="payroll-ristan"
+                  className="rounded-lg data-[state=active]:bg-orange-500 data-[state=active]:text-white text-xs font-bold py-2"
                 >
-                  Bersama
-                </TabsTrigger>
-                <TabsTrigger
-                  value="seragam"
-                  className="rounded-lg data-[state=active]:bg-fuchsia-600 data-[state=active]:text-white text-xs font-bold py-2"
-                >
-                  Seragam
+                  <ClipboardList className="w-3 h-3 mr-2" /> Ristan
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="ristan-100">
-                <PotonganKehilanganManager
-                  employees={employees}
-                  isEmployee={true}
-                  currentEmployeeId={employee.id}
-                />
+              
+              <TabsContent value="payroll-bonus">
+                <Card className="glass-panel border-none py-20 bg-emerald-500/5 border-dashed border-emerald-500/20">
+                  <CardContent className="flex flex-col items-center justify-center text-center">
+                    <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/30 animate-pulse">
+                      <Zap className="w-10 h-10 text-emerald-400" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">
+                      Menu Bonus
+                    </h3>
+                    <p className="text-white/40 max-w-sm">
+                      Dalam proses tunggu update selanjutnya. Fitur ini akan
+                      tersedia pada versi aplikasi mendatang.
+                    </p>
+                    <Badge className="mt-6 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border-none px-4 py-1">
+                      SOON
+                    </Badge>
+                  </CardContent>
+                </Card>
               </TabsContent>
-              <TabsContent value="ristan-bersama">
-                <PotonganKehilanganBersamaManager
-                  employees={employees}
-                  isEmployee={true}
-                  currentEmployeeId={employee.id}
-                />
-              </TabsContent>
-              <TabsContent value="seragam">
-                <PotonganSeragamManager
-                  employees={employees}
-                  isEmployee={true}
-                  currentEmployeeId={employee.id}
-                />
+
+              <TabsContent value="payroll-ristan">
+                <Tabs defaultValue="ristan-100" className="w-full">
+                  <TabsList className="grid grid-cols-3 w-full glass-panel p-1 bg-white/5 border-white/5 mb-6 rounded-xl">
+                    <TabsTrigger
+                      value="ristan-100"
+                      className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-xs font-bold py-2"
+                    >
+                      Ristan 100%
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="ristan-bersama"
+                      className="rounded-lg data-[state=active]:bg-rose-500 data-[state=active]:text-white text-xs font-bold py-2"
+                    >
+                      Bersama
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="seragam"
+                      className="rounded-lg data-[state=active]:bg-fuchsia-600 data-[state=active]:text-white text-xs font-bold py-2"
+                    >
+                      Seragam
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="ristan-100">
+                    <PotonganKehilanganManager
+                      employees={employees}
+                      isEmployee={true}
+                      currentEmployeeId={employee.id}
+                    />
+                  </TabsContent>
+                  <TabsContent value="ristan-bersama">
+                    <PotonganKehilanganBersamaManager
+                      employees={employees}
+                      isEmployee={true}
+                      currentEmployeeId={employee.id}
+                    />
+                  </TabsContent>
+                  <TabsContent value="seragam">
+                    <PotonganSeragamManager
+                      employees={employees}
+                      isEmployee={true}
+                      currentEmployeeId={employee.id}
+                    />
+                  </TabsContent>
+                </Tabs>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -8520,22 +8637,17 @@ function AdminDashboard({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>("Ringkasan");
+  const [expandedSubGroup, setExpandedSubGroup] = useState<string | null>(null);
 
   const toggleGroup = (label: string) => {
     setExpandedGroup((prev) => (prev === label ? null : label));
   };
 
+  const toggleSubGroup = (label: string) => {
+    setExpandedSubGroup((prev) => (prev === label ? null : label));
+  };
+
   const rawMenuGroups = [
-    {
-      label: "Master Data",
-      items: [
-        {
-          value: "periods",
-          label: "Manajemen Periode",
-          icon: <CalendarIcon className="w-4 h-4 text-emerald-400" />,
-        },
-      ],
-    },
     {
       label: "Ringkasan",
       items: [
@@ -8592,89 +8704,32 @@ function AdminDashboard({
       ],
     },
     {
-      label: "Bonus & Penambahan",
-      items: [
+      label: "Payroll",
+      subGroups: [
         {
-          value: "bonus-master",
-          label: "Nota Tertinggi",
-          icon: <Zap className="w-4 h-4" />,
+          label: "Bonus",
+          items: [
+            { value: "bonus-nota", label: "Nota", icon: <Zap className="text-amber-400" /> },
+            { value: "bonus-master", label: "Nota Tertinggi", icon: <Zap className="text-emerald-400" /> },
+            { value: "bonus-jaga-depan", label: "Bonus Jaga Depan", icon: <Zap className="text-blue-400" /> },
+            { value: "bonus-estafet", label: "Bonus Estafet", icon: <Zap className="text-purple-400" /> },
+            { value: "bonus-operator", label: "Bonus Operator", icon: <Calculator className="text-emerald-400" /> },
+            { value: "bonus-berat", label: "Bonus Berat", icon: <Layers className="text-teal-400" /> },
+            { value: "bonus-lain-lain", label: "Bonus Campuran", icon: <Zap className="text-gray-400" /> },
+            { value: "bonus-lain-lain-combined", label: "Bonus Lain-Lain", icon: <Calculator className="text-white/40" /> },
+            { value: "bonus-koreksi-gaji", label: "Koreksi (+)", icon: <Zap className="text-emerald-400" /> },
+          ]
         },
         {
-          value: "bonus-jaga-depan",
-          label: "Bonus Jaga Depan",
-          icon: <Zap className="w-4 h-4" />,
-        },
-        {
-          value: "bonus-estafet",
-          label: "Bonus Estafet",
-          icon: <Zap className="w-4 h-4" />,
-        },
-        {
-          value: "bonus-lain-lain",
-          label: "Bonus Campuran",
-          icon: <Zap className="w-4 h-4" />,
-        },
-        {
-          value: "bonus-lain-lain-combined",
-          label: "Bonus Lain-Lain",
-          icon: <Calculator className="w-4 h-4" />,
-        },
-        {
-          value: "bonus-operator",
-          label: "Bonus Operator",
-          icon: <Calculator className="w-4 h-4 text-emerald-400" />,
-        },
-        {
-          value: "bonus-nota",
-          label: "Bonus Nota",
-          icon: <Zap className="w-4 h-4 text-amber-400" />,
-        },
-        {
-          value: "bonus-berat",
-          label: "Bonus Berat",
-          icon: <Layers className="w-4 h-4 text-teal-400" />,
-        },
-        {
-          value: "bonus-koreksi-gaji",
-          label: "Koreksi Gaji (Penambahan)",
-          icon: <Zap className="w-4 h-4 text-emerald-400" />,
-        },
-      ],
-    },
-    {
-      label: "Ristan & Potongan",
-      items: [
-        {
-          value: "potongan",
-          label: (
-            <span className="flex flex-col items-start leading-tight">
-              <span>Potongan Kehilangan</span>
-              <span>(Restan 100%)</span>
-            </span>
-          ),
-          icon: <DollarSign className="w-4 h-4" />,
-        },
-        {
-          value: "potongan-bersama",
-          label: (
-            <span className="flex flex-col items-start leading-tight">
-              <span>Potongan Kehilangan</span>
-              <span>(Restan Bersama)</span>
-            </span>
-          ),
-          icon: <DollarSign className="w-4 h-4" />,
-        },
-        {
-          value: "potongan-seragam",
-          label: "Potongan Seragam",
-          icon: <Shirt className="w-4 h-4" />,
-        },
-        {
-          value: "potongan-koreksi-gaji-minus",
-          label: "Koreksi Gaji (Pengurangan)",
-          icon: <Zap className="w-4 h-4 text-rose-400" />,
-        },
-      ],
+          label: "Restan",
+          items: [
+             { value: "potongan", label: "Restan 100%", icon: <DollarSign className="text-orange-400" /> },
+             { value: "potongan-bersama", label: "Restan Bersama", icon: <DollarSign className="text-rose-400" /> },
+             { value: "potongan-seragam", label: "Potongan Seragam", icon: <Shirt className="text-fuchsia-400" /> },
+             { value: "potongan-koreksi-gaji-minus", label: "Koreksi (-)", icon: <Zap className="text-rose-400" /> },
+          ]
+        }
+      ]
     },
     {
       label: "Audit & Export",
@@ -8708,6 +8763,11 @@ function AdminDashboard({
           value: "shift-periode",
           label: "Shift Periode",
           icon: <CalendarIcon className="w-4 h-4 text-emerald-400" />,
+        },
+        {
+          value: "pengaturan-libur-admin",
+          label: "Pengaturan Periode Libur",
+          icon: <Settings className="w-4 h-4 text-purple-400" />,
         },
       ],
     },
@@ -8750,20 +8810,29 @@ function AdminDashboard({
   ];
 
   const menuGroups = rawMenuGroups
-    .map((g) => {
+    .map((g: any) => {
       if (currentUser?.role === "spv") {
         return {
           ...g,
-          items: g.items.filter((i) =>
+          items: g.items?.filter((i: any) =>
             ["dashboard", "live", "leaves", "jadwal"].includes(i.value),
           ),
+          subGroups: g.subGroups?.map((sg: any) => ({
+            ...sg,
+            items: sg.items.filter((i: any) =>
+              ["dashboard", "live", "leaves", "jadwal"].includes(i.value),
+            )
+          })).filter((sg: any) => sg.items.length > 0)
         };
       }
       return g;
     })
-    .filter((g) => g.items.length > 0);
+    .filter((g: any) => (g.items?.length || 0) > 0 || (g.subGroups?.length || 0) > 0);
 
-  const allMenuItems = menuGroups.flatMap((g) => g.items);
+  const allMenuItems = menuGroups.flatMap((g: any) => [
+    ...(g.items || []),
+    ...(g.subGroups?.flatMap((sg: any) => sg.items) || [])
+  ]);
 
   return (
     <Tabs
@@ -8834,33 +8903,83 @@ function AdminDashboard({
                               className="overflow-hidden"
                             >
                               <div className="ml-4 border-l-2 border-white/5 pl-3 space-y-1 pt-1">
-                            {group.items.map((item) => (
-                              <TabsTrigger
-                                key={item.value}
-                                value={item.value}
-                                onClick={() => setIsMobileOpen(false)}
-                                className="w-full justify-start gap-3.5 h-11 px-4 rounded-2xl border-none transition-all duration-300 group/item data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold text-white/40 hover:text-white hover:bg-white/5 shadow-none"
-                              >
-                                <div
-                                  className={`p-2 rounded-xl transition-all duration-300 ${activeTab === item.value ? "bg-primary shadow-lg shadow-primary/20 scale-110 text-white" : "bg-white/5 text-white/40 group-hover/item:text-white/80 group-hover/item:bg-white/10"}`}
-                                >
-                                  {React.cloneElement(
-                                    item.icon as React.ReactElement,
-                                    { className: "w-4 h-4" },
-                                  )}
-                                </div>
-                                <span className="text-[13px] tracking-tight">
-                                  {item.label}
-                                </span>
-                                {activeTab === item.value && (
-                                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
-                                )}
-                              </TabsTrigger>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                                {group.items?.map((item: any) => (
+                                  <TabsTrigger
+                                    key={item.value}
+                                    value={item.value}
+                                    onClick={() => setIsMobileOpen(false)}
+                                    className="w-full justify-start gap-3.5 h-11 px-4 rounded-2xl border-none transition-all duration-300 group/item data-[state=active]:bg-primary/10 data-[state=active]:text-primary font-bold text-white/40 hover:text-white hover:bg-white/5 shadow-none"
+                                  >
+                                    <div
+                                      className={`p-2 rounded-xl transition-all duration-300 ${activeTab === item.value ? "bg-primary shadow-lg shadow-primary/20 scale-110 text-white" : "bg-white/5 text-white/40 group-hover/item:text-white/80 group-hover/item:bg-white/10"}`}
+                                    >
+                                      {React.cloneElement(
+                                        item.icon as React.ReactElement,
+                                        { className: "w-4 h-4" },
+                                      )}
+                                    </div>
+                                    <span className="text-[13px] tracking-tight">
+                                      {item.label}
+                                    </span>
+                                    {activeTab === item.value && (
+                                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
+                                    )}
+                                  </TabsTrigger>
+                                ))}
+
+                                {group.subGroups?.map((subGroup: any) => {
+                                  const isSubExpanded = expandedSubGroup === subGroup.label;
+                                  return (
+                                    <div key={subGroup.label} className="space-y-1">
+                                      <button
+                                        onClick={() => toggleSubGroup(subGroup.label)}
+                                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/5 transition-all group/sub-btn"
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <div className={`w-1 h-3 rounded-full transition-all duration-300 ${isSubExpanded ? "bg-emerald-500" : "bg-white/5"}`} />
+                                          <span className="text-[12px] font-bold text-white/40 group-hover/sub-btn:text-white/70 transition-colors">
+                                            {subGroup.label}
+                                          </span>
+                                        </div>
+                                        <div className={`text-white/20 group-hover/sub-btn:text-white/50 transition-all duration-300 ${isSubExpanded ? "rotate-90 text-emerald-500" : ""}`}>
+                                          <ChevronRight className="w-3" />
+                                        </div>
+                                      </button>
+                                      
+                                      <AnimatePresence initial={false}>
+                                        {isSubExpanded && (
+                                          <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            className="overflow-hidden"
+                                          >
+                                            <div className="ml-3 border-l border-white/5 pl-2 space-y-1 pb-2">
+                                              {subGroup.items.map((item: any) => (
+                                                <TabsTrigger
+                                                  key={item.value}
+                                                  value={item.value}
+                                                  onClick={() => setIsMobileOpen(false)}
+                                                  className="w-full justify-start gap-3 h-9 px-3 rounded-xl border-none transition-all duration-300 group/item data-[state=active]:bg-white/10 data-[state=active]:text-white font-medium text-white/30 hover:text-white hover:bg-white/5 shadow-none"
+                                                >
+                                                  <div className={`p-1.5 rounded-lg transition-all duration-300 ${activeTab === item.value ? "bg-white/20 text-white" : "text-white/20 group-hover/item:text-white/60"}`}>
+                                                     {React.cloneElement(item.icon as React.ReactElement, { className: "w-3.5 h-3.5" })}
+                                                  </div>
+                                                  <span className="text-[12px] whitespace-nowrap">{item.label}</span>
+                                                </TabsTrigger>
+                                              ))}
+                                            </div>
+                                          </motion.div>
+                                        )}
+                                      </AnimatePresence>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                   </div>
                     );
                   })}
@@ -9040,123 +9159,68 @@ function AdminDashboard({
                   onRefresh={onRefresh}
                 />
               </TabsContent>
-              <TabsContent value="bonus-master" className="mt-0 outline-none">
-                <AdminBonusMaster
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="payroll-admin" className="mt-0 outline-none">
+                <div className="space-y-6">
+                  {/* Redirect or show placeholder if needed, but usually activeTab will point directly to sub-items */}
+                  <Card className="glass-panel border-none py-20 bg-emerald-500/5 border-dashed border-emerald-500/20">
+                    <CardContent className="flex flex-col items-center justify-center text-center">
+                      <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/30 animate-pulse">
+                        <DollarSign className="w-10 h-10 text-emerald-400" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white mb-2">
+                        Pilih Menu Payroll di Sidebar
+                      </h3>
+                      <p className="text-white/40 max-w-sm">
+                        Gunakan sidebar untuk mengakses detail Bonus dan Restan.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
               </TabsContent>
-              <TabsContent value="bonus-estafet" className="mt-0 outline-none">
-                <AdminBonusEstafet
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+
+              {/* Sub-item Contents */}
+              <TabsContent value="bonus-nota">
+                <AdminBonusNota employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent
-                value="bonus-lain-lain"
-                className="mt-0 outline-none"
-              >
-                <AdminBonusLainLain
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="bonus-master">
+                <AdminBonusMaster activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent
-                value="bonus-lain-lain-combined"
-                className="mt-0 outline-none"
-              >
-                <AdminBonusLainLainCombined
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="bonus-estafet">
+                <AdminBonusEstafet employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent
-                value="bonus-jaga-depan"
-                className="mt-0 outline-none"
-              >
-                <AdminBonusJagaDepan
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="bonus-jaga-depan">
+                <AdminBonusJagaDepan employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent value="bonus-operator" className="mt-0 outline-none">
-                <AdminBonusOperator
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="bonus-operator">
+                <AdminBonusOperator employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent value="bonus-nota" className="mt-0 outline-none">
-                <AdminBonusNota
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="bonus-berat">
+                <AdminBonusBerat employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent
-                value="bonus-koreksi-gaji"
-                className="mt-0 outline-none"
-              >
-                <AdminKoreksiGaji
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="bonus-lain-lain">
+                <AdminBonusLainLain employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent value="bonus-berat" className="mt-0 outline-none">
-                <AdminBonusBerat
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                  onDirtyChange={setHasUnsavedChanges}
-                />
+              <TabsContent value="bonus-lain-lain-combined">
+                <AdminBonusLainLainCombined employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent value="potongan" className="mt-0 outline-none">
-                <PotonganKehilanganManager
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                />
+              <TabsContent value="bonus-koreksi-gaji">
+                <AdminKoreksiGaji employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
-              <TabsContent
-                value="potongan-bersama"
-                className="mt-0 outline-none"
-              >
-                <PotonganKehilanganBersamaManager
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                />
+
+              <TabsContent value="potongan">
+                <PotonganKehilanganManager employees={employees} activePeriodId={activePeriodId} />
               </TabsContent>
-              <TabsContent
-                value="potongan-seragam"
-                className="mt-0 outline-none"
-              >
-                <PotonganSeragamManager
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                />
+              <TabsContent value="potongan-bersama">
+                <PotonganKehilanganBersamaManager employees={employees} activePeriodId={activePeriodId} />
               </TabsContent>
-              <TabsContent
-                value="potongan-koreksi-gaji-minus"
-                className="mt-0 outline-none"
-              >
-                <AdminKoreksiGajiMinus
-                  employees={employees}
-                  activePeriodId={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                />
+              <TabsContent value="potongan-seragam">
+                <PotonganSeragamManager employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="potongan-koreksi-gaji-minus">
+                <AdminKoreksiGajiMinus employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
+              </TabsContent>
+              <TabsContent value="pengaturan-libur-admin" className="mt-0 outline-none">
+                <LiburPeriodManager />
               </TabsContent>
               <TabsContent value="office" className="mt-0 outline-none">
                 <AdminOfficeConfig />
@@ -12393,7 +12457,6 @@ function AdminJadwalLibur({
   alert: (msg: string, type?: "success" | "error" | "info") => void;
 }) {
   console.log("AdminJadwalLibur rendered");
-  const [holdDate, setHoldDate] = useState<string | null>(null);
   const [controls, setControls] = useState<Record<string, any>>({});
   const periodOptions = React.useMemo(
     () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
@@ -15681,6 +15744,64 @@ function AdminLeave({
   const [showAdd, setShowAdd] = useState(false);
   const [showSubmitted, setShowSubmitted] = useState(false);
   const [showNotRequested, setShowNotRequested] = useState(false);
+  const [showNoChances, setShowNoChances] = useState(false);
+  const [showBooking, setShowBooking] = useState(false);
+  const [bookingUser, setBookingUser] = useState("");
+  const [bookingUserName, setBookingUserName] = useState("");
+  const [bookingDates, setBookingDates] = useState<string[]>([""]);
+  const [selectedBookingPeriod, setSelectedBookingPeriod] = useState(selectedPeriod);
+  const [bookingReason, setBookingReason] = useState("");
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  
+  const filteredEmployees = React.useMemo(() => {
+    if (bookingUserName.length < 3 || !showAutocomplete) return [];
+    return employees.filter(e => e.name.toLowerCase().includes(bookingUserName.toLowerCase()) || e.pin.includes(bookingUserName));
+  }, [bookingUserName, employees, showAutocomplete]);
+
+  const [noChancesUsers, setNoChancesUsers] = useState<Employee[]>([]);
+
+  const loadNoChancesUsers = () => {
+    const currentLastResetPoint = getMostRecentResetPoint();
+    const users = employees.filter(e => {
+      const limitKeyLegacy = `leave_view_limit_${e.id}_${selectedPeriod}`;
+      const stateKey = `leave_view_state_${e.id}_${selectedPeriod}`;
+      const valStr = localStorage.getItem(stateKey);
+      // clear legacy to prevent confusion if needed, or just ignore
+      if (valStr) {
+        try {
+          const parsed = JSON.parse(valStr);
+          if (parsed.lastReset < currentLastResetPoint) {
+            return false;
+          }
+          return parsed.chances <= 0;
+        } catch (err) {}
+      } else {
+         // check legacy for migration but we can just ignore it since it resets anyway
+         const legacy = localStorage.getItem(limitKeyLegacy);
+         if (legacy === "0") return true; 
+      }
+      return false;
+    });
+    setNoChancesUsers(users);
+    setShowNoChances(true);
+  };
+
+  const addChance = (employeeId: string) => {
+    const stateKey = `leave_view_state_${employeeId}_${selectedPeriod}`;
+    const valStr = localStorage.getItem(stateKey);
+    let parsed = { chances: 0, lastReset: Date.now() };
+    if (valStr) {
+      try { parsed = JSON.parse(valStr); } catch (e) {}
+    } else {
+       // if not in state, look at legacy
+       const limitKeyLegacy = `leave_view_limit_${employeeId}_${selectedPeriod}`;
+       const legacy = localStorage.getItem(limitKeyLegacy);
+       if (legacy) parsed.chances = parseInt(legacy) || 0;
+    }
+    parsed.chances += 1;
+    localStorage.setItem(stateKey, JSON.stringify(parsed));
+    loadNoChancesUsers();
+  };
   const [newPeriod, setNewPeriod] = useState({
     name: "",
     startDate: "",
@@ -15988,6 +16109,192 @@ function AdminLeave({
 
   return (
     <div className="space-y-6">
+      <Dialog open={showBooking} onOpenChange={setShowBooking}>
+        <DialogContent className="glass-panel border-white/10 text-white max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-emerald-400 flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5" /> Booking Libur
+            </DialogTitle>
+            <DialogDescription className="text-white/50">
+              Input tanggal libur karyawan. Tanggal ini tidak bisa diubah oleh karyawan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+               <Label className="text-xs uppercase font-bold text-white/50">Pilih Periode</Label>
+               <Select value={selectedBookingPeriod} onValueChange={(val) => {
+                  setSelectedBookingPeriod(val);
+                  const p = periodOptions.find(o => o.value === val);
+                  const maxDays = p?.maxDaysPerRequest || 6;
+                  setBookingDates(Array(Math.max(1, maxDays)).fill(""));
+               }}>
+                 <SelectTrigger className="field-input h-10 w-full">
+                   <SelectValue placeholder="Pilih Periode">
+                    {periodOptions.find((p) => p.value === selectedBookingPeriod)?.label || "Pilih Periode"}
+                   </SelectValue>
+                 </SelectTrigger>
+                 <SelectContent className="glass-panel border-white/20 text-white max-h-64">
+                   {periodOptions.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                 </SelectContent>
+               </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-white/50">Alasan</Label>
+              <Input value={bookingReason} onChange={(e) => setBookingReason(e.target.value)} className="field-input h-10 w-full" placeholder="Masukkan alasan..." />
+            </div>
+
+            <div className="space-y-2 relative">
+              <Label className="text-xs uppercase font-bold text-white/50">Pilih Karyawan</Label>
+              <Input 
+                value={bookingUserName} 
+                onChange={(e) => {
+                    setBookingUserName(e.target.value);
+                    setShowAutocomplete(true);
+                    if(e.target.value === "") setBookingUser("");
+                }}
+                placeholder="Ketik 3 huruf nama/pin karyawan..."
+                className="field-input h-10 w-full"
+              />
+              {filteredEmployees.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 glass-panel border border-white/20 rounded-xl overflow-y-auto max-h-60 shadow-xl">
+                  {filteredEmployees.map(e => (
+                    <button
+                      key={e.id}
+                      className="w-full text-left px-4 py-2 text-sm text-white hover:bg-white/10"
+                      onClick={() => {
+                        setBookingUser(e.id);
+                        setBookingUserName(e.name);
+                        setShowAutocomplete(false);
+                      }}
+                    >
+                      {e.name} - {e.division || 'Depan'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-xs uppercase font-bold text-white/50">Tanggal Yang Dilock</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {bookingDates.map((d, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input 
+                      type="date"
+                      value={d}
+                      className="field-input text-xs h-9 flex-1"
+                      onChange={(e) => {
+                        const newD = [...bookingDates];
+                        newD[i] = e.target.value;
+                        setBookingDates(newD);
+                      }}
+                    />
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-9 w-9 text-rose-400 hover:bg-rose-500/20"
+                      onClick={() => {
+                        const newD = [...bookingDates];
+                        newD.splice(i, 1);
+                        if (newD.length === 0) newD.push("");
+                        setBookingDates(newD);
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+               <Button onClick={async () => {
+                   if (!bookingUser) return alert("Pilih Karyawan!");
+                   if (!selectedBookingPeriod) return alert("Pilih Periode!");
+                   const dates = bookingDates.filter(Boolean);
+                   if (dates.length === 0) return alert("Pilih minimal 1 tanggal!");
+                   
+                   const emp = employees.find(e => e.id === bookingUser);
+                   if (!emp) return;
+                   
+                   try {
+                     const docId = `${emp.id}_${selectedBookingPeriod}`;
+                     let payload: any = {};
+                     
+                     // Read existing
+                     const existingReq = requests.find(r => r.id === docId); 
+                     
+                     if (existingReq) {
+                        const exDates = existingReq.dates || [];
+                        const mergedLocked = Array.from(new Set([...(existingReq.lockedDates || []), ...dates]));
+                        const mergedDates = Array.from(new Set([...exDates, ...dates]));
+                        
+                        payload = {
+                           dates: mergedDates,
+                           lockedDates: mergedLocked,
+                        };
+                        mergedDates.forEach((d, i) => { payload[`date${i+1}`] = d; });
+                     } else {
+                        payload = {
+                           employeeId: emp.id,
+                           employeeName: emp.name,
+                           division: emp.division || "Depan",
+                           period: selectedBookingPeriod,
+                           status: "approved", 
+                           dates: dates,
+                           lockedDates: dates,
+                           originalDates: [...dates],
+                           reason: bookingReason || "Khusus/Penting (Dilock Admin)",
+                           sectionId: "",
+                           createdAt: serverTimestamp(),
+                        };
+                        dates.forEach((d, i) => { payload[`date${i+1}`] = d; });
+                     }
+                     
+                     await setDoc(doc(db, "leaveRequests", docId), payload, { merge: true });
+                     alert("Tanggal berhasil dilock untuk karyawan ini!", "success");
+                     setShowBooking(false);
+                     setBookingUser("");
+                     setBookingDates(Array(periodOptions.find(o => o.value === selectedBookingPeriod)?.maxDaysPerRequest || 6).fill(""));
+                   } catch(err: any) {
+                     alert("Error: " + err.message);
+                   }
+               }} className="bg-emerald-600 hover:bg-emerald-500 font-bold w-full">
+                  SIMPAN BOOKING LIBUR
+               </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={showNoChances} onOpenChange={setShowNoChances}>
+        <DialogContent className="glass-panel border-white/10 text-white max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-rose-400 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" /> Karyawan Habis Kesempatan
+            </DialogTitle>
+            <DialogDescription className="text-white/50">
+              Karyawan yang sudah menggunakan 2x kesempatan (hari ini) pada periode {periodOptions.find((p) => p.value === selectedPeriod)?.label || selectedPeriod}. Reset otomatis jam 14.00.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            {noChancesUsers.length === 0 ? (
+              <p className="text-white/40 italic text-center py-4">Tidak ada karyawan yang kehabisan kesempatan.</p>
+            ) : (
+              noChancesUsers.map(e => (
+                <div key={e.id} className="flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-sm">{e.name}</span>
+                    <span className="text-xs text-white/40">Divisi {e.division || 'Depan'}</span>
+                  </div>
+                  <Button onClick={() => addChance(e.id)} size="sm" className="bg-blue-500 hover:bg-blue-600 text-white font-bold h-8 text-xs">
+                    +1 Kesempatan
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="flex justify-center mb-2 overflow-x-auto no-scrollbar">
         <Tabs
           value={selectedDivision}
@@ -16026,7 +16333,7 @@ function AdminLeave({
               Daftar karyawan {selectedDivision} yang sudah mengajukan libur.
             </CardDescription>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 mt-4 sm:mt-0 w-full sm:w-auto">
+          <div className="flex flex-row flex-wrap gap-2 sm:gap-4 mt-4 sm:mt-0 w-full sm:w-auto justify-end">
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
               <SelectTrigger className="w-full sm:w-[200px] glass-panel border-white/10 text-white font-bold h-11">
                 <SelectValue placeholder="Pilih Periode">
@@ -16053,6 +16360,20 @@ function AdminLeave({
             >
               <Settings className={`w-4 h-4 ${showSettings ? 'animate-spin-slow' : ''}`} />
               {showSettings ? "Tutup Pengaturan" : "Pengaturan Batas Waktu"}
+            </Button>
+            <Button
+              onClick={() => setShowBooking(true)}
+              variant="outline"
+              className="flex gap-2 glass-panel border-white/10 text-white hover:bg-white/10 shadow-lg h-11 px-6 rounded-xl font-bold"
+            >
+              <CalendarIcon className="w-4 h-4 text-emerald-400" /> Booking Libur
+            </Button>
+            <Button
+              onClick={loadNoChancesUsers}
+              variant="outline"
+              className="flex gap-2 glass-panel border-white/10 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all h-11 px-6 rounded-xl font-bold font-xs"
+            >
+              <AlertCircle className="w-4 h-4" /> Habis Kesempatan
             </Button>
             <Button
               onClick={handleExport}
@@ -16552,12 +16873,15 @@ function EmployeeLeave({
   employee,
   employees,
   sections,
+  setActiveTab,
 }: {
   employee: Employee;
   employees: Employee[];
   sections: Section[];
+  setActiveTab: (tab: string) => void;
 }) {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [holdDate, setHoldDate] = useState<string | null>(null);
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
   const [periodControl, setPeriodControl] = useState<any>(null);
   const [controls, setControls] = useState<Record<string, any>>({});
@@ -16567,6 +16891,7 @@ function EmployeeLeave({
   );
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [showPeriodManager, setShowPeriodManager] = useState(false);
 
   useEffect(() => {
     const unsub = subscribePeriodControls((data) => {
@@ -16590,7 +16915,49 @@ function EmployeeLeave({
     sectionId: "",
   });
   const [showDateSelector, setShowDateSelector] = useState<{index: number | null}>({index: null});
+  const [showTable, setShowTable] = useState(false);
+  const [chancesLeft, setChancesLeft] = useState<number | null>(null);
+  const [hasInitializedChances, setHasInitializedChances] = useState(false);
+  const [leaveFlowState, setLeaveFlowState] = useState<"intro" | "prep_warning" | "form">("intro");
+  
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const isPostPopupRef = React.useRef(false);
+
+  useEffect(() => {
+    if (!selectedPeriod) return;
+    if (Object.keys(controls).length === 0) return;
+    
+    const ctrl = controls[selectedPeriod];
+    if (!ctrl || (ctrl.status !== "open" && ctrl.status !== "scheduled" && ctrl.isVisibleToEmployee !== true)) return;
+
+    const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
+    const limitKeyLegacy = `leave_view_limit_${employee.id}_${selectedPeriod}`;
+    
+    let valStr = localStorage.getItem(stateKey);
+    let state = { chances: 2, lastReset: Date.now() };
+
+    const currentLastResetPoint = getMostRecentResetPoint();
+
+    if (valStr) {
+      try {
+        const parsed = JSON.parse(valStr);
+        if (parsed.lastReset < currentLastResetPoint) {
+           // Reset to 2 if past 14:00 point
+           state = { chances: 2, lastReset: Date.now() };
+        } else {
+           state = parsed;
+        }
+      } catch (err) {}
+    }
+    
+    localStorage.setItem(stateKey, JSON.stringify(state));
+    // Remove legacy to keep it clean
+    localStorage.removeItem(limitKeyLegacy);
+    
+    setChancesLeft(state.chances);
+    setHasInitializedChances(true);
+    setLeaveFlowState("intro"); // reset when period changes
+  }, [selectedPeriod, employee.id, controls]);
 
 
   useEffect(() => {
@@ -16698,13 +17065,19 @@ function EmployeeLeave({
 
   useEffect(() => {
     if (!selectedPeriod) return;
+    if (leaveFlowState !== "form") return;
+    
     const unsub = getSnapshotOnce(doc(db, "periodControls", selectedPeriod), (snap) => {
       setPeriodControl(snap.exists() ? snap.data() : { status: "open" });
     }, (err) => console.error(err));
     return unsub;
-  }, [selectedPeriod]);
+  }, [selectedPeriod, leaveFlowState]);
 
   useEffect(() => {
+    // ONLY fetch data if user has passed the intro/warning and is actually in the form!
+    // This is the CRITICAL STEP to save Firebase read quota.
+    if (leaveFlowState !== "form") return;
+
     // Listener that synchronizes request additions and Admin deletions in real-time
     // Fetch ALL requests for THIS employee (cross-division) to ensure accurate carryover
     const qEmp = query(
@@ -16746,10 +17119,12 @@ function EmployeeLeave({
       unsubEmp();
       unsubDiv();
     };
-  }, [employee.id, employee.division]);
+  }, [employee.id, employee.division, leaveFlowState]);
 
   const [allQuotas, setAllQuotas] = useState<any[]>([]);
   useEffect(() => {
+    if (leaveFlowState !== "form") return;
+
     const fetchQuotas = async () => {
       try {
         const snap = await getDocs(collection(db, "periodQuotas"));
@@ -16759,7 +17134,7 @@ function EmployeeLeave({
       }
     };
     fetchQuotas();
-  }, []);
+  }, [leaveFlowState]);
 
   const currentRequests = requests.filter((r) => r.period === selectedPeriod);
   const currentAllRequests = allRequests.filter(
@@ -16881,7 +17256,12 @@ function EmployeeLeave({
       status: "approved", // Auto approved
       originalDates: [...selectedDates], // Store original request for reset feature
       createdAt: serverTimestamp(),
+      reason: (currentRequests && currentRequests[0] && currentRequests[0].reason && currentRequests[0].reason.includes("Dilock Admin")) ? currentRequests[0].reason + " // " + formData.reason : formData.reason
     };
+    
+    if (currentRequests && currentRequests[0] && currentRequests[0].lockedDates) {
+      payload.lockedDates = currentRequests[0].lockedDates;
+    }
 
     // Fallback for backwards compatibility in existing old view scripts etc.
     formData.dates.forEach((d, i) => {
@@ -17007,8 +17387,127 @@ function EmployeeLeave({
   const isClosed = periodStatusResult !== "open";
   const currentPeriodValue = format(new Date(), "yyyy-MM");
 
+  if (Object.keys(controls).length > 0 && !selectedPeriod) {
+    return (
+      <div className="space-y-6 mt-8 pb-12 text-white">
+        <div className="h-full flex flex-col items-center justify-center p-8 mt-12 bg-white/5 rounded-3xl border border-white/10 mx-auto max-w-2xl shadow-2xl relative overflow-hidden">
+          <div className="absolute inset-0 mesh-bg opacity-30 mix-blend-overlay"></div>
+          <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 ring-8 ring-white/5 shadow-[0_0_50px_rgba(255,255,255,0.05)] relative z-10">
+            <CalendarIcon className="w-12 h-12 text-white/40" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center relative z-10">TIDAK ADA PERIODE AKTIF</h3>
+          <p className="text-white/50 text-center max-w-md relative z-10">
+            Saat ini tidak ada periode pengajuan libur yang dibuka. Silakan tunggu informasi selanjutnya dari Admin.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasInitializedChances && chancesLeft === 0 && leaveFlowState === "intro") {
+    return (
+      <div className="space-y-6 mt-8 pb-12 text-white">
+        <div className="h-full flex flex-col items-center justify-center p-8 mt-12 bg-rose-500/10 rounded-3xl border border-rose-500/20 mx-auto max-w-2xl shadow-2xl relative overflow-hidden">
+          <div className="absolute inset-0 mesh-bg opacity-10 mix-blend-overlay"></div>
+          <div className="w-24 h-24 bg-rose-500/20 rounded-full flex items-center justify-center mb-6 ring-8 ring-rose-500/10 relative z-10">
+            <AlertCircle className="w-12 h-12 text-rose-500" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center relative z-10">KESEMPATAN HABIS</h3>
+          <p className="text-white/50 text-center max-w-md relative z-10">
+            Maaf, Anda sudah menggunakan semua kesempatan (2x) untuk membuka menu pengajuan libur pada hari ini. Anda harus menunggu besok jam 14.00 untuk mendapatkan kesempatan lagi.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasInitializedChances && leaveFlowState === "intro" && chancesLeft !== null) {
+    return (
+      <div className="space-y-6 mt-8 pb-12 text-white">
+        <div className="h-full flex flex-col items-center justify-center p-8 mt-12 bg-white/5 rounded-3xl border border-white/10 mx-auto max-w-2xl shadow-2xl relative overflow-hidden text-center">
+          <div className="absolute inset-0 mesh-bg opacity-30 mix-blend-overlay"></div>
+          <div className="w-24 h-24 bg-blue-500/20 rounded-full flex items-center justify-center mb-6 ring-8 ring-blue-500/10 relative z-10">
+            <CalendarIcon className="w-12 h-12 text-blue-400" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest relative z-10">PENGAJUAN LIBUR</h3>
+          <p className="text-white/50 mb-6 max-w-md relative z-10">
+            Ini adalah kesempatan ke-{2 - chancesLeft + 1} Anda (dari total 2x sehari) membuka form libur ini. Sisa kesempatan Anda hari ini: {chancesLeft} kali.
+            <br/><br/>
+            <strong className="text-rose-400 font-bold block">Pastikan Anda sudah mempersiapkan tanggal libur Anda sebelum melanjutkan!</strong>
+          </p>
+          <div className="flex gap-4 relative z-10">
+            <Button
+              variant="outline"
+              className="text-white border-white/20 hover:bg-white/10"
+              onClick={() => setLeaveFlowState("prep_warning")}
+            >
+              Kembali
+            </Button>
+            <Button
+              className="bg-blue-500 hover:bg-blue-600 text-white font-bold"
+              onClick={() => {
+                const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
+                const newVal = chancesLeft - 1;
+                const state = { chances: newVal, lastReset: Date.now() };
+                localStorage.setItem(stateKey, JSON.stringify(state));
+                setChancesLeft(newVal);
+                setLeaveFlowState("form");
+              }}
+            >
+              Lanjut
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (leaveFlowState === "prep_warning") {
+    return (
+      <div className="space-y-6 mt-8 pb-12 text-white">
+        <div className="h-full flex flex-col items-center justify-center p-8 mt-12 bg-white/5 rounded-3xl border border-white/10 mx-auto max-w-2xl shadow-2xl relative overflow-hidden text-center">
+          <div className="absolute inset-0 mesh-bg opacity-30 mix-blend-overlay"></div>
+          <div className="w-24 h-24 bg-rose-500/20 rounded-full flex items-center justify-center mb-6 ring-8 ring-rose-500/10 relative z-10">
+            <CalendarIcon className="w-12 h-12 text-rose-400" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest relative z-10">TENTUKAN TANGGAL DULU</h3>
+          <p className="text-white/50 mb-6 max-w-md relative z-10">
+            Silakan menentukan tanggal libur Anda terlebih dahulu. Jika sudah siap, klik tombol di bawah ini.
+          </p>
+          <Button
+            className="bg-blue-500 hover:bg-blue-600 text-white font-bold relative z-10"
+            onClick={() => setLeaveFlowState("intro")}
+          >
+            Berikut
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 mt-8 pb-12 text-white">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Request Libur</h2>
+        <Button variant="outline" size="sm" className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10" onClick={() => setShowPeriodManager(true)}>Kelola Periode Libur</Button>
+      </div>
+
+      <Dialog open={showPeriodManager} onOpenChange={setShowPeriodManager}>
+        <DialogContent className="glass-panel border-white/10 text-white max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+                <DialogTitle>Manajemen Periode Libur</DialogTitle>
+            </DialogHeader>
+            <LiburPeriodManager />
+        </DialogContent>
+      </Dialog>
+      
+      {hasInitializedChances && chancesLeft !== null && (
+        <div className="p-4 border border-blue-500/20 bg-blue-500/10 rounded-xl text-center shadow-lg animate-in fade-in slide-in-from-top-2">
+          <p className="text-sm font-bold text-blue-400">
+            Sisa kesempatan Anda untuk membuka form ini hari ini: {chancesLeft} kali (Reset jam 14.00).
+          </p>
+        </div>
+      )}
       {/* Improved Music & Words Popup using motion for reliability */}
       <AnimatePresence>
         {showMusicPopup && (
@@ -17184,57 +17683,75 @@ function EmployeeLeave({
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid grid-cols-2 gap-4 py-4">
-                    {formData.dates.map((d, index) => (
+                    {formData.dates.map((d, index) => {
+                      const isLocked = currentRequests && currentRequests[0] && currentRequests[0].lockedDates && currentRequests[0].lockedDates.includes(d);
+                      return (
                       <div className="grid gap-1.5" key={index}>
                         <Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">
                           Libur Ke-{index + 1}
                         </Label>
                         <div className="relative">
                           {d ? (
-                            <div className="flex items-center justify-between field-input text-xs w-full pr-2 text-white">
-                              {d.startsWith('BEBAS') ? 'TGL BEBAS' : d}
+                            <div className="flex items-center justify-between field-input text-xs w-full pr-2 text-white overflow-hidden">
+                              <span className="truncate flex-1">{d.startsWith('BEBAS') ? 'TGL BEBAS' : d}</span>
+                              {isLocked ? (
+                                <LockIcon className="w-4 h-4 text-rose-400 shrink-0" />
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 shrink-0"
+                                  onClick={() => {
+                                    const newDates = [...formData.dates];
+                                    newDates[index] = "";
+                                    setFormData({ ...formData, dates: newDates });
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3 text-white/50" />
+                                </Button>
+                              )}
+                            </div>
+                          ) : showDateSelector.index === index ? (
+                            <div className="flex gap-2">
+                              <Input
+                                type="date"
+                                className="field-input w-full text-xs text-white bg-white/5 px-2 flex-1 h-10"
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    const newDates = [...formData.dates];
+                                    newDates[index] = e.target.value;
+                                    setFormData({ ...formData, dates: newDates });
+                                    setShowDateSelector({index: null});
+                                  }
+                                }}
+                              />
                               <Button
                                 type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0"
+                                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-10 px-3 text-[10px] whitespace-nowrap uppercase tracking-wider rounded-xl"
                                 onClick={() => {
                                   const newDates = [...formData.dates];
-                                  newDates[index] = "";
+                                  newDates[index] = "BEBAS_" + Date.now() + "_" + index;
                                   setFormData({ ...formData, dates: newDates });
+                                  setShowDateSelector({index: null});
                                 }}
                               >
-                                <Trash2 className="h-3 w-3" />
+                                Bebas
                               </Button>
                             </div>
                           ) : (
                             <Button
                               type="button"
-                              className="field-input text-xs w-full text-white/50 justify-start"
-                              onClick={() => {
-                                // Logic to open a selection modal (to be implemented next)
-                                const choice = prompt("Pilih tipe libur: 1 untuk Tgl Sendiri, 2 untuk Tgl Bebas");
-                                if (choice === "1") {
-                                  const date = prompt("Masukkan tanggal (YYYY-MM-DD):");
-                                  if (date) {
-                                    const newDates = [...formData.dates];
-                                    newDates[index] = date;
-                                    setFormData({ ...formData, dates: newDates });
-                                  }
-                                } else if (choice === "2") {
-                                  // Mark as BEBAS
-                                  const newDates = [...formData.dates];
-                                  newDates[index] = "BEBAS_" + Date.now() + "_" + index;
-                                  setFormData({ ...formData, dates: newDates });
-                                }
-                              }}
+                              className="field-input text-xs w-full text-white/50 justify-start hover:bg-white/10 h-10"
+                              onClick={() => setShowDateSelector({index})}
                             >
                               Pilih Tanggal
                             </Button>
                           )}
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                     <div className="grid gap-1.5 col-span-2">
                       <Label className="text-white/70 text-[10px] uppercase font-bold tracking-wider">
                         Bagian (Wajib)
@@ -17314,6 +17831,20 @@ function EmployeeLeave({
               </Dialog>
             </CardHeader>
             <CardContent>
+              {!showTable ? (
+                <div className="flex flex-col items-center justify-center p-6 text-white/50 bg-white/5 rounded-xl border border-white/5">
+                  <p className="mb-4 text-sm text-center">Tabel riwayat pengajuan libur Anda disembunyikan.</p>
+                  <Button onClick={() => setShowTable(true)} variant="outline" className="text-white hover:bg-white/10 border-white/20">
+                    Lihat Request Libur Saya
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex justify-start">
+                    <Button onClick={() => setShowTable(false)} variant="ghost" size="sm" className="text-white/50 hover:text-white">
+                      Sembunyikan Tabel
+                    </Button>
+                  </div>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -17442,6 +17973,8 @@ function EmployeeLeave({
                   </TableBody>
                 </Table>
               </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -17458,6 +17991,7 @@ function EmployeeLeave({
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {!showTable ? null : (
               <div className="overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
                 <Table>
                   <TableHeader>
@@ -17513,6 +18047,7 @@ function EmployeeLeave({
                   </TableBody>
                 </Table>
               </div>
+              )}
             </CardContent>
           </Card>
 
@@ -17596,7 +18131,7 @@ function EmployeeLeave({
                         <div
                           key={dateStr}
                           onClick={() => {
-                            if (isFull || count > 0) {
+                            if (isFull) {
                               setHoldDate((prev) =>
                                 prev === dateStr ? null : dateStr,
                               );

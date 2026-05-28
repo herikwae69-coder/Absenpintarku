@@ -1,0 +1,43 @@
+5647:          <TabsContent
+6076:          <TabsContent
+6088:          <TabsContent
+6095:          <TabsContent
+6115:              <TabsContent value="payroll-bonus">
+6135:              <TabsContent value="payroll-ristan">
+6157:                  <TabsContent value="ristan-100">
+6164:                  <TabsContent value="ristan-bersama">
+6171:                  <TabsContent value="seragam">
+8904:              <TabsContent value="superadmin-manager" className="mt-0 outline-none">
+8910:              <TabsContent value="employees" className="mt-0 outline-none">
+8931:              <TabsContent value="shifts" className="mt-0 outline-none">
+8946:              <TabsContent value="divisions" className="mt-0 outline-none">
+8961:              <TabsContent value="sections" className="mt-0 outline-none">
+8971:              <TabsContent value="live" className="mt-0 outline-none">
+8980:              <TabsContent value="manual" className="mt-0 outline-none">
+8986:              <TabsContent value="job-config" className="mt-0 outline-none">
+8995:                         <TabsContent value="payroll-admin" className="mt-0 outline-none">
+9013:                  <TabsContent value="bonus-nota">
+9016:                  <TabsContent value="bonus-master">
+9019:                  <TabsContent value="bonus-estafet">
+9022:                  <TabsContent value="bonus-jaga-depan">
+9025:                  <TabsContent value="bonus-operator">
+9028:                  <TabsContent value="bonus-berat">
+9031:                  <TabsContent value="bonus-lain-lain">
+9034:                  <TabsContent value="bonus-lain-lain-combined">
+9037:                  <TabsContent value="potongan">
+9040:                  <TabsContent value="potongan-bersama">
+9043:                  <TabsContent value="potongan-seragam">
+9046:                  <TabsContent value="bonus-koreksi-gaji">
+9049:                  <TabsContent value="potongan-koreksi-gaji-minus">
+9054:              <TabsContent value="pengaturan-libur-admin" className="mt-0 outline-none">
+9057:              <TabsContent value="office" className="mt-0 outline-none">
+9060:              <TabsContent value="leaves" className="mt-0 outline-none">
+9070:              <TabsContent value="quotas" className="mt-0 outline-none">
+9079:              <TabsContent value="jadwal" className="mt-0 outline-none">
+9089:              <TabsContent value="shift-periode" className="mt-0 outline-none">
+9099:              <TabsContent value="audit" className="mt-0 outline-none">
+9107:              <TabsContent value="kata" className="mt-0 outline-none">
+9110:              <TabsContent value="reports" className="mt-0 outline-none">
+9119:              <TabsContent value="music" className="mt-0 outline-none">
+9122:              <TabsContent value="db-status" className="mt-0 outline-none">
+9125:              <TabsContent value="dashboard" className="mt-0 outline-none">

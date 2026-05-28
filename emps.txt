@@ -1,0 +1,144 @@
+236:  Employee,
+469:// Admin Authentication is now handle via Employee roles
+507:  const [employees, setEmployees] = useState<Employee[]>([]);
+513:  const [currentUser, setCurrentUser] = useState<Employee | null>(null);
+531:            employees: Employee[],
+541:              setEmployees(cached.employees);
+564:      const employees = empSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Employee);
+578:      setEmployees(employees);
+594:            employees: Employee[],
+604:            setEmployees(cached.employees);
+822:  const handleLogin = async (employee: Employee, credential: string): Promise<boolean> => {
+853:  const handleAdminAuth = async (employee: Employee, credential: string): Promise<boolean> => {
+975:                <EmployeeView
+1141:  employees: Employee[];
+1143:  onLogin: (e: Employee, pin: string) => Promise<boolean>;
+1144:  onAdminAuth: (e: Employee, pwd: string) => Promise<boolean>;
+1191:  const handleEmpLogin = async (e: Employee, p: string) => {
+1208:  const handleAdminLogin = async (e: Employee, p: string) => {
+1238:  const selectedEmployee = employees.find(
+1251:        userData={selectedEmployee ? { name: selectedEmployee.name, pin: selectedEmployee.pin } : null}
+1383:                      {selectedEmployee && (
+1392:                            {selectedEmployee.name}
+1395:                            {jobPositions?.find(p => p.id === selectedEmployee.jobPositionId)?.name || "-"}
+1402:                      {selectedEmployee && (
+1474:                      disabled={!selectedEmployee || !pin}
+1476:                        selectedEmployee && handleEmpLogin(selectedEmployee, pin)
+1879:function EmployeeSelector({
+1889:  employees: Employee[];
+1993:  employees: Employee[];
+2010:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+2224:  const toggleEmployee = (dateStr: string, empId: string) => {
+2446:                        <EmployeeSelector
+2527:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+2997:  employees: Employee[];
+3014:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+3417:                        <EmployeeSelector
+3483:  employees: Employee[];
+3500:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+3529:  const [showEmployeeCandidates, setShowEmployeeCandidates] = useState(false);
+3531:  const filteredEmployees = React.useMemo(() => {
+3952:                    <EmployeeSelector
+4119:  employees: Employee[];
+4136:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+4451:  employees: Employee[];
+4468:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+4715:  const selectedEmployee = employees.find((e) => e.id === selectedEmpId);
+4716:  const filteredEmployees = employees.filter(
+4949:                      {selectedEmployee
+4950:                        ? `${selectedEmployee.name} (${selectedEmployee.pin})`
+4966:                      {filteredEmployees.length === 0 ? (
+4971:                        filteredEmployees.map((e) => (
+5118:function EmployeeView({
+5131:  employee: Employee;
+5132:  employees: Employee[];
+6080:            <EmployeeLeave
+6138:                  isEmployee={true}
+6139:                  currentEmployeeId={employee.id}
+6145:                  isEmployee={true}
+6146:                  currentEmployeeId={employee.id}
+6152:                  isEmployee={true}
+6153:                  currentEmployeeId={employee.id}
+6171:  employees: Employee[];
+6188:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+6641:                <EmployeeSelector
+6853:  employees: Employee[];
+6870:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+7144:                <EmployeeSelector
+7252:  employees: Employee[];
+7269:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+7543:                <EmployeeSelector
+7650:  employees: Employee[];
+7667:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+8120:                <EmployeeSelector
+8440:  employees: Employee[];
+8447:  currentUser: Employee | null;
+8972:                  <AdminEmployees
+9333:  employees: Employee[];
+9337:    totalEmployees: 0,
+9375:        // 1. Total Employees
+9379:        const totalEmployees = empSnap.data().count;
+9407:        const allEmployeesSnap = await getDocs(collection(db, "employees"));
+9409:        allEmployeesSnap.forEach((doc) =>
+9457:          totalEmployees,
+9460:          absentToday: totalEmployees - presentToday,
+9491:      const suggestedLevel = getSuggestedLevelForEmployee(
+9745:                {stats.totalEmployees}
+9880:                      {user.role || "Employee"}
+10294:const getSuggestedLevelForEmployee = (
+10331:function AdminEmployees({
+10344:  employees: Employee[];
+10350:  currentUser: Employee | null;
+10356:  const [isEditing, setIsEditing] = useState<Employee | null>(null);
+10362:  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null); // NEW
+10378:  const filteredEmployees = employees.filter((e) => {
+10545:  const handleEmployeeDelete = async (emp: any) => {
+10604:  const triggerEdit = (e: Employee) => {
+10627:      suggestedLevel: getSuggestedLevelForEmployee(
+10713:                setSelectedEmployee(null);
+10753:                      if (!selectedEmployee || !deactivateReason || !deactivateDate) return alert("Lengkapi data!");
+10754:                      await updateDoc(doc(db, "employees", selectedEmployee.id), {
+10756:                          pin: selectedEmployee.pin.includes("(nonaktif)") ? selectedEmployee.pin : selectedEmployee.pin + " (nonaktif)",
+10764:                      setSelectedEmployee(null);
+10775:              if (!val) setSelectedEmployee(null);
+10782:                  Apakah Anda yakin ingin mengaktifkan kembali {selectedEmployee?.name}?
+10793:                      if (!selectedEmployee) return;
+10794:                      await updateDoc(doc(db, "employees", selectedEmployee.id), {
+10796:                          pin: selectedEmployee.pin.replace(" (nonaktif)", ""),
+10803:                      setSelectedEmployee(null);
+11217:              {filteredEmployees.map((e) => (
+11287:                          setSelectedEmployee(e);
+11299:                          setSelectedEmployee(e);
+12397:  employees: Employee[];
+12407:    () => getCombinedPeriods(controls).filter(p => controls[p.value]?.isVisibleToEmployee === true),
+13434:  employees: Employee[];
+13946:        isVisibleToEmployee: isVisible,
+14213:                          updateVisibility(p.value, !ctrl.isVisibleToEmployee)
+14216:                          ctrl.isVisibleToEmployee
+14223:                            ctrl.isVisibleToEmployee
+14228:                          {ctrl.isVisibleToEmployee && (
+14232:                        {ctrl.isVisibleToEmployee
+14816:  employees: Employee[];
+14984:  employees: Employee[];
+14998:  const [selectedEmpForManual, setSelectedEmpForManual] = useState<Employee | null>(null);
+15334:              <EmployeeSelector
+15396:                      <EmployeeSelector
+15670:  employees: Employee[];
+15693:  const [noChancesUsers, setNoChancesUsers] = useState<Employee[]>([]);
+15825:        isVisibleToEmployee: isVisible,
+16640:function EmployeeLeave({
+16645:  employee: Employee;
+16646:  employees: Employee[];
+16696:    if (!ctrl || (ctrl.status !== "open" && ctrl.status !== "scheduled" && ctrl.isVisibleToEmployee !== true)) return;
+16817:        ctrl.isVisibleToEmployee === true ||
+16861:        console.error("Employee requests error:", err);
+16880:      (err) => console.error("Employee leave error:", err),
+18086:  employees: Employee[];
+18124:  const updateStatus = async (emp: Employee, status: string) => {
+18168:  const getMatchedEmployee = (val: string) => {
+18389:              {/* Employee Preview */}
+18392:                  {getMatchedEmployee(inputs[status]) ? (
+18396:                        {getMatchedEmployee(inputs[status])?.name} (
+18397:                        {getMatchedEmployee(inputs[status])?.pin})
+18503:function AdminBackup({ employees }: { employees: Employee[] }) {
+18572:  employees: Employee[];

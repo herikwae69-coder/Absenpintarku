@@ -1,0 +1,21 @@
+318:    const base = qDoc?.quota ?? 4;
+518:  const [quotaExceeded, setQuotaExceeded] = useState(false);
+593:      if (err?.message?.includes("Quota") || err?.message?.includes("quota")) {
+886:  if (quotaExceeded) {
+8723:          value: "quotas",
+9199:              <TabsContent value="quotas" className="mt-0 outline-none">
+13459:  const [quotas, setQuotas] = useState<any[]>([]);
+13533:          const quotaVal =
+13544:                quota: quotaVal,
+13572:        quotas,
+13648:            id="quota-upload"
+13651:            htmlFor="quota-upload"
+13732:                      quotas,
+13736:                    // Calculate used quota from 'leaveRequests' collection using unique dates logic
+13800:                                const quotaVal = parseInt(newVal);
+13801:                                if (!isNaN(quotaVal)) {
+13812:                                      quota: quotaVal,
+17039:    // This is the CRITICAL STEP to save Firebase read quota.
+17058:        // If quota exceeded, we might want to alert, but the main app handles the blank screen for total failure
+17062:    // Listener for ALL requests in the CURRENT division (for popular dates / quota checks)
+17163:    // Check if enough quota
