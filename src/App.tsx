@@ -636,7 +636,7 @@ export default function App() {
     }
   };
 
-  if (isUpdating && view !== "login" && !isAdmin) {
+  if ((quotaExceeded || isUpdating) && !isAdmin && view !== "login") {
     return (
       <div className="min-h-screen bg-[#0a0f1a] flex flex-col items-center justify-center p-6 text-center overflow-hidden font-sans">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -654,7 +654,7 @@ export default function App() {
               </div>
               
               <h1 className="text-3xl font-black text-white mb-6 uppercase tracking-tighter">
-                  Sedang proses update,<br/>aplikasi tidak bisa di buka.
+                  {quotaExceeded ? "Limit Database Tercapai," : "Sedang proses update,"}<br/>aplikasi tidak bisa di buka.
               </h1>
               
               <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl mb-8">
@@ -668,12 +668,12 @@ export default function App() {
 
               <div className="flex items-center justify-center gap-3 text-white/30 text-sm font-medium">
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  Harap tunggu sampai proses pemeliharaan selesai
+                  {quotaExceeded ? "Mohon kembali lagi besok atau hubungi admin" : "Harap tunggu sampai proses pemeliharaan selesai"}
               </div>
           </motion.div>
           
           <div className="mt-12 text-white/10 text-[100px] font-black select-none pointer-events-none uppercase tracking-tighter italic">
-              MAINTENANCE
+              {quotaExceeded ? "LIMIT REACHED" : "MAINTENANCE"}
           </div>
       </div>
     );
@@ -938,33 +938,6 @@ export default function App() {
       return false;
     }
   };
-
-  if (quotaExceeded) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center font-sans text-white/50 p-6 text-center">
-        <div className="mesh-bg" />
-        <motion.div
-           animate={{ scale: [1, 1.1, 1] }}
-           transition={{ repeat: Infinity, duration: 2 }}
-           className="mb-6"
-        >
-          <ClipboardList className="w-16 h-16 text-rose-500/80 mx-auto" />
-        </motion.div>
-        <div className="glass-panel p-8 max-w-lg shadow-xl relative overflow-hidden ring-1 ring-white/10">
-            <h2 className="text-xl font-bold text-white mb-4">Yah, Limit Database Tercapai 😅</h2>
-            <p className="text-sm text-gray-300 leading-relaxed text-left mb-4">
-                Dikarenakan tidak ada endors yg masuk, app kebanggaan jg1 ini masih menggunakan database gratis dari google.com, dan hari ini sudah mencapai batas operasional harian gratis. Mohom kembali lagi besok yaa.. Tapi tenang saja babang heri masih punya solusi agar semua tetap terkendali, wait on proses ya boskuhh
-            </p>
-            <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
-               <span className="text-xs text-white/40 italic">#SupportBabangHeri</span>
-               <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-                 Coba Muat Ulang
-               </Button>
-            </div>
-        </div>
-      </div>
-    );
-  }
 
   if (loading && view === "login")
     return (
