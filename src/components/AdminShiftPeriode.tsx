@@ -41,9 +41,13 @@ export function AdminShiftPeriode({
 
   const fetchPeriods = async () => {
     try {
-      const q = query(collection(db, "periodControls"));
-      const snap = await getDocs(q);
-      const opts = snap.docs.map(doc => {
+      const pcQ = query(collection(db, "periodControls"));
+      const pcSnap = await getDocs(pcQ);
+      
+      const lpQ = query(collection(db, "liburPeriods"));
+      const lpSnap = await getDocs(lpQ);
+
+      const pcOpts = pcSnap.docs.map(doc => {
           const data = doc.data();
           return {
               label: data.name,
@@ -52,7 +56,22 @@ export function AdminShiftPeriode({
               end: data.endDate ? new Date(data.endDate) : new Date(),
               ...data
           };
-      }).filter((p: any) => !!p.label && !!p.active).sort((a,b) => b.start.getTime() - a.start.getTime()); // fallback
+      }).filter((p: any) => !!p.label && !!p.active);
+
+      const lpOpts = lpSnap.docs.map(doc => {
+          const data = doc.data();
+          return {
+              label: data.name,
+              value: doc.id,
+              start: data.startDate ? new Date(data.startDate) : new Date(),
+              end: data.endDate ? new Date(data.endDate) : new Date(),
+              active: data.status === "active",
+              ...data
+          };
+      }).filter((p: any) => !!p.label && !!p.active);
+
+      const opts = [...pcOpts, ...lpOpts].sort((a,b) => b.start.getTime() - a.start.getTime());
+      
       setPeriodOptions(opts);
       if (opts.length > 0) {
           if(!selectedPeriod || !opts.find(o => o.value === selectedPeriod)) {

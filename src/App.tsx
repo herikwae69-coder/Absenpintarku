@@ -39,30 +39,79 @@ import {
 const getSnapshotOnce = onSnapshot;
 
 let sharedPeriodControlsCache: Record<string, any> = {};
+let liburPeriodsCache: Record<string, any> = {};
 let controlsReadyPromise: Promise<Record<string, any>> | null = null;
 type PeriodListener = (data: Record<string, any>) => void;
 const periodListeners: PeriodListener[] = [];
 
+const notifyListeners = () => {
+  const merged: Record<string, any> = { ...sharedPeriodControlsCache };
+  
+  Object.entries(liburPeriodsCache).forEach(([id, lpData]) => {
+    // If it exists in sharedPeriodControlsCache (shadow or legacy), properties from lpData
+    // (name, dates) should overwrite, but we keep others like maxAccumulatedLeave
+    merged[id] = {
+      ...(merged[id] || {}), // Keep existing settings (locks, quotas, status)
+      ...lpData,             // Applied latest name, dates, and base status
+    };
+    
+    // Safety: If periodControls has a more specific status (locked/scheduled), keep it
+    const pcStatus = sharedPeriodControlsCache[id]?.status;
+    if (pcStatus && pcStatus !== "active" && pcStatus !== "closed") {
+       merged[id].status = pcStatus;
+    }
+  });
+
+  periodListeners.forEach(fn => fn(merged));
+};
+
 export const getSharedPeriodControls = async () => {
   if (!controlsReadyPromise) {
     controlsReadyPromise = new Promise((resolve) => {
+      let pcReady = false;
+      let lpReady = false;
+
+      const checkReady = () => {
+        if (pcReady && lpReady) {
+          const merged = { ...sharedPeriodControlsCache, ...liburPeriodsCache };
+          resolve(merged);
+          notifyListeners();
+        }
+      };
+
       onSnapshot(collection(db, "periodControls"), (snap) => {
         const data: Record<string, any> = {};
         snap.docs.forEach((d) => {
           data[d.id] = d.data();
         });
         sharedPeriodControlsCache = data;
-        resolve(data);
-        periodListeners.forEach(fn => fn(data));
+        pcReady = true;
+        checkReady();
+      });
+
+      onSnapshot(collection(db, "liburPeriods"), (snap) => {
+        const data: Record<string, any> = {};
+        snap.docs.forEach((d) => {
+          const docData = d.data();
+          data[d.id] = {
+            ...docData,
+            active: docData.status === "active",
+            isVisibleToEmployee: docData.status === "active",
+          };
+        });
+        liburPeriodsCache = data;
+        lpReady = true;
+        checkReady();
       });
     });
   }
   await controlsReadyPromise;
-  return sharedPeriodControlsCache;
+  return { ...sharedPeriodControlsCache, ...liburPeriodsCache };
 };
 
 export const resetSharedPeriodControls = () => {
     sharedPeriodControlsCache = {};
+    liburPeriodsCache = {};
     controlsReadyPromise = null;
     getSharedPeriodControls();
 };
@@ -70,7 +119,9 @@ export const resetSharedPeriodControls = () => {
 export const subscribePeriodControls = (fn: PeriodListener) => {
   periodListeners.push(fn);
   if (controlsReadyPromise) {
-    controlsReadyPromise.then(() => fn(sharedPeriodControlsCache));
+    controlsReadyPromise.then(() => {
+      fn({ ...sharedPeriodControlsCache, ...liburPeriodsCache });
+    });
   } else {
     getSharedPeriodControls();
   }
@@ -636,49 +687,6 @@ export default function App() {
     }
   };
 
-  if ((quotaExceeded || isUpdating) && !isAdmin && view !== "login") {
-    return (
-      <div className="min-h-screen bg-[#0a0f1a] flex flex-col items-center justify-center p-6 text-center overflow-hidden font-sans">
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-              <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[100px] animate-pulse" />
-              <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse delay-1000" />
-          </div>
-
-          <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="max-w-xl w-full glass-panel p-10 rounded-3xl border border-white/10 relative z-10"
-          >
-              <div className="w-24 h-24 bg-amber-500/20 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-amber-500/30">
-                  <RefreshCw className="w-12 h-12 text-amber-500 animate-spin-slow" />
-              </div>
-              
-              <h1 className="text-3xl font-black text-white mb-6 uppercase tracking-tighter">
-                  {quotaExceeded ? "Limit Database Tercapai," : "Sedang proses update,"}<br/>aplikasi tidak bisa di buka.
-              </h1>
-              
-              <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl mb-8">
-                  <p className="text-rose-400 font-bold text-lg mb-1 uppercase tracking-wider">
-                      PENGUMUMAN PENTING
-                  </p>
-                  <p className="text-rose-300/80 leading-relaxed font-bold">
-                      PROSES ABSEN MOHON UNTUK MANUAL DULU
-                  </p>
-              </div>
-
-              <div className="flex items-center justify-center gap-3 text-white/30 text-sm font-medium">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  {quotaExceeded ? "Mohon kembali lagi besok atau hubungi admin" : "Harap tunggu sampai proses pemeliharaan selesai"}
-              </div>
-          </motion.div>
-          
-          <div className="mt-12 text-white/10 text-[100px] font-black select-none pointer-events-none uppercase tracking-tighter italic">
-              {quotaExceeded ? "LIMIT REACHED" : "MAINTENANCE"}
-          </div>
-      </div>
-    );
-  }
-
   useEffect(() => {
     // Check for persisted login
     const persistedUser = localStorage.getItem("jg1_user");
@@ -938,6 +946,49 @@ export default function App() {
       return false;
     }
   };
+
+  if ((quotaExceeded || isUpdating) && !isAdmin && view !== "login") {
+    return (
+      <div className="min-h-screen bg-[#0a0f1a] flex flex-col items-center justify-center p-6 text-center overflow-hidden font-sans">
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[100px] animate-pulse" />
+              <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse delay-1000" />
+          </div>
+
+          <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-xl w-full glass-panel p-10 rounded-3xl border border-white/10 relative z-10"
+          >
+              <div className="w-24 h-24 bg-amber-500/20 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-amber-500/30">
+                  <RefreshCw className="w-12 h-12 text-amber-500 animate-spin-slow" />
+              </div>
+              
+              <h1 className="text-3xl font-black text-white mb-6 uppercase tracking-tighter">
+                  {quotaExceeded ? "Limit Database Tercapai," : "Sedang proses update,"}<br/>aplikasi tidak bisa di buka.
+              </h1>
+              
+              <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl mb-8">
+                  <p className="text-rose-400 font-bold text-lg mb-1 uppercase tracking-wider">
+                      PENGUMUMAN PENTING
+                 </p>
+                  <p className="text-rose-300/80 leading-relaxed font-bold">
+                      PROSES ABSEN MOHON UNTUK MANUAL DULU
+                  </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 text-white/30 text-sm font-medium">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  {quotaExceeded ? "Mohon kembali lagi besok atau hubungi admin" : "Harap tunggu sampai proses pemeliharaan selesai"}
+              </div>
+          </motion.div>
+          
+          <div className="mt-12 text-white/10 text-[100px] font-black select-none pointer-events-none uppercase tracking-tighter italic">
+              {quotaExceeded ? "LIMIT REACHED" : "MAINTENANCE"}
+          </div>
+      </div>
+    );
+  }
 
   if (loading && view === "login")
     return (
@@ -5676,7 +5727,7 @@ function EmployeeView({
               className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
             >
               <Clock className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Absen</span>
+              <span className="text-xs">Live Absensi</span>
             </TabsTrigger>
             <TabsTrigger
               value="libur"
@@ -5684,20 +5735,6 @@ function EmployeeView({
             >
               <CalendarIcon className="w-3.5 h-3.5" />{" "}
               <span className="text-xs">Libur</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="pengaturan-libur"
-              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-purple-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
-            >
-              <Settings className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Pengaturan Libur</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="payroll"
-              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-emerald-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
-            >
-              <DollarSign className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Payroll</span>
             </TabsTrigger>
           </TabsList>
 
@@ -6140,101 +6177,6 @@ function EmployeeView({
               sections={sections}
               setActiveTab={setActiveTab}
             />
-          </TabsContent>
-
-          <TabsContent
-            value="pengaturan-libur"
-            className="mt-0 focus-visible:outline-none focus-visible:ring-0"
-          >
-            <LiburPeriodManager />
-          </TabsContent>
-
-          <TabsContent
-            value="payroll"
-            className="mt-0 focus-visible:outline-none focus-visible:ring-0"
-          >
-            <Tabs defaultValue="payroll-bonus" className="w-full">
-              <TabsList className="grid grid-cols-2 w-full glass-panel p-1 bg-white/5 border-white/5 mb-6 rounded-xl">
-                <TabsTrigger
-                  value="payroll-bonus"
-                  className="rounded-lg data-[state=active]:bg-emerald-600 data-[state=active]:text-white text-xs font-bold py-2"
-                >
-                  <Zap className="w-3 h-3 mr-2" /> Bonus
-                </TabsTrigger>
-                <TabsTrigger
-                  value="payroll-ristan"
-                  className="rounded-lg data-[state=active]:bg-orange-500 data-[state=active]:text-white text-xs font-bold py-2"
-                >
-                  <ClipboardList className="w-3 h-3 mr-2" /> Ristan
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="payroll-bonus">
-                <Card className="glass-panel border-none py-20 bg-emerald-500/5 border-dashed border-emerald-500/20">
-                  <CardContent className="flex flex-col items-center justify-center text-center">
-                    <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/30 animate-pulse">
-                      <Zap className="w-10 h-10 text-emerald-400" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-white mb-2">
-                      Menu Bonus
-                    </h3>
-                    <p className="text-white/40 max-w-sm">
-                      Dalam proses tunggu update selanjutnya. Fitur ini akan
-                      tersedia pada versi aplikasi mendatang.
-                    </p>
-                    <Badge className="mt-6 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border-none px-4 py-1">
-                      SOON
-                    </Badge>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="payroll-ristan">
-                <Tabs defaultValue="ristan-100" className="w-full">
-                  <TabsList className="grid grid-cols-3 w-full glass-panel p-1 bg-white/5 border-white/5 mb-6 rounded-xl">
-                    <TabsTrigger
-                      value="ristan-100"
-                      className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white text-xs font-bold py-2"
-                    >
-                      Ristan 100%
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="ristan-bersama"
-                      className="rounded-lg data-[state=active]:bg-rose-500 data-[state=active]:text-white text-xs font-bold py-2"
-                    >
-                      Bersama
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="seragam"
-                      className="rounded-lg data-[state=active]:bg-fuchsia-600 data-[state=active]:text-white text-xs font-bold py-2"
-                    >
-                      Seragam
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="ristan-100">
-                    <PotonganKehilanganManager
-                      employees={employees}
-                      isEmployee={true}
-                      currentEmployeeId={employee.id}
-                    />
-                  </TabsContent>
-                  <TabsContent value="ristan-bersama">
-                    <PotonganKehilanganBersamaManager
-                      employees={employees}
-                      isEmployee={true}
-                      currentEmployeeId={employee.id}
-                    />
-                  </TabsContent>
-                  <TabsContent value="seragam">
-                    <PotonganSeragamManager
-                      employees={employees}
-                      isEmployee={true}
-                      currentEmployeeId={employee.id}
-                    />
-                  </TabsContent>
-                </Tabs>
-              </TabsContent>
-            </Tabs>
           </TabsContent>
         </Tabs>
       </div>
@@ -8660,6 +8602,14 @@ function AdminDashboard({
       label: "Absensi",
       items: [
         {
+          value: "live",
+          label: "Live Absensi",
+          icon: <ClipboardList className="w-4 h-4" />,
+        },
+      ],
+      /*
+      items: [
+        {
           value: "manual",
           label: "Absensi Manual",
           icon: <ClipboardCheck className="w-4 h-4" />,
@@ -8675,9 +8625,18 @@ function AdminDashboard({
           icon: <Eye className="w-4 h-4" />,
         },
       ],
+      */
     },
     {
       label: "Payroll",
+      items: [
+        {
+          value: "payroll-disabled",
+          label: "Menu Payroll",
+          icon: <DollarSign className="w-4 h-4 text-rose-500" />,
+        },
+      ],
+      /*
       subGroups: [
         {
           label: "Bonus",
@@ -8703,9 +8662,18 @@ function AdminDashboard({
           ]
         }
       ]
+      */
     },
     {
       label: "Audit & Export",
+      items: [
+        {
+          value: "audit-disabled",
+          label: "Audit & Export Data",
+          icon: <FileDown className="w-4 h-4 text-rose-500" />,
+        },
+      ],
+      /*
       items: [
         {
           value: "audit",
@@ -8713,6 +8681,7 @@ function AdminDashboard({
           icon: <FileDown className="w-4 h-4 text-emerald-400" />,
         },
       ],
+      */
     },
     {
       label: "Libur",
@@ -9116,12 +9085,14 @@ function AdminDashboard({
                   alert={alert}
                 />
               </TabsContent>
+              {/*
               <TabsContent value="manual" className="mt-0 outline-none">
                 <AdminManualAttendance
                   employees={employees}
                   divisions={divisions}
                 />
               </TabsContent>
+              */}
               <TabsContent value="job-config" className="mt-0 outline-none">
                 <AdminJobConfig
                   jobPositions={jobPositions}
@@ -9132,9 +9103,27 @@ function AdminDashboard({
                   onRefresh={onRefresh}
                 />
               </TabsContent>
+              <TabsContent value="payroll-disabled" className="mt-0 outline-none">
+                <div className="space-y-6">
+                  <Card className="glass-panel border-none py-20 bg-rose-500/5 border-dashed border-rose-500/20">
+                    <CardContent className="flex flex-col items-center justify-center text-center">
+                      <div className="w-20 h-20 rounded-full bg-rose-500/20 flex items-center justify-center mb-6 border border-rose-500/30">
+                        <AlertTriangle className="w-10 h-10 text-rose-400" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white mb-2">
+                        Menu Dinonaktifkan
+                      </h3>
+                      <p className="text-white/40 max-w-md">
+                        Menu payroll saat ini sedang dinonaktifkan oleh pengembang untuk sementara waktu.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* 
               <TabsContent value="payroll-admin" className="mt-0 outline-none">
                 <div className="space-y-6">
-                  {/* Redirect or show placeholder if needed, but usually activeTab will point directly to sub-items */}
                   <Card className="glass-panel border-none py-20 bg-emerald-500/5 border-dashed border-emerald-500/20">
                     <CardContent className="flex flex-col items-center justify-center text-center">
                       <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/30 animate-pulse">
@@ -9151,7 +9140,6 @@ function AdminDashboard({
                 </div>
               </TabsContent>
 
-              {/* Sub-item Contents */}
               <TabsContent value="bonus-nota">
                 <AdminBonusNota employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
               </TabsContent>
@@ -9192,6 +9180,7 @@ function AdminDashboard({
               <TabsContent value="potongan-koreksi-gaji-minus">
                 <AdminKoreksiGajiMinus employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
               </TabsContent>
+              */}
               <TabsContent value="pengaturan-libur-admin" className="mt-0 outline-none">
                 <LiburPeriodManager />
               </TabsContent>
@@ -9237,6 +9226,24 @@ function AdminDashboard({
                   alert={alert}
                 />
               </TabsContent>
+              <TabsContent value="audit-disabled" className="mt-0 outline-none">
+                <div className="space-y-6">
+                  <Card className="glass-panel border-none py-20 bg-rose-500/5 border-dashed border-rose-500/20">
+                    <CardContent className="flex flex-col items-center justify-center text-center">
+                      <div className="w-20 h-20 rounded-full bg-rose-500/20 flex items-center justify-center mb-6 border border-rose-500/30">
+                        <AlertTriangle className="w-10 h-10 text-rose-400" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-white mb-2">
+                        Menu Dinonaktifkan
+                      </h3>
+                      <p className="text-white/40 max-w-md">
+                        Menu audit & export saat ini sedang dinonaktifkan oleh pengembang untuk sementara waktu.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+              {/*
               <TabsContent value="audit" className="mt-0 outline-none">
                 <AdminAuditDanExport
                   employees={employees}
@@ -9245,6 +9252,7 @@ function AdminDashboard({
                   setActivePeriodId={setActivePeriodId}
                 />
               </TabsContent>
+              */}
               <TabsContent value="kata" className="mt-0 outline-none">
                 <AdminKata />
               </TabsContent>
@@ -9378,64 +9386,13 @@ function AdminOverview({
   const [isBadDebtOpen, setIsBadDebtOpen] = useState(false);
 
   useEffect(() => {
-    // Listener for online users (last seen in last 5 minutes)
-    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const q = query(
-      collection(db, "employees"),
-      where("lastSeen", ">", Timestamp.fromDate(fiveMinsAgo)),
-    );
-
-    const unsub = getSnapshotOnce(q, (snap) => {
-      const online = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setOnlineUsers(online);
-    });
-
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        // 1. Total Employees
-        const empSnap = await getCountFromServer(
-          query(collection(db, "employees")),
-        );
-        const totalEmployees = empSnap.data().count;
-
-        // 2. Attendance Today
-        const todayStr = format(new Date(), "yyyy-MM-dd");
-        const attRef = collection(db, "attendance");
-        const todayAttQuery = query(attRef, where("date", "==", todayStr));
-        const todayAttSnap = await getDocs(todayAttQuery);
-
-        let presentToday = 0;
-        let lateToday = 0;
-
-        todayAttSnap.forEach((doc) => {
-          presentToday++;
-          if (doc.data().status === "Terlambat") {
-            lateToday++;
-          }
-        });
-
-        // 3. Pending Leaves
-        const leaveSnap = await getCountFromServer(
-          query(
-            collection(db, "leaveRequests"),
-            where("status", "==", "pending"),
-          ),
-        );
-        const pendingLeaves = leaveSnap.data().count;
-
-        // 5. Bad Debts (Inactive employees with remaining balance)
-        const allEmployeesSnap = await getDocs(collection(db, "employees"));
+        // Bad Debts (Inactive employees with remaining balance)
         const employeesMap = new Map();
-        allEmployeesSnap.forEach((doc) =>
-          employeesMap.set(doc.id, { id: doc.id, ...doc.data() }),
+        employees.forEach((emp) =>
+          employeesMap.set(emp.id, emp),
         );
 
         const badDebtsQuery = query(
@@ -9482,27 +9439,14 @@ function AdminOverview({
         setBadDebtList(monitorList);
 
         setStats({
-          totalEmployees,
-          presentToday,
-          lateToday,
-          absentToday: totalEmployees - presentToday,
-          pendingLeaves,
+          totalEmployees: 0,
+          presentToday: 0,
+          lateToday: 0,
+          absentToday: 0,
+          pendingLeaves: 0,
           badDebtsCount: monitorList.length,
           totalBadDebtAmount,
         });
-
-        // 4. Recent Activity (10 rows)
-        const recentActivityQuery = query(
-          collection(db, "activityLogs"),
-          orderBy("timestamp", "desc"),
-          limit(10),
-        );
-        const recentAttSnap = await getDocs(recentActivityQuery);
-        const activities = recentAttSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setRecentActivity(activities);
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
@@ -9734,112 +9678,8 @@ function AdminOverview({
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
-        <Card
-          className="glass-panel border-white/5 p-5 hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer group relative overflow-hidden"
-          onClick={() => setIsOnlineDetailOpen(true)}
-        >
-          <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 blur-2xl rounded-full -mr-10 -mt-10" />
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1 group-hover:text-emerald-400/60 transition-colors">
-                LIVE MONITOR
-              </p>
-              <div className="flex items-center gap-2">
-                <h3 className="text-4xl font-black text-emerald-400 group-hover:scale-110 transition-transform origin-left">
-                  {onlineUsers.length}
-                </h3>
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
-              </div>
-            </div>
-            <div className="p-2.5 rounded-2xl bg-emerald-400/10 border border-emerald-400/20 group-hover:bg-emerald-400/20 transition-colors">
-              <Zap className="w-5 h-5 text-emerald-400" />
-            </div>
-          </div>
-        </Card>
-
-        {/* Similar refinement for other cards... (Omitted for brevity in common chunks but I'll update them below) */}
-        <Card
-          className={`glass-panel border-white/5 p-5 transition-all group relative overflow-hidden ${role === "admin" ? "hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
-          onClick={() => role === "admin" && setActiveTab("employees")}
-        >
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">
-                TOTAL STAFF
-              </p>
-              <h3 className="text-4xl font-black text-white group-hover:text-primary transition-colors">
-                {stats.totalEmployees}
-              </h3>
-            </div>
-            <div className="p-2.5 rounded-2xl bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors">
-              <Users className="w-5 h-5 text-primary" />
-            </div>
-          </div>
-        </Card>
-
-        <Card
-          className="glass-panel border-white/5 p-5 hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer group relative overflow-hidden"
-          onClick={() => setActiveTab("live")}
-        >
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">
-                PRESENT TODAY
-              </p>
-              <h3 className="text-4xl font-black text-emerald-400">
-                {stats.presentToday}
-              </h3>
-              {stats.lateToday > 0 && (
-                <p className="text-[9px] text-rose-400 font-black mt-1 uppercase tracking-tighter">
-                  -{stats.lateToday} Late Arrivals
-                </p>
-              )}
-            </div>
-            <div className="p-2.5 rounded-2xl bg-emerald-400/10 border border-emerald-400/20 group-hover:bg-emerald-400/20 transition-colors">
-              <Check className="w-5 h-5 text-emerald-400" />
-            </div>
-          </div>
-        </Card>
-
-        <Card
-          className="glass-panel border-white/5 p-5 hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer group relative overflow-hidden"
-          onClick={() => setActiveTab("leaves")}
-        >
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">
-                LEAVE REQUESTS
-              </p>
-              <h3 className="text-4xl font-black text-amber-400">
-                {stats.pendingLeaves}
-              </h3>
-            </div>
-            <div className="p-2.5 rounded-2xl bg-amber-400/10 border border-amber-400/20 group-hover:bg-amber-400/20 transition-colors">
-              <CalendarIcon className="w-5 h-5 text-amber-400" />
-            </div>
-          </div>
-        </Card>
-
-        <Card
-          className={`glass-panel border-white/5 p-5 transition-all group relative overflow-hidden ${role === "admin" ? "hover:bg-white/[0.07] hover:scale-[1.02] active:scale-[0.98] cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
-          onClick={() => role === "admin" && setActiveTab("db-status")}
-        >
-          <div className="flex items-start justify-between relative z-10">
-            <div>
-              <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">
-                DATABASE
-              </p>
-              <h3 className="text-4xl font-black text-blue-400">SYNC</h3>
-            </div>
-            <div className="p-2.5 rounded-2xl bg-blue-400/10 border border-blue-400/20 group-hover:bg-blue-400/20 transition-colors">
-              <Database className="w-5 h-5 text-blue-400" />
-            </div>
-          </div>
-        </Card>
-
-        {stats.badDebtsCount > 0 && (
+      {stats.badDebtsCount > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           <Card
             className="glass-panel border-rose-500/20 p-5 bg-rose-500/5 hover:bg-rose-500/10 hover:scale-[1.02] transition-all cursor-pointer group relative overflow-hidden"
             onClick={() => setIsBadDebtOpen(true)}
@@ -9867,74 +9707,8 @@ function AdminOverview({
               </div>
             </div>
           </Card>
-        )}
-      </div>
-
-      <Dialog open={isOnlineDetailOpen} onOpenChange={setIsOnlineDetailOpen}>
-        <DialogContent className="glass-panel border-white/20 bg-black/90 text-white max-w-md">
-          <DialogHeader className="p-0">
-            <DialogTitle className="text-lg font-black flex items-center gap-2">
-              <Zap className="w-5 h-5 text-emerald-400" />
-              User Sedang Online ({onlineUsers.length})
-            </DialogTitle>
-            <DialogDescription className="text-white/40 text-xs italic">
-              Menampilkan karyawan yang aktif di aplikasi dalam 5 menit
-              terakhir.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-            {onlineUsers.length > 0 ? (
-              onlineUsers.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10"
-                >
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center border border-white/10 overflow-hidden">
-                    {user.photoUrl ? (
-                      <img
-                        src={user.photoUrl}
-                        alt="Avatar"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <User className="w-5 h-5 text-white/40" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-white truncate">
-                      {user.name}
-                    </p>
-                    <p className="text-[10px] text-white/40 uppercase tracking-widest font-black">
-                      {user.role || "Employee"}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[9px] font-bold text-emerald-400/60 font-mono text-right">
-                      LIVE
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-10">
-                <p className="text-xs text-white/20 italic">
-                  Tidak ada user online saat ini.
-                </p>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="sm:justify-start">
-            <Button
-              variant="ghost"
-              className="w-full text-white/40 text-xs hover:text-white"
-              onClick={() => setIsOnlineDetailOpen(false)}
-            >
-              Tutup
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       <Dialog open={isBadDebtOpen} onOpenChange={setIsBadDebtOpen}>
         <DialogContent className="glass-panel border-rose-500/20 bg-black/95 text-white max-w-2xl rounded-[2.5rem] border-2 shadow-[0_0_50px_rgba(244,63,94,0.15)]">
@@ -10056,117 +9830,6 @@ function AdminOverview({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activity */}
-        <Card className="lg:col-span-2 glass-panel border-none p-6">
-          <CardHeader className="px-0 pt-0">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <History className="w-5 h-5 text-primary" />
-              Aktivitas Absensi Terbaru
-            </CardTitle>
-            <CardDescription className="text-white/40">
-              Log aktivitas real-time dari seluruh karyawan.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="h-64 overflow-y-auto pr-2 space-y-2">
-              {recentActivity.length > 0 ? (
-                recentActivity.map((act) => (
-                  <div
-                    key={act.id}
-                    className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/[0.08] transition-colors"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0 flex items-center justify-center border border-white/10 overflow-hidden">
-                      {act.photoUrl ? (
-                        <img
-                          src={act.photoUrl}
-                          alt="Selfie"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <User className="w-4 h-4 text-white/40" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-white truncate">
-                        {act.employeeName}
-                      </p>
-                      <p className="text-[10px] text-white/50">
-                        {act.action} • {act.timestamp ? new Date(act.timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
-                      </p>
-                    </div>
-                    <div
-                      className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${
-                        act.status === "Tepat Waktu" || act.type === "Check Out"
-                          ? "bg-emerald-400/10 text-emerald-400"
-                          : act.status === "Terlambat"
-                            ? "bg-rose-400/10 text-rose-400"
-                            : "bg-amber-400/10 text-amber-400"
-                      }`}
-                    >
-                      {act.status || act.type}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-10 text-center">
-                  <p className="text-xs text-white/20 italic">
-                    Belum ada aktivitas hari ini.
-                  </p>
-                </div>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              className="w-full mt-4 text-xs text-white/40 hover:text-primary transition-colors"
-              onClick={() => setActiveTab("live")}
-            >
-              Lihat Semua Aktivitas <ChevronRight className="w-3 h-3 ml-1" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Quick Insights / Health */}
-        <div className="space-y-6">
-          <Card className="glass-panel border-none p-6">
-            <CardHeader className="px-0 pt-0">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-amber-400" />
-                Info Sistem
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-0 space-y-4">
-              <div className="p-4 rounded-2xl bg-amber-400/5 border border-amber-400/20">
-                <p className="text-[11px] text-amber-400/80 font-medium leading-relaxed italic">
-                  "Pengingat: Data foto absensi akan otomatis dibersihkan setiap
-                  2 bulan untuk menjaga kapasitas penyimpanan (Max 1GB)."
-                </p>
-              </div>
-              <div className="pt-4 border-t border-white/5 space-y-2">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-white/40">Status Server:</span>
-                  <span className="text-emerald-400 font-bold">Online</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-white/40">Sinkronisasi:</span>
-                  <span className="text-emerald-400 font-bold">Aktif</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {role === "admin" && (
-            <Button
-              className="w-full h-20 rounded-3xl bg-primary text-white font-black text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20 flex flex-col items-center justify-center gap-1"
-              onClick={() => setActiveTab("manual")}
-            >
-              <ClipboardCheck className="w-6 h-6" />
-              ABSENSI MANUAL
-            </Button>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -16447,81 +16110,67 @@ function AdminLeave({
                   const ctrl = controls[p.value] || { status: "open" };
                   const isCustom = p.value.startsWith("custom_");
                   return (
-                    <div
-                      key={p.value}
-                      className="glass-panel p-4 border-white/5 bg-black/40 flex items-center justify-between gap-4 rounded-xl hover:border-white/10 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                            ctrl.status === "open"
-                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                              : ctrl.status === "closed"
-                                ? "bg-rose-500/20 text-rose-400 border-rose-500/30"
-                                : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-                          }`}
-                        >
-                          {ctrl.status === "open" ? (
-                            <BadgeCheck className="w-5 h-5" />
-                          ) : ctrl.status === "closed" ? (
-                            <LockIcon className="w-5 h-5" />
-                          ) : (
-                            <Clock className="w-5 h-5" />
-                          )}
-                        </div>
-                        <div className="overflow-hidden min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-white font-bold truncate">{p.label}</h4>
-                            {isCustom && (
-                              <Badge className="bg-white/10 text-white/40 border-none text-[8px] h-4">
-                                Custom
-                              </Badge>
+                      <div
+                        key={p.value}
+                        className={`glass-panel p-4 border-white/5 bg-black/40 flex items-center justify-between gap-4 rounded-xl transition-all shadow-xl border-l-4 ${
+                          ctrl.status === "open"
+                            ? "border-l-emerald-500 hover:border-emerald-400"
+                            : ctrl.status === "closed"
+                              ? "border-l-rose-500/30 opacity-60 grayscale hover:grayscale-0 hover:opacity-100"
+                              : "border-l-amber-500 hover:border-amber-400"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                              ctrl.status === "open"
+                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                                : ctrl.status === "closed"
+                                  ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                  : "bg-amber-500/20 text-amber-400 border-amber-500/30 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                            }`}
+                          >
+                            {ctrl.status === "open" ? (
+                              <BadgeCheck className="w-5 h-5" />
+                            ) : ctrl.status === "closed" ? (
+                              <LockIcon className="w-5 h-5" />
+                            ) : (
+                              <Clock className="w-5 h-5" />
                             )}
-                            <Popover>
-                              <PopoverTrigger
-                                render={
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="w-6 h-6 hover:bg-white/10 shrink-0"
-                                  >
-                                    <Edit className="w-3 h-3 text-white/30" />
-                                  </Button>
-                                }
-                              />
-                              <PopoverContent className="bg-black/95 text-white border-white/20 p-2 w-64 shadow-2xl">
-                                <div className="space-y-2">
-                                  <Label className="text-[10px] uppercase font-bold text-white/40">
-                                    Ubah Nama Periode
-                                  </Label>
-                                  <div className="flex gap-2">
-                                    <Input
-                                      placeholder="Nama baru..."
-                                      className="field-input h-8 text-xs bg-white/5"
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          updatePeriodName(
-                                            p.value,
-                                            e.currentTarget.value,
-                                          );
-                                          (e.target as any).blur();
-                                        }
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
                           </div>
-                          <p className="text-[10px] text-white/40 font-mono">
-                            {ctrl.status === "scheduled"
-                              ? "TERJADWAL"
-                              : ctrl.status === "open"
-                                ? "TERBUKA"
-                                : "DITUTUP"}
-                          </p>
+                          <div className="overflow-hidden min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className={`font-bold truncate ${ctrl.status === 'closed' ? 'text-white/40' : 'text-white'}`}>{p.label}</h4>
+                              {isCustom && (
+                                <Badge className={`border-none text-[8px] h-4 ${ctrl.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/10 text-white/40'}`}>
+                                  Custom
+                                </Badge>
+                              )}
+                              <Badge className={`border-none text-[8px] h-4 px-1 ${
+                                ctrl.status === "open"
+                                  ? "bg-emerald-500 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                                  : ctrl.status === "scheduled"
+                                    ? "bg-amber-500 text-white shadow-[0_0_8px_rgba(245,158,11,0.4)]"
+                                    : "bg-rose-500/50 text-white/50"
+                              }`}>
+                                {ctrl.status === "open" ? "ACTIVE" : ctrl.status === "scheduled" ? "AUTO" : "CLOSED"}
+                              </Badge>
+                            </div>
+                            <p className={`text-[10px] font-black uppercase tracking-widest mt-0.5 ${
+                              ctrl.status === "open"
+                                ? "text-emerald-400"
+                                : ctrl.status === "closed"
+                                  ? "text-rose-500/60 font-medium"
+                                  : "text-amber-400"
+                            }`}>
+                              {ctrl.status === "scheduled"
+                                ? "MODAL OTOMATIS AKTIF"
+                                : ctrl.status === "open"
+                                  ? "DIBUKA - MENERIMA REQUEST"
+                                  : "DITUTUP - ARSIP"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                          <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
@@ -16864,7 +16513,6 @@ function EmployeeLeave({
   );
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [showPeriodManager, setShowPeriodManager] = useState(false);
 
   useEffect(() => {
     const unsub = subscribePeriodControls((data) => {
@@ -16889,6 +16537,7 @@ function EmployeeLeave({
   });
   const [showDateSelector, setShowDateSelector] = useState<{index: number | null}>({index: null});
   const [showTable, setShowTable] = useState(false);
+  const [showOthersTable, setShowOthersTable] = useState(false);
   const [chancesLeft, setChancesLeft] = useState<number | null>(null);
   const [hasInitializedChances, setHasInitializedChances] = useState(false);
   const [leaveFlowState, setLeaveFlowState] = useState<"intro" | "prep_warning" | "form">("intro");
@@ -17360,17 +17009,17 @@ function EmployeeLeave({
   const isClosed = periodStatusResult !== "open";
   const currentPeriodValue = format(new Date(), "yyyy-MM");
 
-  if (Object.keys(controls).length > 0 && !selectedPeriod) {
+  if (!selectedPeriod) {
     return (
       <div className="space-y-6 mt-8 pb-12 text-white">
-        <div className="h-full flex flex-col items-center justify-center p-8 mt-12 bg-white/5 rounded-3xl border border-white/10 mx-auto max-w-2xl shadow-2xl relative overflow-hidden">
+        <div className="h-full flex flex-col items-center justify-center p-12 mt-12 bg-white/5 rounded-3xl border border-white/10 mx-auto max-w-2xl shadow-2xl relative overflow-hidden">
           <div className="absolute inset-0 mesh-bg opacity-30 mix-blend-overlay"></div>
           <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 ring-8 ring-white/5 shadow-[0_0_50px_rgba(255,255,255,0.05)] relative z-10">
             <CalendarIcon className="w-12 h-12 text-white/40" />
           </div>
-          <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center relative z-10">TIDAK ADA PERIODE AKTIF</h3>
-          <p className="text-white/50 text-center max-w-md relative z-10">
-            Saat ini tidak ada periode pengajuan libur yang dibuka. Silakan tunggu informasi selanjutnya dari Admin.
+          <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center relative z-10">TIDAK ADA PERIODE REQUEST LIBUR YANG DIBUKA</h3>
+          <p className="text-white/50 text-center max-w-md relative z-10 italic">
+            Silakan tunggu informasi selanjutnya dari Admin.
           </p>
         </div>
       </div>
@@ -17460,20 +17109,6 @@ function EmployeeLeave({
 
   return (
     <div className="space-y-6 mt-8 pb-12 text-white">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Request Libur</h2>
-        <Button variant="outline" size="sm" className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10" onClick={() => setShowPeriodManager(true)}>Kelola Periode Libur</Button>
-      </div>
-
-      <Dialog open={showPeriodManager} onOpenChange={setShowPeriodManager}>
-        <DialogContent className="glass-panel border-white/10 text-white max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-                <DialogTitle>Manajemen Periode Libur</DialogTitle>
-            </DialogHeader>
-            <LiburPeriodManager />
-        </DialogContent>
-      </Dialog>
-      
       {hasInitializedChances && chancesLeft !== null && (
         <div className="p-4 border border-blue-500/20 bg-blue-500/10 rounded-xl text-center shadow-lg animate-in fade-in slide-in-from-top-2">
           <p className="text-sm font-bold text-blue-400">
@@ -17964,7 +17599,20 @@ function EmployeeLeave({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {!showTable ? null : (
+              {!showOthersTable ? (
+                <div className="flex flex-col items-center justify-center p-6 text-white/50 bg-white/5 rounded-xl border border-white/5">
+                  <p className="mb-4 text-sm text-center">Daftar request teman satu divisi disembunyikan.</p>
+                  <Button onClick={() => setShowOthersTable(true)} variant="outline" className="text-white hover:bg-white/10 border-white/20">
+                    Lihat daftar request di divisi anda
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex justify-start">
+                    <Button onClick={() => setShowOthersTable(false)} variant="ghost" size="sm" className="text-white/50 hover:text-white">
+                      Sembunyikan Daftar
+                    </Button>
+                  </div>
               <div className="overflow-x-auto max-h-[400px] overflow-y-auto custom-scrollbar">
                 <Table>
                   <TableHeader>
@@ -18005,10 +17653,19 @@ function EmployeeLeave({
                                   r.date4,
                                   r.date5,
                                   r.date6,
+                                  r.date1, // repeat date1 if dates is null? No, probably should just be cautious
                                 ]
                               )
                                 .filter(Boolean)
-                                .map((d) => format(new Date(d), "dd/MM"))
+                                .map((d) => {
+                                   try {
+                                     // Check if d is a valid date string before formatting
+                                     if (d.startsWith('BEBAS')) return 'BEBAS';
+                                     return format(new Date(d), "dd/MM");
+                                   } catch(e) {
+                                     return d;
+                                   }
+                                })
                                 .join(", ") || "-"}
                             </TableCell>
                             <TableCell className="text-white/50 text-[10px] italic min-w-[80px]">
@@ -18020,6 +17677,7 @@ function EmployeeLeave({
                   </TableBody>
                 </Table>
               </div>
+                </div>
               )}
             </CardContent>
           </Card>

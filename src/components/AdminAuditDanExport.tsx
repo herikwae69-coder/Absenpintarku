@@ -74,16 +74,26 @@ export default function AdminAuditDanExport({
     useEffect(() => {
         const fetchControls = async () => {
             try {
-                const snap = await getDocs(collection(db, 'periodControls'));
+                const pcSnap = await getDocs(collection(db, 'periodControls'));
+                const lpSnap = await getDocs(collection(db, 'liburPeriods'));
+                
                 const data: Record<string, any> = {};
-                snap.docs.forEach(d => { data[d.id] = d.data(); });
+                pcSnap.docs.forEach(d => { data[d.id] = d.data(); });
+                lpSnap.docs.forEach(d => { 
+                    const docData = d.data();
+                    data[d.id] = {
+                        ...docData,
+                        active: docData.status === "active",
+                    };
+                });
+                
                 setControls(data);
                 
                 // Find period to default to if none selected
                 if (!selectedPeriod) {
                     const now = new Date();
                     const activePeriods = Object.entries(data)
-                        .filter(([_, ctrl]) => !ctrl.hidden && ctrl.startDate && ctrl.endDate)
+                        .filter(([_, ctrl]) => !ctrl.hidden && ctrl.startDate && ctrl.endDate && (ctrl.status === "active" || ctrl.active))
                         .map(([id, ctrl]) => ({ id, start: new Date(ctrl.startDate), end: new Date(ctrl.endDate) }));
                         
                     const runningPeriod = activePeriods.find(p => now >= p.start && now <= p.end);

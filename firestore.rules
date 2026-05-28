@@ -10,7 +10,7 @@ service cloud.firestore {
     
     // Pillar 3: Path Variable Hardening (isValidId)
     function isValidId(id) { 
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$'); 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.\\@\\+\\:]+$'); 
     }
     
     // Pillar 2: Validation Blueprints (Helpers)
@@ -20,49 +20,47 @@ service cloud.firestore {
 
     // --- COLLECTIONS ---
 
-    match /employees/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /shifts/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /sections/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /divisions/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /jobPositions/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /jobLevels/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /attendance/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /manualAttendance/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /leaveRequests/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /periodQuotas/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /periodControls/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /activityLogs/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /config/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /systemConfig/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /potonganKehilanganConfig/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /potonganKehilanganBersamaConfig/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /bonusMasterConfig/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /bonusEstafet/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /bonusJagaDepan/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /bonusLainLain/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /bonusOperator/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /bonusNota/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /bonusBerat/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /koreksiGaji/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /koreksiGajiMinus/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /potonganSeragam/{id} { allow read, list: if true; allow write: if isValidId(id); }
-    match /superAdmins/{id} { allow read, list: if true; allow write: if isValidId(id); }
+    match /employees/{id} { allow read, write: if true; }
+    match /shifts/{id} { allow read, write: if true; }
+    match /sections/{id} { allow read, write: if true; }
+    match /divisions/{id} { allow read, write: if true; }
+    match /jobPositions/{id} { allow read, write: if true; }
+    match /jobLevels/{id} { allow read, write: if true; }
+    match /attendance/{id} { allow read, write: if true; }
+    match /manualAttendance/{id} { allow read, write: if true; }
+    match /leaveRequests/{id} { allow read, write: if true; }
+    match /periodQuotas/{id} { allow read, write: if true; }
+    match /periodControls/{id} { allow read, write: if true; }
+    match /activityLogs/{id} { allow read, write: if true; }
+    match /config/{id} { allow read, write: if true; }
+    match /systemConfig/{id} { allow read, write: if true; }
+    match /potonganKehilanganConfig/{id} { allow read, write: if true; }
+    match /potonganKehilanganBersamaConfig/{id} { allow read, write: if true; }
+    match /bonusMasterConfig/{id} { allow read, write: if true; }
+    match /bonusEstafet/{id} { allow read, write: if true; }
+    match /bonusJagaDepan/{id} { allow read, write: if true; }
+    match /bonusLainLain/{id} { allow read, write: if true; }
+    match /bonusOperator/{id} { allow read, write: if true; }
+    match /bonusNota/{id} { allow read, write: if true; }
+    match /bonusBerat/{id} { allow read, write: if true; }
+    match /koreksiGaji/{id} { allow read, write: if true; }
+    match /koreksiGajiMinus/{id} { allow read, write: if true; }
+    match /potonganSeragam/{id} { allow read, write: if true; }
+    match /superAdmins/{id} { allow read, write: if true; }
+    match /liburPeriods/{id} { allow read, write: if true; }
+    match /quotas/{id} { allow read, write: if true; }
     
     match /potonganKehilangan/{employeeId}/debts/{debtId} {
-        allow read, get, list: if true;
-        allow write: if isValidId(employeeId) && isValidId(debtId);
+        allow read, write: if true;
     }
     match /potonganKehilangan/{employeeId}/debts/{debtId}/payments/{paymentId} {
-        allow read, get, list: if true;
-        allow write: if isValidId(employeeId) && isValidId(debtId) && isValidId(paymentId);
+        allow read, write: if true;
     }
     match /potonganKehilanganBersama/{employeeId}/debtsBersama/{debtId} {
-        allow read, get, list: if true;
-        allow write: if isValidId(employeeId) && isValidId(debtId);
+        allow read, write: if true;
     }
     match /potonganKehilanganBersama/{employeeId}/debtsBersama/{debtId}/paymentsBersama/{paymentId} {
-        allow read, get, list: if true;
-        allow write: if isValidId(employeeId) && isValidId(debtId) && isValidId(paymentId);
+        allow read, write: if true;
     }
 
     match /{path=**}/debts/{debt} {
