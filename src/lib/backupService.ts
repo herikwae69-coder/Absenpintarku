@@ -7,7 +7,7 @@ import { handleFirestoreError, OperationType } from './firestoreUtils';
 
 export const generateBackupZip = async (startDate: Date, endDate: Date) => {
   // 1. Fetch Data
-  const collections = ['attendance', 'manualAttendance', 'leaveRequests', 'periodQuotas', 'periodControls'];
+  const collections = ['leaveRequests', 'periodQuotas', 'periodControls'];
   const fetchPromises = collections.map(async (name) => {
     try {
       return await getDocs(collection(db, name));
@@ -17,26 +17,17 @@ export const generateBackupZip = async (startDate: Date, endDate: Date) => {
     }
   });
 
-  let snapAttendance, snapManual, snapLeaves, snapQuotas, snapPeriods;
+  let snapLeaves, snapQuotas, snapPeriods;
   try {
-    [snapAttendance, snapManual, snapLeaves, snapQuotas, snapPeriods] = await Promise.all(fetchPromises);
+    [snapLeaves, snapQuotas, snapPeriods] = await Promise.all(fetchPromises);
   } catch (error) {
     // Error already handled in map
     throw error;
   }
 
-  const attendanceData = snapAttendance.docs.map(doc => doc.data());
-  const manualData = snapManual.docs.map(doc => doc.data());
   const leaveData = snapLeaves.docs.map(doc => doc.data());
   const quotaData = snapQuotas.docs.map(doc => doc.data());
   const periodData = snapPeriods.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-
-  // Helper to filter data by period in range
-  const getPeriodForDate = (date: string) => {
-    return periodData.find(p => p.startDate && p.endDate && 
-      isWithinInterval(parseISO(date), { start: parseISO(p.startDate), end: parseISO(p.endDate) })
-    );
-  };
 
   const getPeriodsInRange = () => {
     return periodData.filter(p => p.startDate && p.endDate && (
@@ -50,30 +41,6 @@ export const generateBackupZip = async (startDate: Date, endDate: Date) => {
   
   // Create Zip
   const zip = new JSZip();
-
-  // Excel 1: Live Absensi
-  const wbLive = XLSX.utils.book_new();
-  relevantPeriods.sort((a,b) => a.id.localeCompare(b.id)).forEach(p => {
-    const data = attendanceData.filter(a => isWithinInterval(parseISO(a.date), { start: parseISO(p.startDate), end: parseISO(p.endDate) }));
-    if(data.length > 0) {
-      const ws = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(wbLive, ws, p.id.substring(0, 31));
-    }
-  });
-  if(wbLive.SheetNames.length === 0) XLSX.utils.book_append_sheet(wbLive, XLSX.utils.aoa_to_sheet([["Data Kosong"]]), "Info");
-  zip.file('live_absensi.xlsx', XLSX.write(wbLive, { type: 'array', bookType: 'xlsx' }));
-
-  // Excel 2: Manual Absensi (incl H)
-  const wbManual = XLSX.utils.book_new();
-  relevantPeriods.sort((a,b) => a.id.localeCompare(b.id)).forEach(p => {
-    const data = manualData.filter(a => isWithinInterval(parseISO(a.date), { start: parseISO(p.startDate), end: parseISO(p.endDate) }));
-    if(data.length > 0) {
-      const ws = XLSX.utils.json_to_sheet(data);
-      XLSX.utils.book_append_sheet(wbManual, ws, p.id.substring(0, 31));
-    }
-  });
-  if(wbManual.SheetNames.length === 0) XLSX.utils.book_append_sheet(wbManual, XLSX.utils.aoa_to_sheet([["Data Kosong"]]), "Info");
-  zip.file('absensi_manual.xlsx', XLSX.write(wbManual, { type: 'array', bookType: 'xlsx' }));
 
   // Excel 3: Request Libur & Kuota
   const wbLeave = XLSX.utils.book_new();

@@ -253,11 +253,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast, Toaster } from "sonner";
-import { PotonganKehilanganManager } from "./components/PotonganKehilanganManager";
-import { PotonganKehilanganBersamaManager } from "./components/PotonganKehilanganBersamaManager";
-import { PotonganSeragamManager } from "./components/PotonganSeragamManager";
 import { AdminSuperAdminManager } from "./components/AdminSuperAdminManager";
-import AdminAuditDanExport from "./components/AdminAuditDanExport";
 import { WhatsappSelectionDialog } from "./components/WhatsappSelectionDialog";
 import {
   Dialog,
@@ -5264,7 +5260,7 @@ function EmployeeView({
   const periodOptions = getPeriodOptions();
   const [selectedPeriod, setSelectedPeriod] = useState(periodOptions[3].value);
   const [history, setHistory] = useState<Attendance[]>([]);
-  const [activeTab, setActiveTab] = useState("absen");
+  const [activeTab, setActiveTab] = useState("libur");
   const [riwayatStart, setRiwayatStart] = useState("");
   const [riwayatEnd, setRiwayatEnd] = useState("");
 
@@ -5721,452 +5717,6 @@ function EmployeeView({
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="flex w-max max-w-full overflow-x-auto no-scrollbar snap-x glass-panel p-1 h-auto bg-white/5 border-white/10 mb-8 rounded-2xl gap-1 justify-start mx-auto">
-            <TabsTrigger
-              value="absen"
-              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
-            >
-              <Clock className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Live Absensi</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="libur"
-              className="flex-none min-w-[70px] h-[36px] px-3 rounded-xl flex items-center justify-center gap-2 data-[state=active]:bg-blue-600 data-[state=active]:text-white font-bold transition-all text-white/40 snap-center"
-            >
-              <CalendarIcon className="w-3.5 h-3.5" />{" "}
-              <span className="text-xs">Libur</span>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent
-            value="absen"
-            className="mt-0 focus-visible:outline-none focus-visible:ring-0"
-          >
-            <div className="flex items-center justify-between mb-4 glass-panel p-3 rounded-xl border-white/5">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
-                  <Users className="w-4 h-4 text-emerald-400" />
-                </div>
-                <p className="text-xs text-white/60 font-bold uppercase tracking-wider">
-                  Divisi:{" "}
-                  <span className="text-white">
-                    {employee.division || "Umum"}
-                  </span>
-                </p>
-              </div>
-              {!attendance ? (
-                <Select
-                  value={selectedShiftId}
-                  onValueChange={setSelectedShiftId}
-                >
-                  <SelectTrigger className="w-[180px] glass-panel border-white/10 text-white text-[10px] h-10 px-4 rounded-xl">
-                    <SelectValue placeholder="Pilih Shift">
-                      {selectedShiftId
-                        ? shifts.find((s) => s.id === selectedShiftId)?.name
-                        : "Pilih Shift"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="glass-panel border-white/20 text-white rounded-xl">
-                    {shifts.map((s) => (
-                      <SelectItem
-                        key={s.id}
-                        value={s.id}
-                        className="hover:bg-white/10"
-                      >{`${s.name} (${s.startTime}-${s.endTime})`}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="glass-panel border-white/10 text-white text-[10px] px-3 py-1.5 border-none bg-white/5 rounded-full"
-                >
-                  Shift: {currentShift?.name || "Reguler"}
-                </Badge>
-              )}
-            </div>
-
-            <Card className="glass-panel border-none shadow-2xl mb-8 overflow-hidden relative">
-              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                <Clock className="w-40 h-40" />
-              </div>
-              <CardHeader className="text-center py-10">
-                <CardDescription className="text-white/40 uppercase tracking-widest font-semibold mb-1">
-                  Pukul
-                </CardDescription>
-                <CardTitle className="text-7xl font-mono tracking-tighter text-white">
-                  {format(currentTime, "HH:mm")}
-                  <span className="text-3xl opacity-30 ml-1">
-                    {format(currentTime, ":ss")}
-                  </span>
-                </CardTitle>
-                <p className="text-white/50 mt-2 text-lg">
-                  {format(currentTime, "EEEE, d MMMM yyyy")}
-                </p>
-              </CardHeader>
-            </Card>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* CHECK IN */}
-              <Card className="glass-panel border-none flex flex-col justify-between">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mb-3 border border-emerald-500/30">
-                      <Clock className="w-6 h-6" />
-                    </div>
-                    <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">
-                      Masuk
-                    </p>
-                    <p className="text-2xl font-bold text-white mb-4">
-                      {attendance?.checkIn
-                        ? format(toDateSafe(attendance.checkIn), "HH:mm")
-                        : "--:--"}
-                    </p>
-                  </div>
-                </CardContent>
-                <CardFooter className="pt-0">
-                  <Button
-                    disabled={!!attendance?.checkIn}
-                    onClick={() => {
-                      if (!selectedShiftId)
-                        return alert("Pilih shift terlebih dahulu!");
-                      setConfirmAction("checkIn");
-                    }}
-                    className="w-full btn-masuk text-white rounded-xl shadow-lg h-12 font-bold border-none"
-                  >
-                    MASUK
-                  </Button>
-                </CardFooter>
-              </Card>
-
-              {/* BREAK SECTION (SLIDER) */}
-              <Card className="glass-panel border-none flex flex-col justify-between md:col-span-2">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="flex gap-12 mb-4">
-                      <div className="flex flex-col items-center">
-                        <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-1">
-                          Mulai Istirahat
-                        </p>
-                        <p className="text-xl font-bold text-white">
-                          {attendance?.breakStart
-                            ? format(toDateSafe(attendance.breakStart), "HH:mm")
-                            : "--:--"}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-1">
-                          Selesai Istirahat
-                        </p>
-                        <p className="text-xl font-bold text-white">
-                          {attendance?.breakEnd
-                            ? format(toDateSafe(attendance.breakEnd), "HH:mm")
-                            : "--:--"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="w-full max-w-sm mx-auto">
-                      <BreakSlider
-                        isBreak={
-                          !!attendance?.breakStart && !attendance?.breakEnd
-                        }
-                        disabled={!attendance || !!attendance.checkOut}
-                        onComplete={async () => {
-                          const isCurrentlyOnBreak =
-                            !!attendance?.breakStart && !attendance?.breakEnd;
-                          await handleAction(
-                            isCurrentlyOnBreak ? "breakEnd" : "breakStart",
-                          );
-                        }}
-                      />
-                    </div>
-
-                    {/* Timer Istirahat Realtime */}
-                    {attendance?.breakStart && !attendance?.breakEnd && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="mt-6 p-4 rounded-2xl bg-primary/10 border border-primary/20 flex flex-col items-center gap-1 shadow-inner"
-                      >
-                        <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] mb-1">
-                          Durasi Istirahat Anda
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
-                          <p className="text-4xl font-mono font-black text-white tracking-widest">
-                            {(() => {
-                              const start = toDateSafe(attendance.breakStart);
-                              const diff = Math.floor(
-                                (currentTime.getTime() - start.getTime()) /
-                                  1000,
-                              );
-                              const mins = Math.floor(diff / 60);
-                              const secs = diff % 60;
-                              return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-                            })()}
-                          </p>
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* CHECK OUT */}
-              <Card className="glass-panel border-none flex flex-col justify-between">
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-rose-500/20 text-rose-400 rounded-full flex items-center justify-center mb-3 border border-rose-500/30">
-                      <LogOut className="w-6 h-6" />
-                    </div>
-                    <p className="text-xs text-white/50 uppercase font-bold tracking-wider mb-1">
-                      Pulang
-                    </p>
-                    <p className="text-2xl font-bold text-white mb-4">
-                      {attendance?.checkOut
-                        ? format(toDateSafe(attendance.checkOut), "HH:mm")
-                        : "--:--"}
-                    </p>
-                  </div>
-                </CardContent>
-                <CardFooter className="pt-0">
-                  <Button
-                    disabled={!attendance?.checkIn || !!attendance?.checkOut}
-                    onClick={() => setConfirmAction("checkOut")}
-                    className="w-full btn-pulang text-white rounded-xl shadow-lg h-12 font-bold border-none"
-                  >
-                    PULANG
-                  </Button>
-                </CardFooter>
-              </Card>
-            </div>
-
-            {/* Stats Summary */}
-            {attendance && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4"
-              >
-                <div className="glass-panel p-4 rounded-2xl flex items-center gap-4 border-white/5">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                    <Clock className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest leading-none mb-1">
-                      Keterlambatan
-                    </p>
-                    <p
-                      className={`text-lg font-black ${attendanceStats.late > 0 ? "text-rose-400" : "text-emerald-400"}`}
-                    >
-                      {attendanceStats.late > 0
-                        ? formatDuration(attendanceStats.late)
-                        : "Tepat Waktu"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="glass-panel p-4 rounded-2xl flex items-center gap-4 border-white/5">
-                  <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center border border-rose-500/20">
-                    <LogOut className="w-5 h-5 text-rose-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest leading-none mb-1">
-                      Pulang Awal
-                    </p>
-                    <p
-                      className={`text-lg font-black ${attendanceStats.earlyLeave > 0 ? "text-rose-400" : "text-white/20"}`}
-                    >
-                      {attendanceStats.earlyLeave > 0
-                        ? formatDuration(attendanceStats.earlyLeave)
-                        : "-"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="glass-panel p-4 rounded-2xl flex items-center gap-4 border-white/5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                    <Zap className="w-5 h-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest leading-none mb-1">
-                      Lembur
-                    </p>
-                    <p
-                      className={`text-lg font-black ${attendanceStats.overtime > 0 ? "text-emerald-400" : "text-white/20"}`}
-                    >
-                      {attendanceStats.overtime > 0
-                        ? formatDuration(attendanceStats.overtime)
-                        : "-"}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {attendance && (
-              <Card className="mt-8 glass-panel border-none shadow-xl overflow-hidden">
-                <CardHeader className="bg-white/5 py-3 px-4">
-                  <CardTitle className="text-sm font-semibold flex items-center justify-between text-white">
-                    Status Kehadiran Hari Ini
-                    <Badge
-                      variant="outline"
-                      className={`border-none ${getStatusColor(attendance.status)}`}
-                    >
-                      {attendance.status === "present"
-                        ? "HADIR"
-                        : attendance.status === "late"
-                          ? "TERLAMBAT"
-                          : attendance.status.toUpperCase()}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <div className="text-xs text-white/40 space-y-1">
-                    <p>
-                      Terakhir diperbarui:{" "}
-                      {attendance.updatedAt
-                        ? format(toDateSafe(attendance.updatedAt), "HH:mm:ss")
-                        : "-"}
-                    </p>
-                    <p className="italic">
-                      Data absen tersimpan otomatis di server.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <CameraDialog
-              isOpen={showCamera}
-              onClose={() => {
-                setShowCamera(false);
-                setPendingAction(null);
-              }}
-              onCapture={(photo) => {
-                if (pendingAction) {
-                  handleAction(pendingAction.action, photo);
-                }
-              }}
-            />
-
-            {/* Processing Dialog */}
-            <Dialog open={isProcessing}>
-              <DialogContent className="glass-panel text-white border-white/20 p-8 max-w-sm rounded-[2rem] outline-none">
-                <div className="flex flex-col items-center justify-center gap-4">
-                  <div className="w-12 h-12 border-4 border-primary border-t-white rounded-full animate-spin" />
-                  <p className="text-center font-bold text-lg">
-                    {statusMessage || "Memproses..."}
-                  </p>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            <div className="mt-8">
-              <Card className="glass-panel border-none shadow-lg">
-                <CardHeader className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
-                  <CardTitle className="text-white">Riwayat Absensi</CardTitle>
-                  <div className="flex items-center gap-2 w-full md:w-auto">
-                    <Input
-                      type="date"
-                      value={riwayatStart}
-                      onChange={(e) => setRiwayatStart(e.target.value)}
-                      className="glass-panel border-white/10 text-white flex-1 md:w-[150px]"
-                    />
-                    <span className="text-white/50">-</span>
-                    <Input
-                      type="date"
-                      value={riwayatEnd}
-                      onChange={(e) => setRiwayatEnd(e.target.value)}
-                      className="glass-panel border-white/10 text-white flex-1 md:w-[150px]"
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto no-scrollbar">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-white/10 text-white/40 hover:bg-transparent">
-                          <TableHead className="text-white/40">
-                            Tanggal
-                          </TableHead>
-                          <TableHead className="text-white/40">Masuk</TableHead>
-                          <TableHead className="text-white/40">
-                            Pulang
-                          </TableHead>
-                          <TableHead className="text-white/40">
-                            Status
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {history
-                          .filter((h) => {
-                            if (!riwayatStart && !riwayatEnd) return true;
-                            if (riwayatStart && !riwayatEnd)
-                              return h.date >= riwayatStart;
-                            if (!riwayatStart && riwayatEnd)
-                              return h.date <= riwayatEnd;
-                            return (
-                              h.date >= riwayatStart && h.date <= riwayatEnd
-                            );
-                          })
-                          .map((a) => (
-                            <TableRow
-                              key={a.id}
-                              className="border-white/5 hover:bg-white/5"
-                            >
-                              <TableCell className="text-white/70">
-                                {a.date
-                                  ? format(new Date(a.date), "dd MMM yyyy")
-                                  : "-"}
-                              </TableCell>
-                              <TableCell className="text-white/70 font-mono">
-                                {a.checkIn
-                                  ? format(toDateSafe(a.checkIn), "HH:mm")
-                                  : "-"}
-                              </TableCell>
-                              <TableCell className="text-white/70 font-mono">
-                                {a.checkOut
-                                  ? format(toDateSafe(a.checkOut), "HH:mm")
-                                  : "-"}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant="outline"
-                                  className="border-white/20 text-white/50"
-                                >
-                                  {a.status.toUpperCase()}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        {history.filter((h) => {
-                          if (!riwayatStart && !riwayatEnd) return true;
-                          if (riwayatStart && !riwayatEnd)
-                            return h.date >= riwayatStart;
-                          if (!riwayatStart && riwayatEnd)
-                            return h.date <= riwayatEnd;
-                          return h.date >= riwayatStart && h.date <= riwayatEnd;
-                        }).length === 0 && (
-                          <TableRow>
-                            <TableCell
-                              colSpan={4}
-                              className="text-center py-6 text-white/30 italic"
-                            >
-                              Tidak ada data untuk periode ini.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
           <TabsContent
             value="libur"
             className="mt-0 focus-visible:outline-none focus-visible:ring-0"
@@ -8346,102 +7896,6 @@ if (periodOptions.length === 0) {
 }
 
 // --- ADMIN DASHBOARD ---
-function AdminOfficeConfig() {
-  const [config, setConfig] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  function LocationMarker() {
-    const map = useMapEvents({
-      click(e) {
-        setConfig((prev: any) => ({
-          ...prev,
-          lat: e.latlng.lat,
-          lng: e.latlng.lng,
-        }));
-      },
-    });
-    return config && config.lat !== 0 ? (
-      <Marker position={[config.lat, config.lng]} />
-    ) : null;
-  }
-
-  useEffect(() => {
-    const unsub = getSnapshotOnce(
-      doc(db, "config", "office"),
-      (snap) => {
-        if (snap.exists()) setConfig(snap.data());
-        else setConfig({ lat: -6.2088, lng: 106.8456, radius: 100 });
-        setLoading(false);
-      },
-      (err) => handleFirestoreError(err, OperationType.GET, "config/office"),
-    );
-    return unsub;
-  }, []);
-
-  const handleUpdate = async () => {
-    await setDoc(doc(db, "config", "office"), config);
-    alert("Konfigurasi lokasi kantor diperbarui!");
-  };
-
-  if (loading) return <div>Memuat...</div>;
-
-  return (
-    <div className="glass-panel p-6 space-y-6">
-      <h3 className="text-xl font-bold text-white">Atur Lokasi Kantor</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label className="text-white/50">Latitude</Label>
-          <Input
-            type="number"
-            step="any"
-            value={config.lat}
-            onChange={(e) =>
-              setConfig({ ...config, lat: parseFloat(e.target.value) })
-            }
-            className="text-white"
-          />
-        </div>
-        <div>
-          <Label className="text-white/50">Longitude</Label>
-          <Input
-            type="number"
-            step="any"
-            value={config.lng}
-            onChange={(e) =>
-              setConfig({ ...config, lng: parseFloat(e.target.value) })
-            }
-            className="text-white"
-          />
-        </div>
-        <div>
-          <Label className="text-white/50">Radius (meter)</Label>
-          <Input
-            type="number"
-            value={config.radius}
-            onChange={(e) =>
-              setConfig({ ...config, radius: parseInt(e.target.value) })
-            }
-            className="text-white"
-          />
-        </div>
-      </div>
-      <div className="h-[400px] w-full border border-white/20 rounded-lg overflow-hidden">
-        <MapContainer
-          center={[config.lat || -6.2, config.lng || 106.8]}
-          zoom={15}
-          className="h-full w-full"
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <LocationMarker />
-        </MapContainer>
-      </div>
-      <Button onClick={handleUpdate} className="bg-primary">
-        Simpan Konfigurasi
-      </Button>
-    </div>
-  );
-}
-
 function AdminDashboard({
   employees,
   shifts,
@@ -8536,7 +7990,7 @@ function AdminDashboard({
   }, [isSuper]);
 
   const [activeTab, _setActiveTab] = useState(
-    currentUser?.role === "spv" ? "live" : "dashboard",
+    currentUser?.role === "spv" ? "leaves" : "dashboard",
   );
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -8599,91 +8053,6 @@ function AdminDashboard({
       ],
     },
     {
-      label: "Absensi",
-      items: [
-        {
-          value: "live",
-          label: "Live Absensi",
-          icon: <ClipboardList className="w-4 h-4" />,
-        },
-      ],
-      /*
-      items: [
-        {
-          value: "manual",
-          label: "Absensi Manual",
-          icon: <ClipboardCheck className="w-4 h-4" />,
-        },
-        {
-          value: "live",
-          label: "Live Absensi",
-          icon: <ClipboardList className="w-4 h-4" />,
-        },
-        {
-          value: "reports",
-          label: "Laporan",
-          icon: <Eye className="w-4 h-4" />,
-        },
-      ],
-      */
-    },
-    {
-      label: "Payroll",
-      items: [
-        {
-          value: "payroll-disabled",
-          label: "Menu Payroll",
-          icon: <DollarSign className="w-4 h-4 text-rose-500" />,
-        },
-      ],
-      /*
-      subGroups: [
-        {
-          label: "Bonus",
-          items: [
-            { value: "bonus-nota", label: "Nota", icon: <Zap className="text-amber-400" /> },
-            { value: "bonus-master", label: "Nota Tertinggi", icon: <Zap className="text-emerald-400" /> },
-            { value: "bonus-jaga-depan", label: "Bonus Jaga Depan", icon: <Zap className="text-blue-400" /> },
-            { value: "bonus-estafet", label: "Bonus Estafet", icon: <Zap className="text-purple-400" /> },
-            { value: "bonus-operator", label: "Bonus Operator", icon: <Calculator className="text-emerald-400" /> },
-            { value: "bonus-berat", label: "Bonus Berat", icon: <Layers className="text-teal-400" /> },
-            { value: "bonus-lain-lain", label: "Bonus Campuran", icon: <Zap className="text-gray-400" /> },
-            { value: "bonus-lain-lain-combined", label: "Bonus Lain-Lain", icon: <Calculator className="text-white/40" /> },
-            { value: "bonus-koreksi-gaji", label: "Koreksi (+)", icon: <Zap className="text-emerald-400" /> },
-          ]
-        },
-        {
-          label: "Restan",
-          items: [
-             { value: "potongan", label: "Restan 100%", icon: <DollarSign className="text-orange-400" /> },
-             { value: "potongan-bersama", label: "Restan Bersama", icon: <DollarSign className="text-rose-400" /> },
-             { value: "potongan-seragam", label: "Potongan Seragam", icon: <Shirt className="text-fuchsia-400" /> },
-             { value: "potongan-koreksi-gaji-minus", label: "Koreksi (-)", icon: <Zap className="text-rose-400" /> },
-          ]
-        }
-      ]
-      */
-    },
-    {
-      label: "Audit & Export",
-      items: [
-        {
-          value: "audit-disabled",
-          label: "Audit & Export Data",
-          icon: <FileDown className="w-4 h-4 text-rose-500" />,
-        },
-      ],
-      /*
-      items: [
-        {
-          value: "audit",
-          label: "Audit & Export Data",
-          icon: <FileDown className="w-4 h-4 text-emerald-400" />,
-        },
-      ],
-      */
-    },
-    {
       label: "Libur",
       items: [
         {
@@ -8728,11 +8097,6 @@ function AdminDashboard({
           icon: <Briefcase className="w-4 h-4" />,
         },
         {
-          value: "office",
-          label: "Lokasi Kantor",
-          icon: <MapPin className="w-4 h-4" />,
-        },
-        {
           value: "music",
           label: "Musik Request",
           icon: <Music className="w-4 h-4" />,
@@ -8757,12 +8121,12 @@ function AdminDashboard({
         return {
           ...g,
           items: g.items?.filter((i: any) =>
-            ["dashboard", "live", "leaves", "jadwal"].includes(i.value),
+            ["dashboard", "leaves", "jadwal"].includes(i.value),
           ),
           subGroups: g.subGroups?.map((sg: any) => ({
             ...sg,
             items: sg.items.filter((i: any) =>
-              ["dashboard", "live", "leaves", "jadwal"].includes(i.value),
+              ["dashboard", "leaves", "jadwal"].includes(i.value),
             )
           })).filter((sg: any) => sg.items.length > 0)
         };
@@ -9076,23 +8440,6 @@ function AdminDashboard({
                   onRefresh={onRefresh}
                 />
               </TabsContent>
-              <TabsContent value="live" className="mt-0 outline-none">
-                <AdminLive
-                  employees={employees}
-                  shifts={shifts}
-                  confirm={confirm}
-                  prompt={prompt}
-                  alert={alert}
-                />
-              </TabsContent>
-              {/*
-              <TabsContent value="manual" className="mt-0 outline-none">
-                <AdminManualAttendance
-                  employees={employees}
-                  divisions={divisions}
-                />
-              </TabsContent>
-              */}
               <TabsContent value="job-config" className="mt-0 outline-none">
                 <AdminJobConfig
                   jobPositions={jobPositions}
@@ -9103,89 +8450,8 @@ function AdminDashboard({
                   onRefresh={onRefresh}
                 />
               </TabsContent>
-              <TabsContent value="payroll-disabled" className="mt-0 outline-none">
-                <div className="space-y-6">
-                  <Card className="glass-panel border-none py-20 bg-rose-500/5 border-dashed border-rose-500/20">
-                    <CardContent className="flex flex-col items-center justify-center text-center">
-                      <div className="w-20 h-20 rounded-full bg-rose-500/20 flex items-center justify-center mb-6 border border-rose-500/30">
-                        <AlertTriangle className="w-10 h-10 text-rose-400" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">
-                        Menu Dinonaktifkan
-                      </h3>
-                      <p className="text-white/40 max-w-md">
-                        Menu payroll saat ini sedang dinonaktifkan oleh pengembang untuk sementara waktu.
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              {/* 
-              <TabsContent value="payroll-admin" className="mt-0 outline-none">
-                <div className="space-y-6">
-                  <Card className="glass-panel border-none py-20 bg-emerald-500/5 border-dashed border-emerald-500/20">
-                    <CardContent className="flex flex-col items-center justify-center text-center">
-                      <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/30 animate-pulse">
-                        <DollarSign className="w-10 h-10 text-emerald-400" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">
-                        Pilih Menu Payroll di Sidebar
-                      </h3>
-                      <p className="text-white/40 max-w-sm">
-                        Gunakan sidebar untuk mengakses detail Bonus dan Restan.
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="bonus-nota">
-                <AdminBonusNota employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-master">
-                <AdminBonusMaster activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-estafet">
-                <AdminBonusEstafet employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-jaga-depan">
-                <AdminBonusJagaDepan employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-operator">
-                <AdminBonusOperator employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-berat">
-                <AdminBonusBerat employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-lain-lain">
-                <AdminBonusLainLain employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-lain-lain-combined">
-                <AdminBonusLainLainCombined employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-              <TabsContent value="bonus-koreksi-gaji">
-                <AdminKoreksiGaji employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} onDirtyChange={setHasUnsavedChanges} />
-              </TabsContent>
-
-              <TabsContent value="potongan">
-                <PotonganKehilanganManager employees={employees} activePeriodId={activePeriodId} />
-              </TabsContent>
-              <TabsContent value="potongan-bersama">
-                <PotonganKehilanganBersamaManager employees={employees} activePeriodId={activePeriodId} />
-              </TabsContent>
-              <TabsContent value="potongan-seragam">
-                <PotonganSeragamManager employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
-              </TabsContent>
-              <TabsContent value="potongan-koreksi-gaji-minus">
-                <AdminKoreksiGajiMinus employees={employees} activePeriodId={activePeriodId} setActivePeriodId={setActivePeriodId} />
-              </TabsContent>
-              */}
               <TabsContent value="pengaturan-libur-admin" className="mt-0 outline-none">
                 <LiburPeriodManager />
-              </TabsContent>
-              <TabsContent value="office" className="mt-0 outline-none">
-                <AdminOfficeConfig />
               </TabsContent>
               <TabsContent value="leaves" className="mt-0 outline-none">
                 <AdminLeave
@@ -9226,44 +8492,8 @@ function AdminDashboard({
                   alert={alert}
                 />
               </TabsContent>
-              <TabsContent value="audit-disabled" className="mt-0 outline-none">
-                <div className="space-y-6">
-                  <Card className="glass-panel border-none py-20 bg-rose-500/5 border-dashed border-rose-500/20">
-                    <CardContent className="flex flex-col items-center justify-center text-center">
-                      <div className="w-20 h-20 rounded-full bg-rose-500/20 flex items-center justify-center mb-6 border border-rose-500/30">
-                        <AlertTriangle className="w-10 h-10 text-rose-400" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-white mb-2">
-                        Menu Dinonaktifkan
-                      </h3>
-                      <p className="text-white/40 max-w-md">
-                        Menu audit & export saat ini sedang dinonaktifkan oleh pengembang untuk sementara waktu.
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-              {/*
-              <TabsContent value="audit" className="mt-0 outline-none">
-                <AdminAuditDanExport
-                  employees={employees}
-                  setActiveTab={setActiveTab}
-                  selectedPeriod={activePeriodId}
-                  setActivePeriodId={setActivePeriodId}
-                />
-              </TabsContent>
-              */}
               <TabsContent value="kata" className="mt-0 outline-none">
                 <AdminKata />
-              </TabsContent>
-              <TabsContent value="reports" className="mt-0 outline-none">
-                <AdminReports
-                  employees={employees}
-                  shifts={shifts}
-                  confirm={confirm}
-                  prompt={prompt}
-                  alert={alert}
-                />
               </TabsContent>
               <TabsContent value="music" className="mt-0 outline-none">
                 <AdminMusic />
@@ -11979,6 +11209,7 @@ function DraggableLeaveBadge({
   disabled,
   dragId,
   displayDate,
+  customLabel,
 }: {
   request: LeaveRequest;
   dateStr: string;
@@ -11989,6 +11220,7 @@ function DraggableLeaveBadge({
   dragId?: string;
   displayDate?: string | null;
   key?: string;
+  customLabel?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -12024,7 +11256,7 @@ function DraggableLeaveBadge({
       } ${disabled ? "cursor-default" : ""}`}
     >
       <span className="text-primary mr-1">●</span>
-      {getNickname(request.employeeId, request.employeeName)}
+      {customLabel ? customLabel : getNickname(request.employeeId, request.employeeName)}
       <span className="ml-1 opacity-50 font-normal">
         {getSectionInitials(request.sectionId)}
       </span>
@@ -12189,7 +11421,7 @@ const [selectedDivision, setSelectedDivision] = useState<string>(
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
 
-    if (newDate !== "TRASH" && newDate !== "WAITING") {
+    if (newDate !== "TRASH" && newDate !== "WAITING" && newDate !== "BEBAS") {
       const hasDuplicateDate = leaveRequests.some((r) => {
         if (r.employeeId !== request.employeeId) return false;
 
@@ -12234,6 +11466,9 @@ const [selectedDivision, setSelectedDivision] = useState<string>(
             : d === originalDate && !replaced
         ) {
           replaced = true;
+          if (newDate === "BEBAS") {
+            return `BEBAS_${Date.now()}_${index}`;
+          }
           return newDate;
         }
         return d;
@@ -12676,6 +11911,32 @@ const [selectedDivision, setSelectedDivision] = useState<string>(
     });
   });
 
+  const bebasRequests: {
+    request: LeaveRequest;
+    bebasDates: { value: string; index: number }[];
+  }[] = [];
+
+  leaveRequests.forEach((req) => {
+    if (req.division !== selectedDivision) return;
+    const rDates = req.dates || [
+      req.date1,
+      req.date2,
+      req.date3,
+      req.date4,
+      req.date5,
+      req.date6,
+    ];
+    const bebasDates: { value: string; index: number }[] = [];
+    rDates.forEach((d, index) => {
+      if (d && typeof d === "string" && d.startsWith("BEBAS")) {
+        bebasDates.push({ value: d, index });
+      }
+    });
+    if (bebasDates.length > 0) {
+      bebasRequests.push({ request: req, bebasDates });
+    }
+  });
+
   const hasPendingTrashOrWaiting =
     (dateMap["WAITING"] && dateMap["WAITING"].length > 0) ||
     (dateMap["TRASH"] && dateMap["TRASH"].length > 0);
@@ -12887,7 +12148,7 @@ if (periodOptions.length === 0) {
                 return (
                   <div className="space-y-4">
                     {isEditingSchedule && (
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <DroppableCell
                           dateStr="WAITING"
                           className="border-amber-500/30 bg-amber-500/5 min-h-[120px] rounded-2xl flex flex-col items-center justify-center border-dashed border-2"
@@ -12920,6 +12181,42 @@ if (periodOptions.length === 0) {
                             ))}
                           </div>
                         </DroppableCell>
+
+                        <DroppableCell
+                          dateStr="BEBAS"
+                          className="border-indigo-500/30 bg-indigo-500/5 min-h-[120px] rounded-2xl flex flex-col items-center justify-center border-dashed border-2"
+                          isSunday={false}
+                          isToday={false}
+                        >
+                          <div className="text-indigo-400 flex flex-col items-center gap-2 mt-4 pointer-events-none">
+                            <CalendarDays className="w-6 h-6 animate-pulse" />
+                            <span className="text-[10px] uppercase tracking-widest font-bold">
+                              Request Tanggal Bebas
+                            </span>
+                          </div>
+                          <div className="w-full mt-4 flex flex-wrap gap-2 px-4 pb-4 justify-center">
+                            {bebasRequests.length === 0 ? (
+                              <div className="text-[8px] text-white/10 text-center tracking-[0.2em] uppercase font-black my-4">
+                                - Kosong -
+                              </div>
+                            ) : (
+                              bebasRequests.map((br, i) => (
+                                <DraggableLeaveBadge
+                                  key={`${br.request.id}-BEBAS-${i}`}
+                                  dragId={`${br.request.id}|${br.bebasDates[0].value}|${br.bebasDates[0].index}`}
+                                  request={br.request}
+                                  dateStr={br.bebasDates[0].value}
+                                  isSunday={false}
+                                  getNickname={getNickname}
+                                  getSectionInitials={getSectionInitials}
+                                  disabled={!isEditingSchedule}
+                                  customLabel={`${getNickname(br.request.employeeId, br.request.employeeName)} (${br.bebasDates.length})`}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </DroppableCell>
+
                         <DroppableCell
                           dateStr="TRASH"
                           className="border-rose-500/30 bg-rose-500/5 min-h-[120px] rounded-2xl flex flex-col items-center justify-center border-dashed border-2 relative group"
@@ -13982,12 +13279,12 @@ function AdminPeriods({
                         </Button>
                       }
                     />
-                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-[450px] overflow-y-auto custom-scrollbar">
+                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-auto overflow-y-auto custom-scrollbar shadow-2xl rounded-xl">
                       <div className="space-y-3">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 border-b border-white/10 pb-2">
                           <Clock className="w-4 h-4 text-amber-400" />
                           <h4 className="text-white font-bold text-sm">
-                            Batas Waktu Request
+                            Jadwalkan Periode
                           </h4>
                         </div>
                         <div className="space-y-1">
@@ -14083,86 +13380,6 @@ function AdminPeriods({
                               </p>
                             </div>
                           )}
-                        <div className="pt-2 border-t border-white/5 space-y-1">
-                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">
-                            Maks Request Per Hari
-                          </Label>
-                          <div className="flex items-center gap-2">
-                            <LocalInput
-                              type="number"
-                              value={ctrl.maxRequestsPerDay || 7}
-                              onSave={(val) =>
-                                updateMaxLimit(p.value, parseInt(val) || 7)
-                              }
-                              className="field-input h-9 text-white w-20"
-                            />
-                            <span className="text-[10px] text-white/30 italic">
-                              Orang / Hari
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 border-t border-white/5 space-y-1">
-                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">
-                            Maks Tabungan Libur
-                          </Label>
-                          <div className="flex items-center gap-2">
-                            <LocalInput
-                              type="number"
-                              value={ctrl.maxAccumulatedLeave || 6}
-                              onSave={(val) =>
-                                updateMaxAccumulated(
-                                  p.value,
-                                  parseInt(val) || 6,
-                                )
-                              }
-                              className="field-input h-9 text-white w-20"
-                            />
-                            <span className="text-[10px] text-white/30 italic">
-                              Hari / Periode
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 border-t border-white/5 space-y-1">
-                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">
-                            Maks Ambil Libur
-                          </Label>
-                          <div className="flex items-center gap-2">
-                            <LocalInput
-                              type="number"
-                              value={ctrl.maxDaysPerRequest || 6}
-                              onSave={(val) =>
-                                updateMaxDaysPerRequest(
-                                  p.value,
-                                  parseInt(val) || 6,
-                                )
-                              }
-                              className="field-input h-9 text-white w-20"
-                            />
-                            <span className="text-[10px] text-white/30 italic">
-                              Hari / User
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 border-t border-white/5 space-y-1">
-                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider">
-                            Custom Nama Periode
-                          </Label>
-                          <LocalInput
-                            value={ctrl.name || ""}
-                            placeholder={p.label}
-                            onSave={async (val) => {
-                              await setDoc(
-                                doc(db, "periodControls", p.value),
-                                { name: val },
-                                { merge: true },
-                              );
-                            }}
-                            className="field-input h-9 text-white"
-                          />
-                        </div>
                         <Button
                           className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
                           size="sm"
@@ -14183,8 +13400,114 @@ function AdminPeriods({
                             );
                           }}
                         >
-                          OK / Simpan Pengaturan
+                          OK / Simpan Jadwal
                         </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  <Popover>
+                    <PopoverTrigger
+                      render={
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={ctrl.isPermanentlyClosed}
+                          className="text-white/50 hover:bg-white/10 flex items-center gap-1.5"
+                        >
+                          <Settings className="w-4 h-4 text-white/60" />
+                          <span>Pengaturan</span>
+                        </Button>
+                      }
+                    />
+                    <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-auto max-h-[350px] overflow-y-auto custom-scrollbar shadow-2xl rounded-xl">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 mb-1 border-b border-white/10 pb-2">
+                          <Settings className="w-4 h-4 text-emerald-400" />
+                          <h4 className="text-white font-bold text-sm">
+                            Pengaturan Batas Kuota
+                          </h4>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                            Batas Maks. Perhari Per Divisi
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <LocalInput
+                              type="number"
+                              value={ctrl.maxRequestsPerDay || 7}
+                              onSave={(val) =>
+                                updateMaxLimit(p.value, parseInt(val) || 7)
+                              }
+                              className="field-input h-9 text-white w-20"
+                            />
+                            <span className="text-[10px] text-white/30 italic">
+                              Orang
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                            Batas Maks Tabungan Libur
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <LocalInput
+                              type="number"
+                              value={ctrl.maxAccumulatedLeave || 6}
+                              onSave={(val) =>
+                                updateMaxAccumulated(
+                                  p.value,
+                                  parseInt(val) || 6,
+                                )
+                              }
+                              className="field-input h-9 text-white w-20"
+                            />
+                            <span className="text-[10px] text-white/30 italic">
+                              Hari / Periode
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                            Maks Ambil Libur (Sekali Request)
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <LocalInput
+                              type="number"
+                              value={ctrl.maxDaysPerRequest || 6}
+                              onSave={(val) =>
+                                updateMaxDaysPerRequest(
+                                  p.value,
+                                  parseInt(val) || 6,
+                                )
+                              }
+                              className="field-input h-9 text-white w-20"
+                            />
+                            <span className="text-[10px] text-white/30 italic">
+                              Hari
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                            Custom Nama Periode
+                          </Label>
+                          <LocalInput
+                            value={ctrl.name || ""}
+                            placeholder={p.label}
+                            onSave={async (val) => {
+                              await setDoc(
+                                doc(db, "periodControls", p.value),
+                                { name: val },
+                                { merge: true },
+                              );
+                            }}
+                            className="field-input h-9 text-white"
+                          />
+                        </div>
                       </div>
                     </PopoverContent>
                   </Popover>
@@ -16207,12 +15530,12 @@ function AdminLeave({
                                 </Button>
                               }
                             />
-                            <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-[450px] overflow-y-auto custom-scrollbar shadow-2xl">
+                            <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-auto overflow-y-auto custom-scrollbar shadow-2xl rounded-xl">
                               <div className="space-y-3">
                                 <div className="flex items-center gap-2 mb-1 border-b border-white/10 pb-2">
                                   <Clock className="w-4 h-4 text-amber-400" />
                                   <h4 className="text-white font-bold text-sm">
-                                    Batas Waktu Request
+                                    Jadwalkan Periode
                                   </h4>
                                 </div>
                                 <div className="space-y-1">
@@ -16291,7 +15614,7 @@ function AdminLeave({
                                     className="field-input h-9 text-white"
                                   />
                                 </div>
-                                <div className="pt-2 border-t border-white/10 space-y-2">
+                                <div className="hidden">
                                   <div className="flex flex-col gap-1">
                                     <Label className="text-[10px] text-white/40 uppercase font-bold">Limit / Hari</Label>
                                     <div className="flex items-center gap-2">
@@ -16323,6 +15646,107 @@ function AdminLeave({
                                 >
                                   SIMPAN JADWAL
                                 </Button>
+                              </div>
+                            </PopoverContent>
+                         </Popover>
+
+                         <Popover>
+                            <PopoverTrigger
+                              render={
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={ctrl.isPermanentlyClosed}
+                                  className="h-10 w-10 p-0 rounded-lg flex items-center justify-center border border-white/5 bg-black/40 text-white/40 hover:bg-white/5 hover:text-white"
+                                >
+                                  <Settings className="w-4 h-4" />
+                                </Button>
+                              }
+                            />
+                            <PopoverContent className="bg-black/95 text-white border-white/20 p-4 w-72 h-auto max-h-[350px] overflow-y-auto custom-scrollbar shadow-2xl rounded-xl">
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2 mb-1 border-b border-white/10 pb-2">
+                                  <Settings className="w-4 h-4 text-emerald-400" />
+                                  <h4 className="text-white font-bold text-sm">
+                                    Pengaturan Periode
+                                  </h4>
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                                    Batas Maks. Perhari Per Divisi
+                                  </Label>
+                                  <div className="flex items-center gap-2">
+                                    <LocalInput
+                                      type="number"
+                                      value={ctrl.maxRequestsPerDay || 7}
+                                      onSave={(val) =>
+                                        updateMaxLimit(p.value, parseInt(val) || 7)
+                                      }
+                                      className="field-input h-9 text-white w-20"
+                                    />
+                                    <span className="text-[10px] text-white/30 italic">
+                                      Orang
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                                    Batas Maks Tabungan Libur
+                                  </Label>
+                                  <div className="flex items-center gap-2">
+                                    <LocalInput
+                                      type="number"
+                                      value={ctrl.maxAccumulatedLeave || 6}
+                                      onSave={(val) =>
+                                        updateMaxAccumulated(
+                                          p.value,
+                                          parseInt(val) || 6,
+                                        )
+                                      }
+                                      className="field-input h-9 text-white w-20"
+                                    />
+                                    <span className="text-[10px] text-white/30 italic">
+                                      Hari
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                                    Batas Maks Ambil Libur (Sekali Request)
+                                  </Label>
+                                  <div className="flex items-center gap-2">
+                                    <LocalInput
+                                      type="number"
+                                      value={ctrl.maxDaysPerRequest || 6}
+                                      onSave={(val) =>
+                                        updateMaxDaysPerRequest(
+                                          p.value,
+                                          parseInt(val) || 6,
+                                        )
+                                      }
+                                      className="field-input h-9 text-white w-20"
+                                    />
+                                    <span className="text-[10px] text-white/30 italic">
+                                      Hari
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] text-white/40 uppercase font-bold tracking-wider block">
+                                    Custom Nama Periode
+                                  </Label>
+                                  <LocalInput
+                                    value={ctrl.name || ""}
+                                    placeholder={p.label}
+                                    onSave={async (val) => {
+                                      await updatePeriodName(p.value, val);
+                                    }}
+                                    className="field-input h-9 text-white"
+                                  />
+                                </div>
                               </div>
                             </PopoverContent>
                          </Popover>
@@ -16399,7 +15823,16 @@ function AdminLeave({
                           ]
                         )
                           .filter(Boolean)
-                          .map((d) => format(new Date(d), "dd/MM"))
+                          .map((d) => {
+                            if (typeof d === "string" && d.startsWith("BEBAS")) return "Bebas";
+                            try {
+                              const parsed = new Date(d);
+                              if (isNaN(parsed.getTime())) return d;
+                              return format(parsed, "dd/MM");
+                            } catch (e) {
+                              return d;
+                            }
+                          })
                           .join(", ") || "-"}
                       </TableCell>
                       <TableCell className="text-right">
@@ -16556,7 +15989,7 @@ function EmployeeLeave({
     const limitKeyLegacy = `leave_view_limit_${employee.id}_${selectedPeriod}`;
     
     let valStr = localStorage.getItem(stateKey);
-    let state = { chances: 2, lastReset: Date.now() };
+    let state = { chances: 3, lastReset: Date.now() };
 
     const currentLastResetPoint = getMostRecentResetPoint();
 
@@ -16564,8 +15997,8 @@ function EmployeeLeave({
       try {
         const parsed = JSON.parse(valStr);
         if (parsed.lastReset < currentLastResetPoint) {
-           // Reset to 2 if past 14:00 point
-           state = { chances: 2, lastReset: Date.now() };
+           // Reset to 3 if past 14:00 point
+           state = { chances: 3, lastReset: Date.now() };
         } else {
            state = parsed;
         }
@@ -16863,8 +16296,21 @@ function EmployeeLeave({
       }).length;
 
       if (count >= maxLimit) {
+        let dateLabel = "-";
+        if (d) {
+          if (typeof d === "string" && d.startsWith("BEBAS")) {
+            dateLabel = "Bebas";
+          } else {
+            try {
+              const parsed = new Date(d);
+              dateLabel = isNaN(parsed.getTime()) ? d : format(parsed, "dd MMM yyyy");
+            } catch (err) {
+              dateLabel = d;
+            }
+          }
+        }
         return alert(
-          `Tanggal ${d ? format(new Date(d), "dd MMM yyyy") : "-"} sudah penuh (maks ${maxLimit} orang di divisi ${employee.division}).`,
+          `Tanggal ${dateLabel} sudah penuh (maks ${maxLimit} orang di divisi ${employee.division}).`,
         );
       }
     }
@@ -17036,7 +16482,7 @@ function EmployeeLeave({
           </div>
           <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center relative z-10">KESEMPATAN HABIS</h3>
           <p className="text-white/50 text-center max-w-md relative z-10">
-            Maaf, Anda sudah menggunakan semua kesempatan (2x) untuk membuka menu pengajuan libur pada hari ini. Anda harus menunggu besok jam 14.00 untuk mendapatkan kesempatan lagi.
+            Maaf, Anda sudah menggunakan semua kesempatan (3x) untuk membuka menu pengajuan libur pada hari ini. Anda harus menunggu besok jam 14.00 untuk mendapatkan kesempatan lagi.
           </p>
         </div>
       </div>
@@ -17053,7 +16499,7 @@ function EmployeeLeave({
           </div>
           <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest relative z-10">PENGAJUAN LIBUR</h3>
           <p className="text-white/50 mb-6 max-w-md relative z-10">
-            Ini adalah kesempatan ke-{2 - chancesLeft + 1} Anda (dari total 2x sehari) membuka form libur ini. Sisa kesempatan Anda hari ini: {chancesLeft} kali.
+            Ini adalah kesempatan ke-{3 - chancesLeft + 1} Anda (dari total 3x sehari) membuka form libur ini. Sisa kesempatan Anda hari ini: {chancesLeft} kali.
             <br/><br/>
             <strong className="text-rose-400 font-bold block">Pastikan Anda sudah mempersiapkan tanggal libur Anda sebelum melanjutkan!</strong>
           </p>
@@ -17514,7 +16960,7 @@ function EmployeeLeave({
                                       key={i}
                                       className={isNew ? "text-amber-400" : ""}
                                     >
-                                      {d}
+                                      {typeof d === "string" && d.startsWith("BEBAS") ? "Bebas" : d}
                                       {i < currentDates.length - 1 ? "," : ""}
                                     </span>
                                   );
@@ -17547,7 +16993,7 @@ function EmployeeLeave({
                                             : ""
                                         }
                                       >
-                                        {od}
+                                        {typeof od === "string" && od.startsWith("BEBAS") ? "Bebas" : od}
                                         {idx <
                                         r.originalDates.filter(Boolean).length -
                                           1
@@ -17909,7 +17355,17 @@ function EmployeeLeave({
                 <div key={d} className="flex flex-col gap-1.5">
                   <div className="flex justify-between items-baseline">
                     <span className="text-xs font-bold text-white/70">
-                      {d ? format(new Date(d), "dd MMMM yyyy") : "-"}
+                      {(() => {
+                        if (!d) return "-";
+                        if (typeof d === "string" && d.startsWith("BEBAS")) return "Tanggal Bebas";
+                        try {
+                          const parsed = new Date(d);
+                          if (isNaN(parsed.getTime())) return d;
+                          return format(parsed, "dd MMMM yyyy");
+                        } catch (e) {
+                          return d;
+                        }
+                      })()}
                     </span>
                     <span
                       className={`text-[10px] font-bold ${count >= (periodControl?.maxRequestsPerDay || 7) ? "text-rose-400" : "text-primary"}`}

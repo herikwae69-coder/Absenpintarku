@@ -1,6 +1,6 @@
 {
   "name": "Absensi Pintar",
-  "description": "Aplikasi absensi karyawan lengkap dengan fitur admin untuk manajemen karyawan, shift, rekap laporan, dan pengelolaan bonus.",
+  "description": "Aplikasi khusus yang difokuskan sepenuhnya untuk pengajuan dan pengelolaan request libur karyawan dengan manajemen kuota mandiri.",
   "requestFramePermissions": ["camera", "geolocation"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
