@@ -14715,6 +14715,7 @@ function AdminLeave({
   const [bookingDates, setBookingDates] = useState<string[]>([""]);
   const [selectedBookingPeriod, setSelectedBookingPeriod] = useState(selectedPeriod);
   const [bookingReason, setBookingReason] = useState("");
+  const [bookingSectionId, setBookingSectionId] = useState("");
   const [bookingRequests, setBookingRequests] = useState<LeaveRequest[]>([]);
 
   useEffect(() => {
@@ -14730,11 +14731,22 @@ function AdminLeave({
     return unsub;
   }, [selectedBookingPeriod]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [bookingDivision, setBookingDivision] = useState("");
   
   const filteredEmployees = React.useMemo(() => {
-    if (bookingUserName.length < 3 || !showAutocomplete) return [];
-    return employees.filter(e => e.name.toLowerCase().includes(bookingUserName.toLowerCase()) || e.pin.includes(bookingUserName));
-  }, [bookingUserName, employees, showAutocomplete]);
+    if (!showAutocomplete) return [];
+    
+    let filtered = employees;
+    if (bookingDivision) {
+       filtered = filtered.filter(e => e.division === bookingDivision);
+    }
+    
+    if (bookingUserName.length > 0) {
+       filtered = filtered.filter(e => e.name.toLowerCase().includes(bookingUserName.toLowerCase()) || e.pin.includes(bookingUserName));
+    }
+    
+    return filtered;
+  }, [bookingUserName, employees, showAutocomplete, bookingDivision]);
 
   const [noChancesUsers, setNoChancesUsers] = useState<Employee[]>([]);
 
@@ -15159,8 +15171,25 @@ function AdminLeave({
                 </div>
               )}
             </div>
+
+            {bookingUser && (
+              <div className="space-y-2 relative z-40">
+                <Label className="text-xs uppercase font-bold text-white/50">Bagian (Sesuai Divisi)</Label>
+                <Select value={bookingSectionId} onValueChange={setBookingSectionId}>
+                  <SelectTrigger className="field-input h-10 w-full text-white">
+                    <SelectValue placeholder="Semua Bagian (Atau Pilih Salah Satu)" />
+                  </SelectTrigger>
+                  <SelectContent className="glass-panel border-white/20 text-white">
+                    <SelectItem value="none" className="text-white/50 italic">- Tidak Ada Bagian -</SelectItem>
+                    {sections.filter(s => s.division === (employees.find(e => e.id === bookingUser)?.division || 'Depan')).map(sec => (
+                      <SelectItem key={sec.id} value={sec.id}>{sec.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
-            <div className="space-y-2">
+            <div className="space-y-2 relative z-0">
               <Label className="text-xs uppercase font-bold text-white/50">Tanggal Yang Dilock</Label>
               <div className="grid grid-cols-2 gap-2">
                 {bookingDates.map((d, i) => (
@@ -15230,7 +15259,7 @@ function AdminLeave({
                            lockedDates: dates,
                            originalDates: [...dates],
                            reason: bookingReason || "Khusus/Penting (Dilock Admin)",
-                           sectionId: "",
+                           sectionId: bookingSectionId === "none" ? "" : bookingSectionId,
                            createdAt: serverTimestamp(),
                         };
                         dates.forEach((d, i) => { payload[`date${i+1}`] = d; });
@@ -15239,6 +15268,7 @@ function AdminLeave({
                      await setDoc(doc(db, "leaveRequests", docId), payload, { merge: true });
                      alert("Tanggal berhasil dilock untuk karyawan ini!", "success");
                      setShowBooking(false);
+                     setBookingSectionId("");
                      setBookingUser("");
                      setBookingDates(Array(periodOptions.find(o => o.value === selectedBookingPeriod)?.maxDaysPerRequest || 6).fill(""));
                    } catch(err: any) {
@@ -15273,6 +15303,9 @@ function AdminLeave({
                            <div key={r.id} className="bg-black/40 border border-white/5 rounded-xl p-3 flex flex-col gap-1">
                               <div className="flex justify-between items-start">
                                  <span className="font-bold text-emerald-400 text-sm">{r.employeeName}</span>
+                                 {r.sectionId && (
+                                     <span className="text-[10px] text-emerald-400/50 uppercase tracking-widest">{sections.find((s: any) => s.id === r.sectionId)?.name || r.sectionId}</span>
+                                 )}
                               </div>
                               <div className="text-xs text-white/80 select-all">
                                  <span className="text-white/40">Tanggal:</span> {r.lockedDates?.map((d: string) => {
