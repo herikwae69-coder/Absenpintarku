@@ -15124,16 +15124,23 @@ function AdminLeave({
 
             <div className="space-y-2 relative">
               <Label className="text-xs uppercase font-bold text-white/50">Pilih Karyawan</Label>
-              <Input 
-                value={bookingUserName} 
-                onChange={(e) => {
-                    setBookingUserName(e.target.value);
-                    setShowAutocomplete(true);
-                    if(e.target.value === "") setBookingUser("");
-                }}
-                placeholder="Ketik 3 huruf nama/pin karyawan..."
-                className="field-input h-10 w-full"
-              />
+              <div className="flex flex-col gap-1">
+                <Input 
+                  value={bookingUserName} 
+                  onChange={(e) => {
+                      setBookingUserName(e.target.value);
+                      setShowAutocomplete(true);
+                      if(e.target.value === "") setBookingUser("");
+                  }}
+                  placeholder="Ketik 3 huruf nama/pin karyawan..."
+                  className="field-input h-10 w-full"
+                />
+                {bookingUser && (
+                  <div className="text-xs text-emerald-400 font-bold ml-1">
+                    Terpilih: {employees.find(e => e.id === bookingUser)?.name} - Divisi {employees.find(e => e.id === bookingUser)?.division || 'Depan'}
+                  </div>
+                )}
+              </div>
               {filteredEmployees.length > 0 && (
                 <div className="absolute z-50 w-full mt-1 glass-panel border border-white/20 rounded-xl overflow-y-auto max-h-60 shadow-xl">
                   {filteredEmployees.map(e => (
@@ -15244,28 +15251,44 @@ function AdminLeave({
 
           <div className="mt-8 border-t border-white/10 pt-4 pb-2">
              <h4 className="text-sm font-bold text-white/70 uppercase mb-3 text-center">Daftar Booking (Periode Ini)</h4>
-             <div className="space-y-3">
+             <div className="space-y-4">
                 {bookingRequests.length === 0 ? (
                    <p className="text-xs text-white/30 text-center italic">- Belum ada booking -</p>
                 ) : (
-                   bookingRequests.map((r: any) => (
-                      <div key={r.id} className="bg-black/40 border border-white/5 rounded-xl p-3 flex flex-col gap-1">
-                         <div className="flex justify-between items-start">
-                            <span className="font-bold text-emerald-400 text-sm">{r.employeeName}</span>
-                            <span className="text-[10px] text-white/40">{r.division}</span>
-                         </div>
-                         <div className="text-xs text-white/80 select-all">
-                            <span className="text-white/40">Tanggal:</span> {r.lockedDates?.map((d: string) => {
-                                try {
-                                    const parsed = new Date(d);
-                                    return isNaN(parsed.getTime()) ? d : format(parsed, "dd MMM yyyy");
-                                } catch(e) { return d; }
-                            }).join(", ") || "-"}
-                         </div>
-                         <div className="text-[11px] text-white/60 italic border-l-2 border-emerald-500/30 pl-2 mt-1">
-                           "{r.reason || "Khusus/Penting (Dilock Admin)"}"
-                         </div>
-                      </div>
+                   Object.entries(
+                     bookingRequests.reduce((acc: any, curr: any) => {
+                       const div = curr.division || 'Depan';
+                       if (!acc[div]) acc[div] = [];
+                       acc[div].push(curr);
+                       return acc;
+                     }, {})
+                   ).map(([division, reqs]: [string, any]) => (
+                     <div key={division} className="space-y-2">
+                       <h5 className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 flex items-center gap-2 rounded border border-emerald-500/20">
+                         {division}
+                         <span className="text-[10px] text-white/50 font-normal">({reqs.length} Booking)</span>
+                       </h5>
+                       <div className="space-y-2 pl-2">
+                         {reqs.map((r: any) => (
+                           <div key={r.id} className="bg-black/40 border border-white/5 rounded-xl p-3 flex flex-col gap-1">
+                              <div className="flex justify-between items-start">
+                                 <span className="font-bold text-emerald-400 text-sm">{r.employeeName}</span>
+                              </div>
+                              <div className="text-xs text-white/80 select-all">
+                                 <span className="text-white/40">Tanggal:</span> {r.lockedDates?.map((d: string) => {
+                                     try {
+                                         const parsed = new Date(d);
+                                         return isNaN(parsed.getTime()) ? d : format(parsed, "dd MMM yyyy");
+                                     } catch(e) { return d; }
+                                 }).join(", ") || "-"}
+                              </div>
+                              <div className="text-[11px] text-white/60 italic border-l-2 border-emerald-500/30 pl-2 mt-1">
+                                "{r.reason || "Khusus/Penting (Dilock Admin)"}"
+                              </div>
+                           </div>
+                         ))}
+                       </div>
+                     </div>
                    ))
                 )}
              </div>
