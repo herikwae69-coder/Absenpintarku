@@ -11421,6 +11421,11 @@ const [selectedDivision, setSelectedDivision] = useState<string>(
     const request = leaveRequests.find((r) => r.id === requestId);
     if (!request) return;
 
+    if (request.lockedDates && request.lockedDates.includes(originalDate)) {
+      const isConfirmed = await confirm(`Ini tgl bookingan libur dengan alasan "${request.reason || "Khusus/Penting"}". Apa anda yakin untuk memindahnya?`);
+      if (!isConfirmed) return;
+    }
+
     if (newDate !== "TRASH" && newDate !== "WAITING" && newDate !== "BEBAS") {
       const hasDuplicateDate = leaveRequests.some((r) => {
         if (r.employeeId !== request.employeeId) return false;
@@ -14710,6 +14715,20 @@ function AdminLeave({
   const [bookingDates, setBookingDates] = useState<string[]>([""]);
   const [selectedBookingPeriod, setSelectedBookingPeriod] = useState(selectedPeriod);
   const [bookingReason, setBookingReason] = useState("");
+  const [bookingRequests, setBookingRequests] = useState<LeaveRequest[]>([]);
+
+  useEffect(() => {
+    if (!selectedBookingPeriod) return;
+    const q = query(
+      collection(db, "leaveRequests"),
+      where("period", "==", selectedBookingPeriod)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const all = snap.docs.map(d => ({id: d.id, ...d.data()} as LeaveRequest));
+      setBookingRequests(all.filter(r => r.lockedDates && r.lockedDates.length > 0));
+    });
+    return unsub;
+  }, [selectedBookingPeriod]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   
   const filteredEmployees = React.useMemo(() => {
@@ -15222,6 +15241,35 @@ function AdminLeave({
                   SIMPAN BOOKING LIBUR
                </Button>
           </DialogFooter>
+
+          <div className="mt-8 border-t border-white/10 pt-4 pb-2">
+             <h4 className="text-sm font-bold text-white/70 uppercase mb-3 text-center">Daftar Booking (Periode Ini)</h4>
+             <div className="space-y-3">
+                {bookingRequests.length === 0 ? (
+                   <p className="text-xs text-white/30 text-center italic">- Belum ada booking -</p>
+                ) : (
+                   bookingRequests.map((r: any) => (
+                      <div key={r.id} className="bg-black/40 border border-white/5 rounded-xl p-3 flex flex-col gap-1">
+                         <div className="flex justify-between items-start">
+                            <span className="font-bold text-emerald-400 text-sm">{r.employeeName}</span>
+                            <span className="text-[10px] text-white/40">{r.division}</span>
+                         </div>
+                         <div className="text-xs text-white/80 select-all">
+                            <span className="text-white/40">Tanggal:</span> {r.lockedDates?.map((d: string) => {
+                                try {
+                                    const parsed = new Date(d);
+                                    return isNaN(parsed.getTime()) ? d : format(parsed, "dd MMM yyyy");
+                                } catch(e) { return d; }
+                            }).join(", ") || "-"}
+                         </div>
+                         <div className="text-[11px] text-white/60 italic border-l-2 border-emerald-500/30 pl-2 mt-1">
+                           "{r.reason || "Khusus/Penting (Dilock Admin)"}"
+                         </div>
+                      </div>
+                   ))
+                )}
+             </div>
+          </div>
         </DialogContent>
       </Dialog>
       
