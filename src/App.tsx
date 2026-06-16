@@ -15142,7 +15142,7 @@ function AdminLeave({
                   onChange={(e) => {
                       setBookingUserName(e.target.value);
                       setShowAutocomplete(true);
-                      if(e.target.value === "") setBookingUser("");
+                      if(e.target.value === "") { setBookingUser(""); setBookingSectionId(""); }
                   }}
                   placeholder="Ketik 3 huruf nama/pin karyawan..."
                   className="field-input h-10 w-full"
@@ -15162,6 +15162,7 @@ function AdminLeave({
                       onClick={() => {
                         setBookingUser(e.id);
                         setBookingUserName(e.name);
+                        setBookingSectionId("");
                         setShowAutocomplete(false);
                       }}
                     >
@@ -15177,7 +15178,13 @@ function AdminLeave({
                 <Label className="text-xs uppercase font-bold text-white/50">Bagian (Sesuai Divisi)</Label>
                 <Select value={bookingSectionId} onValueChange={setBookingSectionId}>
                   <SelectTrigger className="field-input h-10 w-full text-white">
-                    <SelectValue placeholder="Semua Bagian (Atau Pilih Salah Satu)" />
+                    <span data-slot="select-value" className="flex flex-1 text-left truncate opacity-90">
+                      {bookingSectionId === "none" 
+                        ? "- Tidak Ada Bagian -" 
+                        : bookingSectionId 
+                          ? sections.find(s => s.id === bookingSectionId)?.name || bookingSectionId 
+                          : <span className="opacity-50">Semua Bagian (Atau Pilih Salah Satu)</span>}
+                    </span>
                   </SelectTrigger>
                   <SelectContent className="glass-panel border-white/20 text-white">
                     <SelectItem value="none" className="text-white/50 italic">- Tidak Ada Bagian -</SelectItem>
