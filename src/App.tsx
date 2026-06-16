@@ -1159,7 +1159,7 @@ export default function App() {
         {/* Watermark */}
         <div className="fixed bottom-4 right-8 z-50 text-[8px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2 justify-end">
           <div className="w-8 h-[1px] bg-white/10" />
-          App by Heri.k | versi 2.3.0 | 2026
+          App by Heri.k | versi 2.3.1 | 2026
         </div>
       </div>
     </DialogContext.Provider>
@@ -16883,22 +16883,35 @@ function EmployeeLeave({
                                 type="date"
                                 className="field-input w-full text-xs text-white bg-white/5 px-2 flex-1 h-10"
                                 onChange={(e) => {
-                                  if (e.target.value) {
-                                    const newDates = [...formData.dates];
-                                    newDates[index] = e.target.value;
-                                    setFormData({ ...formData, dates: newDates });
-                                    setShowDateSelector({index: null});
+                                  const val = e.target.value;
+                                  if (val) {
+                                    // Delay setting the value and unmounting to prevent iOS Safari focus collapse & ghost-clicks
+                                    setTimeout(() => {
+                                      setFormData((prev) => {
+                                        const newDates = [...prev.dates];
+                                        newDates[index] = val;
+                                        return { ...prev, dates: newDates };
+                                      });
+                                      setShowDateSelector({index: null});
+                                    }, 400);
                                   }
                                 }}
                               />
                               <Button
                                 type="button"
                                 className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-10 px-3 text-[10px] whitespace-nowrap uppercase tracking-wider rounded-xl"
-                                onClick={() => {
-                                  const newDates = [...formData.dates];
-                                  newDates[index] = "BEBAS_" + Date.now() + "_" + index;
-                                  setFormData({ ...formData, dates: newDates });
-                                  setShowDateSelector({index: null});
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  // Delay setting to let any pending touches settle first
+                                  setTimeout(() => {
+                                    setFormData((prev) => {
+                                      const newDates = [...prev.dates];
+                                      newDates[index] = "BEBAS_" + Date.now() + "_" + index;
+                                      return { ...prev, dates: newDates };
+                                    });
+                                    setShowDateSelector({index: null});
+                                  }, 300);
                                 }}
                               >
                                 Bebas
@@ -16908,7 +16921,14 @@ function EmployeeLeave({
                             <Button
                               type="button"
                               className="field-input text-xs w-full text-white/50 justify-start hover:bg-white/10 h-10"
-                              onClick={() => setShowDateSelector({index})}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                // Add small delay on iOS before showing date picker to bypass immediate tap collapse
+                                setTimeout(() => {
+                                  setShowDateSelector({index});
+                                }, 150);
+                              }}
                             >
                               Pilih Tanggal
                             </Button>
