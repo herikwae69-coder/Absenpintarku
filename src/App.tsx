@@ -14750,22 +14750,26 @@ function AdminLeave({
 
   const [noChancesUsers, setNoChancesUsers] = useState<Employee[]>([]);
 
-  const loadNoChancesUsers = async () => {
-    try {
+  // Real-time listener in Admin for out-of-chances employees
+  useEffect(() => {
+    if (!selectedPeriod) return;
+
+    const q = query(
+      collection(db, "employeeChances"),
+      where("periodId", "==", selectedPeriod)
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const currentLastResetPoint = getMostRecentResetPoint();
-      
-      // Fetch all tracked chances for the selected period from Firestore
-      const q = query(
-        collection(db, "employeeChances"),
-        where("periodId", "==", selectedPeriod)
-      );
-      const querySnapshot = await getDocs(q);
-      
       const firestoreNoChancesIds: string[] = [];
+      
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        const lastReset = data.lastReset || 0;
-        if (lastReset >= currentLastResetPoint && data.chances <= 0) {
+        const docLastReset = data.lastReset || 0;
+        const currentChances = typeof data.chances === "number" ? data.chances : 3;
+        
+        // Show as out of chances if chances are 0 or less AND lastReset is on/after the most recent 14:00 reset point
+        if (docLastReset >= currentLastResetPoint && currentChances <= 0) {
           firestoreNoChancesIds.push(data.employeeId);
         }
       });
@@ -14791,31 +14795,16 @@ function AdminLeave({
       
       const users = employees.filter(e => mergedNoChancesIds.includes(e.id));
       setNoChancesUsers(users);
-      setShowNoChances(true);
-    } catch (err) {
-      console.error("Error loading out-of-chances employees from Firestore:", err);
-      // Clean fallback using client local storage
-      const currentLastResetPoint = getMostRecentResetPoint();
-      const users = employees.filter(e => {
-        const limitKeyLegacy = `leave_view_limit_${e.id}_${selectedPeriod}`;
-        const stateKey = `leave_view_state_${e.id}_${selectedPeriod}`;
-        const valStr = localStorage.getItem(stateKey);
-        if (valStr) {
-          try {
-            const parsed = JSON.parse(valStr);
-            if (parsed.lastReset >= currentLastResetPoint) {
-              return parsed.chances <= 0;
-            }
-          } catch (e) {}
-        } else {
-          const legacy = localStorage.getItem(limitKeyLegacy);
-          if (legacy === "0") return true;
-        }
-        return false;
-      });
-      setNoChancesUsers(users);
-      setShowNoChances(true);
-    }
+    }, (err) => {
+      console.error("Error subscribing to employeeChances for admin:", err);
+      handleFirestoreError(err, OperationType.LIST, `employeeChances/${selectedPeriod}`);
+    });
+
+    return unsubscribe;
+  }, [selectedPeriod, employees]);
+
+  const loadNoChancesUsers = () => {
+    setShowNoChances(true);
   };
 
   const addChance = async (employeeId: string) => {
@@ -14824,11 +14813,11 @@ function AdminLeave({
     // Save locally
     const stateKey = `leave_view_state_${employeeId}_${selectedPeriod}`;
     const valStr = localStorage.getItem(stateKey);
-    let parsed = { chances: 0, lastReset: Date.now() };
+    let parsed = { chances: 3, lastReset: Date.now() };
     if (valStr) {
       try { parsed = JSON.parse(valStr); } catch (e) {}
     }
-    parsed.chances += 1;
+    parsed.chances = (parsed.chances || 3) + 1;
     parsed.lastReset = Date.now();
     localStorage.setItem(stateKey, JSON.stringify(parsed));
 
@@ -14836,20 +14825,21 @@ function AdminLeave({
     const chancesDocRef = doc(db, "employeeChances", `${employeeId}_${selectedPeriod}`);
     try {
       const docSnap = await getDoc(chancesDocRef);
-      let existingChances = 0;
+      let existingChances = 3;
       let existingLastReset = Date.now();
       if (docSnap.exists()) {
         const data = docSnap.data();
         existingLastReset = data.lastReset || Date.now();
         if (existingLastReset >= currentLastResetPoint) {
-          existingChances = data.chances;
+          existingChances = typeof data.chances === "number" ? data.chances : 3;
         }
       }
       
+      const updatedChances = existingChances + 1;
       await setDoc(chancesDocRef, {
         employeeId,
         periodId: selectedPeriod,
-        chances: existingChances + 1,
+        chances: updatedChances,
         lastReset: Date.now(),
         updatedAt: serverTimestamp()
       }, { merge: true });
@@ -14857,8 +14847,6 @@ function AdminLeave({
     } catch (err) {
       console.error("Error updating chances in Firestore:", err);
     }
-
-    await loadNoChancesUsers();
   };
   const [newPeriod, setNewPeriod] = useState({
     name: "",
@@ -15093,6 +15081,7 @@ function AdminLeave({
           Bagian: sections.find((s) => s.id === r.sectionId)?.name || "-",
           Divisi: r.division,
           Alasan: r.reason,
+          "Alasan Menyimpan Libur": r.savingLeaveReason || "-",
           Periode: activePeriod?.label || r.period,
         };
 
@@ -15411,7 +15400,7 @@ function AdminLeave({
               <AlertCircle className="w-5 h-5" /> Karyawan Habis Kesempatan
             </DialogTitle>
             <DialogDescription className="text-white/50">
-              Karyawan yang sudah menggunakan 2x kesempatan (hari ini) pada periode {periodOptions.find((p) => p.value === selectedPeriod)?.label || selectedPeriod}. Reset otomatis jam 14.00.
+              Karyawan yang sudah menggunakan semua kesempatan (3x) hari ini pada periode {periodOptions.find((p) => p.value === selectedPeriod)?.label || selectedPeriod}. Reset otomatis jam 14.00.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
@@ -15988,7 +15977,12 @@ function AdminLeave({
                         {sections.find((s) => s.id === r.sectionId)?.name || "-"}
                       </TableCell>
                       <TableCell className="text-white/60 text-xs italic">
-                        "{r.reason}"
+                        <div>"{r.reason}"</div>
+                        {r.savingLeaveReason && (
+                          <div className="text-[10px] text-amber-400 not-italic font-bold mt-1 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 inline-block">
+                            Simpan Libur: {r.savingLeaveReason}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-emerald-400/80 font-bold text-xs">
                         {(
@@ -16125,6 +16119,8 @@ function EmployeeLeave({
   );
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [showSavingLeaveDialog, setShowSavingLeaveDialog] = useState(false);
+  const [savingLeaveTempReason, setSavingLeaveTempReason] = useState("");
 
   useEffect(() => {
     const unsub = subscribePeriodControls((data) => {
@@ -16142,10 +16138,12 @@ function EmployeeLeave({
     dates: string[];
     reason: string;
     sectionId: string;
+    savingLeaveReason?: string;
   }>({
     dates: [],
     reason: "",
     sectionId: "",
+    savingLeaveReason: "",
   });
   const [showDateSelector, setShowDateSelector] = useState<{index: number | null}>({index: null});
   const [showTable, setShowTable] = useState(false);
@@ -16221,6 +16219,7 @@ function EmployeeLeave({
       setHasInitializedChances(true);
     }, (error) => {
       console.error("Error subscribing to employeeChances:", error);
+      handleFirestoreError(error, OperationType.GET, `employeeChances/${employee.id}_${selectedPeriod}`);
       
       // Complete local storage fallback on subscription error
       const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
@@ -16314,6 +16313,7 @@ function EmployeeLeave({
         dates: initialDates.slice(0, maxDays),
         reason: r.reason || "",
         sectionId: r.sectionId || "",
+        savingLeaveReason: r.savingLeaveReason || "",
       });
     } else {
       const maxDays = periodControl?.maxDaysPerRequest || 6;
@@ -16321,6 +16321,7 @@ function EmployeeLeave({
         dates: Array(maxDays).fill(""),
         reason: "",
         sectionId: "",
+        savingLeaveReason: "",
       });
     }
 
@@ -16463,6 +16464,92 @@ function EmployeeLeave({
   const usedCurrent = usedDays; // Keep compatibility with existing variable usage if any
   const remainingInPeriod = Math.max(0, periodEffectiveQuota - usedCurrent);
 
+  const doSubmit = async (finalSavingLeaveReason: string) => {
+    const selectedDates = formData.dates.filter((d: string) => d !== "");
+    const isSavingLeave = selectedDates.length < periodEffectiveQuota;
+
+    const payload: any = {
+      ...formData,
+      employeeId: employee.id,
+      employeeName: employee.name,
+      division: employee.division || "Depan",
+      period: selectedPeriod,
+      status: "approved", // Auto approved
+      savingLeaveReason: isSavingLeave ? finalSavingLeaveReason : "",
+      originalDates: [...selectedDates], // Store original request for reset feature
+      createdAt: serverTimestamp(),
+      reason: (currentRequests && currentRequests[0] && currentRequests[0].reason && currentRequests[0].reason.includes("Dilock Admin")) ? currentRequests[0].reason + " // " + formData.reason : formData.reason
+    };
+    
+    if (currentRequests && currentRequests[0] && currentRequests[0].lockedDates) {
+      payload.lockedDates = currentRequests[0].lockedDates;
+    }
+
+    // Fallback for backwards compatibility in existing old view scripts etc.
+    formData.dates.forEach((d, i) => {
+      payload[`date${i + 1}`] = d;
+    });
+
+    // Single row per employee per period
+    await setDoc(
+      doc(db, "leaveRequests", `${employee.id}_${selectedPeriod}`),
+      payload,
+    );
+
+    // Make sure we close the Saving Leave reason popup
+    setShowSavingLeaveDialog(false);
+
+    // Check for post-submit popup config
+    const configSnap = await getDoc(doc(db, "systemConfig", "requestKata"));
+    if (configSnap.exists()) {
+      const configData = configSnap.data();
+      if (configData.postText) {
+        setMusicPopupText(configData.postText);
+        isPostPopupRef.current = true;
+        setShowMusicPopup(true);
+        // Do NOT stop music here, it should continue
+        setShowAdd(false);
+
+        // Reset form
+        const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
+        setFormData({
+          dates: Array(maxDaysFinal).fill(""),
+          reason: "",
+          sectionId: "",
+          savingLeaveReason: "",
+        });
+
+        // Use duration from config or default to 7 seconds
+        const durationMs = (configData.duration || 7) * 1000;
+        setTimeout(() => {
+          setShowMusicPopup(false);
+          isPostPopupRef.current = false;
+          stopMusic();
+        }, durationMs);
+      } else {
+        setShowAdd(false);
+        stopMusic();
+        const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
+        setFormData({
+          dates: Array(maxDaysFinal).fill(""),
+          reason: "",
+          sectionId: "",
+          savingLeaveReason: "",
+        });
+      }
+    } else {
+      setShowAdd(false);
+      stopMusic();
+      const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
+      setFormData({
+        dates: Array(maxDaysFinal).fill(""),
+        reason: "",
+        sectionId: "",
+        savingLeaveReason: "",
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     // Validate period status
     const pStatus = getPeriodStatus();
@@ -16476,6 +16563,7 @@ function EmployeeLeave({
     if (!formData.reason) return alert("Isi alasan libur!");
     if (!formData.sectionId) return alert("Pilih bagian!");
     const selectedDates = formData.dates.filter((d: string) => d !== "");
+
     if (selectedDates.length === 0)
       return alert("Pilih setidaknya satu tanggal libur!");
 
@@ -16551,78 +16639,14 @@ function EmployeeLeave({
       }
     }
 
-    const payload: any = {
-      ...formData,
-      employeeId: employee.id,
-      employeeName: employee.name,
-      division: employee.division || "Depan",
-      period: selectedPeriod,
-      status: "approved", // Auto approved
-      originalDates: [...selectedDates], // Store original request for reset feature
-      createdAt: serverTimestamp(),
-      reason: (currentRequests && currentRequests[0] && currentRequests[0].reason && currentRequests[0].reason.includes("Dilock Admin")) ? currentRequests[0].reason + " // " + formData.reason : formData.reason
-    };
-    
-    if (currentRequests && currentRequests[0] && currentRequests[0].lockedDates) {
-      payload.lockedDates = currentRequests[0].lockedDates;
-    }
-
-    // Fallback for backwards compatibility in existing old view scripts etc.
-    formData.dates.forEach((d, i) => {
-      payload[`date${i + 1}`] = d;
-    });
-
-    // Single row per employee per period
-    await setDoc(
-      doc(db, "leaveRequests", `${employee.id}_${selectedPeriod}`),
-      payload,
-    );
-
-    // Check for post-submit popup config
-    const configSnap = await getDoc(doc(db, "systemConfig", "requestKata"));
-    if (configSnap.exists()) {
-      const configData = configSnap.data();
-      if (configData.postText) {
-        setMusicPopupText(configData.postText);
-        isPostPopupRef.current = true;
-        setShowMusicPopup(true);
-        // Do NOT stop music here, it should continue
-        setShowAdd(false);
-
-        // Reset form
-        const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
-        setFormData({
-          dates: Array(maxDaysFinal).fill(""),
-          reason: "",
-          sectionId: "",
-        });
-
-        // Use duration from config or default to 7 seconds
-        const durationMs = (configData.duration || 7) * 1000;
-        setTimeout(() => {
-          setShowMusicPopup(false);
-          isPostPopupRef.current = false;
-          stopMusic();
-        }, durationMs);
-      } else {
-        setShowAdd(false);
-        stopMusic();
-        const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
-        setFormData({
-          dates: Array(maxDaysFinal).fill(""),
-          reason: "",
-          sectionId: "",
-        });
-      }
+    const isSavingLeave = selectedDates.length < periodEffectiveQuota;
+    if (isSavingLeave) {
+      // Trigger the modal form for filling the saving leave reason first
+      setSavingLeaveTempReason(formData.savingLeaveReason || "");
+      setShowSavingLeaveDialog(true);
     } else {
-      setShowAdd(false);
-      stopMusic();
-      const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
-      setFormData({
-        dates: Array(maxDaysFinal).fill(""),
-        reason: "",
-        sectionId: "",
-      });
+      // Direct submit
+      await doSubmit("");
     }
   };
 
@@ -17132,7 +17156,7 @@ function EmployeeLeave({
                         onChange={(e) =>
                           setFormData({ ...formData, reason: e.target.value })
                         }
-                        placeholder="Contoh: Keperluan keluarga"
+                        placeholder="Ceritakan apa alasanmu request libur tgl tersebut"
                         className="field-input text-xs"
                       />
                     </div>
@@ -17159,6 +17183,69 @@ function EmployeeLeave({
                       className="w-full bg-primary hover:bg-primary/80 font-bold shadow-lg"
                     >
                       Submit Request Libur
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog
+                open={showSavingLeaveDialog}
+                onOpenChange={setShowSavingLeaveDialog}
+              >
+                <DialogContent className="glass-panel text-white border-white/20 sm:max-w-[450px] p-6 rounded-[2rem] shadow-2xl animate-in fade-in duration-300">
+                  <DialogHeader className="space-y-2">
+                    <DialogTitle className="text-amber-400 text-lg font-bold flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 shrink-0 animate-pulse text-amber-400" />
+                      Yakin Simpan Sisa Libur? (Wajib Jawab)
+                    </DialogTitle>
+                    <DialogDescription className="text-white/70 text-xs leading-relaxed font-normal">
+                      Sistem mendeteksi Anda menyimpan kuota libur Anda di periode ini.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-2">
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-[11px] text-amber-200/90 leading-relaxed font-normal">
+                      Jatah/kuota libur Anda di periode ini adalah{" "}
+                      <span className="font-bold text-white text-xs">{periodEffectiveQuota} hari</span>,
+                      tetapi Anda hanya mengajukan{" "}
+                      <span className="font-bold text-white text-xs">
+                        {formData.dates.filter(Boolean).length} hari
+                      </span>{" "}
+                      (tersisa <span className="font-bold text-white text-xs">{periodEffectiveQuota - formData.dates.filter(Boolean).length} hari</span>).
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label className="text-white/60 text-[10px] uppercase font-bold tracking-wider">
+                        Masukan Alasan Menyimpan Libur :
+                      </Label>
+                      <Input
+                        value={savingLeaveTempReason}
+                        onChange={(e) => setSavingLeaveTempReason(e.target.value)}
+                        placeholder="ceritakan alasanmu menyimpan libur"
+                        className="field-input text-xs border-amber-500/30 focus:ring-amber-500/50"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <DialogFooter className="grid grid-cols-2 gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowSavingLeaveDialog(false)}
+                      className="border-white/10 text-white/70 hover:bg-white/10 rounded-xl text-xs font-bold"
+                    >
+                      Batal / Ubah Request
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        if (!savingLeaveTempReason.trim()) {
+                          return alert("Ceritakan alasanmu menyimpan libur!");
+                        }
+                        await doSubmit(savingLeaveTempReason);
+                      }}
+                      className="bg-amber-500 hover:bg-amber-600 text-black rounded-xl text-xs font-bold h-10 transition-colors"
+                    >
+                      Kirim & Simpan Libur
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -17290,7 +17377,12 @@ function EmployeeLeave({
                           className="text-white/60 text-xs truncate max-w-[100px]"
                           title={r.reason}
                         >
-                          {r.reason}
+                          <div>{r.reason}</div>
+                          {r.savingLeaveReason && (
+                            <div className="text-[10px] text-amber-400 mt-1" title={r.savingLeaveReason}>
+                              Simpan Libur: {r.savingLeaveReason}
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
