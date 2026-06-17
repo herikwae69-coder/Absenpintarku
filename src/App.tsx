@@ -55,9 +55,9 @@ const notifyListeners = () => {
       ...lpData,             // Applied latest name, dates, and base status
     };
     
-    // Safety: If periodControls has a more specific status (locked/scheduled), keep it
+    // Safety: If periodControls has a more specific status (locked/scheduled/closed/open), keep it
     const pcStatus = sharedPeriodControlsCache[id]?.status;
-    if (pcStatus && pcStatus !== "active" && pcStatus !== "closed") {
+    if (pcStatus && pcStatus !== "active") {
        merged[id].status = pcStatus;
     }
   });
