@@ -1159,7 +1159,7 @@ export default function App() {
         {/* Watermark */}
         <div className="fixed bottom-4 right-8 z-50 text-[8px] font-bold text-white/20 uppercase tracking-[0.3em] pointer-events-none flex items-center gap-2 justify-end">
           <div className="w-8 h-[1px] bg-white/10" />
-          App by Heri.k | versi 2.3.1 | 2026
+          App by Heri.k | versi 2.3.3 | 2026
         </div>
       </div>
     </DialogContext.Provider>
@@ -14750,47 +14750,115 @@ function AdminLeave({
 
   const [noChancesUsers, setNoChancesUsers] = useState<Employee[]>([]);
 
-  const loadNoChancesUsers = () => {
-    const currentLastResetPoint = getMostRecentResetPoint();
-    const users = employees.filter(e => {
-      const limitKeyLegacy = `leave_view_limit_${e.id}_${selectedPeriod}`;
-      const stateKey = `leave_view_state_${e.id}_${selectedPeriod}`;
-      const valStr = localStorage.getItem(stateKey);
-      // clear legacy to prevent confusion if needed, or just ignore
-      if (valStr) {
-        try {
-          const parsed = JSON.parse(valStr);
-          if (parsed.lastReset < currentLastResetPoint) {
-            return false;
-          }
-          return parsed.chances <= 0;
-        } catch (err) {}
-      } else {
-         // check legacy for migration but we can just ignore it since it resets anyway
-         const legacy = localStorage.getItem(limitKeyLegacy);
-         if (legacy === "0") return true; 
-      }
-      return false;
-    });
-    setNoChancesUsers(users);
-    setShowNoChances(true);
+  const loadNoChancesUsers = async () => {
+    try {
+      const currentLastResetPoint = getMostRecentResetPoint();
+      
+      // Fetch all tracked chances for the selected period from Firestore
+      const q = query(
+        collection(db, "employeeChances"),
+        where("periodId", "==", selectedPeriod)
+      );
+      const querySnapshot = await getDocs(q);
+      
+      const firestoreNoChancesIds: string[] = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const lastReset = data.lastReset || 0;
+        if (lastReset >= currentLastResetPoint && data.chances <= 0) {
+          firestoreNoChancesIds.push(data.employeeId);
+        }
+      });
+
+      // Local storage hybrid/legacy/backup checks
+      const localStorageNoChancesIds = employees.filter(e => {
+        const stateKey = `leave_view_state_${e.id}_${selectedPeriod}`;
+        const valStr = localStorage.getItem(stateKey);
+        if (valStr) {
+          try {
+            const parsed = JSON.parse(valStr);
+            return parsed.lastReset >= currentLastResetPoint && parsed.chances <= 0;
+          } catch (e) {}
+        }
+        const limitKeyLegacy = `leave_view_limit_${e.id}_${selectedPeriod}`;
+        const legacy = localStorage.getItem(limitKeyLegacy);
+        if (legacy === "0") return true;
+        return false;
+      }).map(e => e.id);
+
+      // Merge and unique list of employee IDs
+      const mergedNoChancesIds = Array.from(new Set([...firestoreNoChancesIds, ...localStorageNoChancesIds]));
+      
+      const users = employees.filter(e => mergedNoChancesIds.includes(e.id));
+      setNoChancesUsers(users);
+      setShowNoChances(true);
+    } catch (err) {
+      console.error("Error loading out-of-chances employees from Firestore:", err);
+      // Clean fallback using client local storage
+      const currentLastResetPoint = getMostRecentResetPoint();
+      const users = employees.filter(e => {
+        const limitKeyLegacy = `leave_view_limit_${e.id}_${selectedPeriod}`;
+        const stateKey = `leave_view_state_${e.id}_${selectedPeriod}`;
+        const valStr = localStorage.getItem(stateKey);
+        if (valStr) {
+          try {
+            const parsed = JSON.parse(valStr);
+            if (parsed.lastReset >= currentLastResetPoint) {
+              return parsed.chances <= 0;
+            }
+          } catch (e) {}
+        } else {
+          const legacy = localStorage.getItem(limitKeyLegacy);
+          if (legacy === "0") return true;
+        }
+        return false;
+      });
+      setNoChancesUsers(users);
+      setShowNoChances(true);
+    }
   };
 
-  const addChance = (employeeId: string) => {
+  const addChance = async (employeeId: string) => {
+    const currentLastResetPoint = getMostRecentResetPoint();
+    
+    // Save locally
     const stateKey = `leave_view_state_${employeeId}_${selectedPeriod}`;
     const valStr = localStorage.getItem(stateKey);
     let parsed = { chances: 0, lastReset: Date.now() };
     if (valStr) {
       try { parsed = JSON.parse(valStr); } catch (e) {}
-    } else {
-       // if not in state, look at legacy
-       const limitKeyLegacy = `leave_view_limit_${employeeId}_${selectedPeriod}`;
-       const legacy = localStorage.getItem(limitKeyLegacy);
-       if (legacy) parsed.chances = parseInt(legacy) || 0;
     }
     parsed.chances += 1;
+    parsed.lastReset = Date.now();
     localStorage.setItem(stateKey, JSON.stringify(parsed));
-    loadNoChancesUsers();
+
+    // Save to Firestore so employee's phone receives this update instantly
+    const chancesDocRef = doc(db, "employeeChances", `${employeeId}_${selectedPeriod}`);
+    try {
+      const docSnap = await getDoc(chancesDocRef);
+      let existingChances = 0;
+      let existingLastReset = Date.now();
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        existingLastReset = data.lastReset || Date.now();
+        if (existingLastReset >= currentLastResetPoint) {
+          existingChances = data.chances;
+        }
+      }
+      
+      await setDoc(chancesDocRef, {
+        employeeId,
+        periodId: selectedPeriod,
+        chances: existingChances + 1,
+        lastReset: Date.now(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+    } catch (err) {
+      console.error("Error updating chances in Firestore:", err);
+    }
+
+    await loadNoChancesUsers();
   };
   const [newPeriod, setNewPeriod] = useState({
     name: "",
@@ -16091,38 +16159,95 @@ function EmployeeLeave({
 
   useEffect(() => {
     if (!selectedPeriod) return;
+    if (!employee.id) return;
     if (Object.keys(controls).length === 0) return;
     
     const ctrl = controls[selectedPeriod];
     if (!ctrl || (ctrl.status !== "open" && ctrl.status !== "scheduled" && ctrl.isVisibleToEmployee !== true)) return;
 
-    const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
-    const limitKeyLegacy = `leave_view_limit_${employee.id}_${selectedPeriod}`;
+    const chancesDocRef = doc(db, "employeeChances", `${employee.id}_${selectedPeriod}`);
     
-    let valStr = localStorage.getItem(stateKey);
-    let state = { chances: 3, lastReset: Date.now() };
-
-    const currentLastResetPoint = getMostRecentResetPoint();
-
-    if (valStr) {
-      try {
-        const parsed = JSON.parse(valStr);
-        if (parsed.lastReset < currentLastResetPoint) {
-           // Reset to 3 if past 14:00 point
-           state = { chances: 3, lastReset: Date.now() };
-        } else {
-           state = parsed;
+    const unsubscribe = onSnapshot(chancesDocRef, (docSnap) => {
+      const currentLastResetPoint = getMostRecentResetPoint();
+      let activeChances = 3;
+      let activeLastReset = Date.now();
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        activeChances = typeof data.chances === "number" ? data.chances : 3;
+        activeLastReset = data.lastReset || Date.now();
+        
+        // If lastReset in Firestore is before the current 14:00 reset point, auto-reset to 3 on DB
+        if (activeLastReset < currentLastResetPoint) {
+          activeChances = 3;
+          activeLastReset = Date.now();
+          setDoc(chancesDocRef, {
+            employeeId: employee.id,
+            periodId: selectedPeriod,
+            chances: 3,
+            lastReset: Date.now(),
+            updatedAt: serverTimestamp()
+          }, { merge: true }).catch(err => console.error("Error resetting chances:", err));
         }
-      } catch (err) {}
-    }
-    
-    localStorage.setItem(stateKey, JSON.stringify(state));
-    // Remove legacy to keep it clean
-    localStorage.removeItem(limitKeyLegacy);
-    
-    setChancesLeft(state.chances);
-    setHasInitializedChances(true);
+      } else {
+        // Fallback to local storage if present
+        const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
+        const valStr = localStorage.getItem(stateKey);
+        if (valStr) {
+          try {
+            const parsed = JSON.parse(valStr);
+            if (parsed.lastReset >= currentLastResetPoint) {
+              activeChances = parsed.chances;
+              activeLastReset = parsed.lastReset;
+            }
+          } catch (e) {}
+        }
+        
+        // Create initial config in Firestore
+        setDoc(chancesDocRef, {
+          employeeId: employee.id,
+          periodId: selectedPeriod,
+          chances: activeChances,
+          lastReset: activeLastReset,
+          updatedAt: serverTimestamp()
+        }, { merge: true }).catch(err => console.error("Error initializing doc:", err));
+      }
+      
+      // Update local storage backup
+      const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
+      localStorage.setItem(stateKey, JSON.stringify({ chances: activeChances, lastReset: activeLastReset }));
+      
+      setChancesLeft(activeChances);
+      setHasInitializedChances(true);
+    }, (error) => {
+      console.error("Error subscribing to employeeChances:", error);
+      
+      // Complete local storage fallback on subscription error
+      const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
+      const limitKeyLegacy = `leave_view_limit_${employee.id}_${selectedPeriod}`;
+      let valStr = localStorage.getItem(stateKey);
+      let state = { chances: 3, lastReset: Date.now() };
+      const currentLastResetPoint = getMostRecentResetPoint();
+
+      if (valStr) {
+        try {
+          const parsed = JSON.parse(valStr);
+          if (parsed.lastReset < currentLastResetPoint) {
+             state = { chances: 3, lastReset: Date.now() };
+          } else {
+             state = parsed;
+          }
+        } catch (err) {}
+      }
+      localStorage.setItem(stateKey, JSON.stringify(state));
+      localStorage.removeItem(limitKeyLegacy);
+      
+      setChancesLeft(state.chances);
+      setHasInitializedChances(true);
+    });
+
     setLeaveFlowState("intro"); // reset when period changes
+    return () => unsubscribe();
   }, [selectedPeriod, employee.id, controls]);
 
 
@@ -16624,12 +16749,27 @@ function EmployeeLeave({
             </Button>
             <Button
               className="bg-blue-500 hover:bg-blue-600 text-white font-bold"
-              onClick={() => {
+              onClick={async () => {
+                const newVal = (chancesLeft ?? 3) - 1;
                 const stateKey = `leave_view_state_${employee.id}_${selectedPeriod}`;
-                const newVal = chancesLeft - 1;
                 const state = { chances: newVal, lastReset: Date.now() };
                 localStorage.setItem(stateKey, JSON.stringify(state));
                 setChancesLeft(newVal);
+
+                // Update Firestore real-time chances tracking doc
+                const chancesDocRef = doc(db, "employeeChances", `${employee.id}_${selectedPeriod}`);
+                try {
+                  await setDoc(chancesDocRef, {
+                    employeeId: employee.id,
+                    periodId: selectedPeriod,
+                    chances: newVal,
+                    lastReset: Date.now(),
+                    updatedAt: serverTimestamp()
+                  }, { merge: true });
+                } catch (err) {
+                  console.error("Error saving chance use to Firestore:", err);
+                }
+
                 setLeaveFlowState("form");
               }}
             >
@@ -16856,32 +16996,26 @@ function EmployeeLeave({
                           Libur Ke-{index + 1}
                         </Label>
                         <div className="relative">
-                          {d ? (
-                            <div className="flex items-center justify-between field-input text-xs w-full pr-2 text-white overflow-hidden h-10">
-                              <span className="truncate flex-1 font-semibold">{d.startsWith('BEBAS') ? '🔴 TGL BEBAS' : d}</span>
-                              {isLocked ? (
-                                <LockIcon className="w-4 h-4 text-rose-400 shrink-0" />
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0 shrink-0 flex items-center justify-center hover:bg-white/10 rounded-lg"
-                                  onClick={() => {
-                                    const newDates = [...formData.dates];
-                                    newDates[index] = "";
-                                    setFormData({ ...formData, dates: newDates });
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-400" />
-                                </Button>
+                          <div className="flex gap-2 w-full">
+                            {/* Visual Display / Interactive Container */}
+                            <div className="relative flex-1 h-10 overflow-hidden rounded-xl">
+                              {/* Visual Placeholder when blank */}
+                              {!d && (
+                                <div className="absolute inset-0 flex items-center justify-between px-3 bg-white/5 border border-white/10 rounded-xl text-white/50 text-xs select-none">
+                                  <span>Pilih Tanggal</span>
+                                  <CalendarIcon className="h-4 w-4 text-white/30" />
+                                </div>
                               )}
-                            </div>
-                          ) : (
-                            <div className="flex gap-2">
+
+                              {/* Real native date input - remains constantly mounted in DOM so iOS Safari doesn't unmount active nodes */}
                               <Input
                                 type="date"
-                                className="field-input w-full text-xs text-white bg-white/5 px-2 flex-1 h-10 cursor-pointer placeholder-white/20 select-none"
+                                value={d && !d.startsWith("BEBAS") ? d : ""}
+                                className={`w-full text-xs text-white bg-white/5 border border-white/10 rounded-xl cursor-pointer font-bold px-3 h-10 focus:outline-none focus:ring-1 focus:ring-blue-500/50 ${
+                                  !d 
+                                    ? "opacity-0 absolute inset-0 z-20 w-full h-full" 
+                                    : "opacity-100 bg-white/5"
+                                }`}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   if (val) {
@@ -16893,6 +17027,44 @@ function EmployeeLeave({
                                   }
                                 }}
                               />
+
+                              {/* Custom display label overlay if "BEBAS" is selected */}
+                              {d && d.startsWith("BEBAS") && (
+                                <div className="absolute inset-0 bg-white/5 border border-white/10 rounded-xl px-3 flex items-center justify-between text-xs font-semibold text-white pointer-events-none h-10">
+                                  <span>🔴 TGL BEBAS</span>
+                                </div>
+                              )}
+
+                              {/* Positioned Trash/Lock indicator overlay when date is selected */}
+                              {d && (
+                                <div className="absolute right-1 top-1 h-8 flex items-center z-30 pointer-events-auto">
+                                  {isLocked ? (
+                                    <LockIcon className="w-4 h-4 text-rose-400 shrink-0 mr-2" />
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 flex items-center justify-center hover:bg-white/10 rounded-lg pointer-events-auto active:scale-90 transition-all text-rose-400"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setFormData((prev) => {
+                                          const newDates = [...prev.dates];
+                                          newDates[index] = "";
+                                          return { ...prev, dates: newDates };
+                                        });
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Bebas Button (Only display if date is not currently set) */}
+                            {!d && (
                               <Button
                                 type="button"
                                 className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold h-10 px-3 text-[10px] whitespace-nowrap uppercase tracking-wider rounded-xl transition-all shadow-sm"
@@ -16908,8 +17080,8 @@ function EmployeeLeave({
                               >
                                 Bebas
                               </Button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
                     );

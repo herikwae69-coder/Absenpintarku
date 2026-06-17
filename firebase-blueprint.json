@@ -254,9 +254,26 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["employeeId", "description", "totalAmount", "installment", "remainingAmount", "createdAt"]
+    },
+    "EmployeeChances": {
+      "title": "Employee Chances",
+      "description": "Daily chance counts for employees to open leave request form",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "periodId": { "type": "string" },
+        "chances": { "type": "integer" },
+        "lastReset": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "periodId", "chances"]
     }
   },
   "firestore": {
+    "/employeeChances/{id}": {
+      "schema": "EmployeeChances",
+      "description": "Leave request view chances tracking."
+    },
     "/bonusBerat/{id}": {
       "schema": "BonusBerat",
       "description": "Collection of accumulated berat bonuses"

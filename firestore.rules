@@ -21,6 +21,7 @@ service cloud.firestore {
     // --- COLLECTIONS ---
 
     match /employees/{id} { allow read, write: if true; }
+    match /employeeChances/{id} { allow read, write: if true; }
     match /shifts/{id} { allow read, write: if true; }
     match /sections/{id} { allow read, write: if true; }
     match /divisions/{id} { allow read, write: if true; }
