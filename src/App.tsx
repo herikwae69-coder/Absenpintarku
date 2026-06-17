@@ -16857,8 +16857,8 @@ function EmployeeLeave({
                         </Label>
                         <div className="relative">
                           {d ? (
-                            <div className="flex items-center justify-between field-input text-xs w-full pr-2 text-white overflow-hidden">
-                              <span className="truncate flex-1">{d.startsWith('BEBAS') ? 'TGL BEBAS' : d}</span>
+                            <div className="flex items-center justify-between field-input text-xs w-full pr-2 text-white overflow-hidden h-10">
+                              <span className="truncate flex-1 font-semibold">{d.startsWith('BEBAS') ? '🔴 TGL BEBAS' : d}</span>
                               {isLocked ? (
                                 <LockIcon className="w-4 h-4 text-rose-400 shrink-0" />
                               ) : (
@@ -16866,72 +16866,49 @@ function EmployeeLeave({
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-6 w-6 p-0 shrink-0"
+                                  className="h-8 w-8 p-0 shrink-0 flex items-center justify-center hover:bg-white/10 rounded-lg"
                                   onClick={() => {
                                     const newDates = [...formData.dates];
                                     newDates[index] = "";
                                     setFormData({ ...formData, dates: newDates });
                                   }}
                                 >
-                                  <Trash2 className="h-3 w-3 text-white/50" />
+                                  <Trash2 className="h-4 w-4 text-rose-400" />
                                 </Button>
                               )}
                             </div>
-                          ) : showDateSelector.index === index ? (
+                          ) : (
                             <div className="flex gap-2">
                               <Input
                                 type="date"
-                                className="field-input w-full text-xs text-white bg-white/5 px-2 flex-1 h-10"
+                                className="field-input w-full text-xs text-white bg-white/5 px-2 flex-1 h-10 cursor-pointer placeholder-white/20 select-none"
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   if (val) {
-                                    // Delay setting the value and unmounting to prevent iOS Safari focus collapse & ghost-clicks
-                                    setTimeout(() => {
-                                      setFormData((prev) => {
-                                        const newDates = [...prev.dates];
-                                        newDates[index] = val;
-                                        return { ...prev, dates: newDates };
-                                      });
-                                      setShowDateSelector({index: null});
-                                    }, 400);
+                                    setFormData((prev) => {
+                                      const newDates = [...prev.dates];
+                                      newDates[index] = val;
+                                      return { ...prev, dates: newDates };
+                                    });
                                   }
                                 }}
                               />
                               <Button
                                 type="button"
-                                className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-10 px-3 text-[10px] whitespace-nowrap uppercase tracking-wider rounded-xl"
+                                className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-bold h-10 px-3 text-[10px] whitespace-nowrap uppercase tracking-wider rounded-xl transition-all shadow-sm"
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  // Delay setting to let any pending touches settle first
-                                  setTimeout(() => {
-                                    setFormData((prev) => {
-                                      const newDates = [...prev.dates];
-                                      newDates[index] = "BEBAS_" + Date.now() + "_" + index;
-                                      return { ...prev, dates: newDates };
-                                    });
-                                    setShowDateSelector({index: null});
-                                  }, 300);
+                                  setFormData((prev) => {
+                                    const newDates = [...prev.dates];
+                                    newDates[index] = "BEBAS_" + Date.now() + "_" + index;
+                                    return { ...prev, dates: newDates };
+                                  });
                                 }}
                               >
                                 Bebas
                               </Button>
                             </div>
-                          ) : (
-                            <Button
-                              type="button"
-                              className="field-input text-xs w-full text-white/50 justify-start hover:bg-white/10 h-10"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // Add small delay on iOS before showing date picker to bypass immediate tap collapse
-                                setTimeout(() => {
-                                  setShowDateSelector({index});
-                                }, 150);
-                              }}
-                            >
-                              Pilih Tanggal
-                            </Button>
                           )}
                         </div>
                       </div>
