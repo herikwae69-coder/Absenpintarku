@@ -16741,9 +16741,22 @@ function EmployeeLeave({
     );
   }
 
-  const hasExistingRequest = currentRequests.length > 0;
+  const hasExistingRequest = currentRequests.length > 0 && !showMusicPopup;
 
   if (hasExistingRequest) {
+    const existingReq = currentRequests[0];
+    const requestedDates = existingReq ? (
+      existingReq.dates || [
+        existingReq.date1,
+        existingReq.date2,
+        existingReq.date3,
+        existingReq.date4,
+        existingReq.date5,
+        existingReq.date6,
+      ]
+    ).filter(Boolean).map(d => typeof d === "string" && d.startsWith("BEBAS") ? "Bebas" : d)
+    : [];
+
     return (
       <div className="space-y-6 mt-8 pb-12 text-white">
         <div className="h-full flex flex-col items-center justify-center p-12 mt-12 bg-white/5 rounded-3xl border border-white/10 mx-auto max-w-2xl shadow-2xl relative overflow-hidden text-center">
@@ -16754,12 +16767,25 @@ function EmployeeLeave({
           <h3 className="text-xl font-black text-amber-400 mb-4 tracking-widest relative z-10 select-none">
             AKSES DIBATASI
           </h3>
-          <p className="text-white text-lg font-bold leading-relaxed max-w-md relative z-10 mb-2">
+          <p className="text-white text-lg font-bold leading-relaxed max-w-md relative z-10 mb-2 p-1 bg-amber-500/5 rounded-xl border border-amber-500/15">
             "Anda sudah request libur untuk periode ini. Buat apa masuk lagi."
           </p>
           <p className="text-white/60 text-sm leading-relaxed max-w-md relative z-10 italic">
             "Hubungi Admin jika ingin melakukan perubahan informasi lebih lanjut."
           </p>
+
+          {requestedDates.length > 0 && (
+            <div className="mt-6 p-4 bg-white/5 rounded-2xl border border-white/10 max-w-md w-full relative z-10">
+              <p className="text-white/40 text-[10px] uppercase font-bold tracking-wider mb-2">Tanggal Libur Yang Diajukan :</p>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {requestedDates.map((d, i) => (
+                  <span key={i} className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 font-extrabold rounded-lg text-xs tracking-tight border border-emerald-500/10">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
