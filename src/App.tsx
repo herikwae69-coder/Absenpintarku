@@ -16121,6 +16121,7 @@ function EmployeeLeave({
   const [showAdd, setShowAdd] = useState(false);
   const [showSavingLeaveDialog, setShowSavingLeaveDialog] = useState(false);
   const [savingLeaveTempReason, setSavingLeaveTempReason] = useState("");
+  const [requestsLoaded, setRequestsLoaded] = useState(false);
 
   useEffect(() => {
     const unsub = subscribePeriodControls((data) => {
@@ -16366,12 +16367,7 @@ function EmployeeLeave({
   }, [selectedPeriod, leaveFlowState]);
 
   useEffect(() => {
-    // ONLY fetch data if user has passed the intro/warning and is actually in the form!
-    // This is the CRITICAL STEP to save Firebase read quota.
-    if (leaveFlowState !== "form") return;
-
-    // Listener that synchronizes request additions and Admin deletions in real-time
-    // Fetch ALL requests for THIS employee (cross-division) to ensure accurate carryover
+    if (!employee.id) return;
     const qEmp = query(
       collection(db, "leaveRequests"),
       where("employeeId", "==", employee.id),
@@ -16383,12 +16379,19 @@ function EmployeeLeave({
           (d) => ({ id: d.id, ...d.data() }) as LeaveRequest,
         );
         setRequests(data);
+        setRequestsLoaded(true);
       },
       (err) => {
         console.error("Employee requests error:", err);
-        // If quota exceeded, we might want to alert, but the main app handles the blank screen for total failure
       }
     );
+    return unsubEmp;
+  }, [employee.id]);
+
+  useEffect(() => {
+    // ONLY fetch division-wide requests data if user has passed the intro/warning and is actually in the form!
+    // This is the CRITICAL STEP to save Firebase read quota.
+    if (leaveFlowState !== "form") return;
 
     // Listener for ALL requests in the CURRENT division (for popular dates / quota checks)
     const qDiv = query(
@@ -16407,11 +16410,8 @@ function EmployeeLeave({
       (err) => console.error("Employee leave error:", err),
     );
     
-    return () => {
-      unsubEmp();
-      unsubDiv();
-    };
-  }, [employee.id, employee.division, leaveFlowState]);
+    return unsubDiv;
+  }, [employee.division, leaveFlowState]);
 
   const [allQuotas, setAllQuotas] = useState<any[]>([]);
   useEffect(() => {
@@ -16726,6 +16726,39 @@ function EmployeeLeave({
           <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-widest text-center relative z-10">TIDAK ADA PERIODE REQUEST LIBUR YANG DIBUKA</h3>
           <p className="text-white/50 text-center max-w-md relative z-10 italic">
             Silakan tunggu informasi selanjutnya dari Admin.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!requestsLoaded) {
+    return (
+      <div className="space-y-6 mt-8 pb-12 text-white flex flex-col items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-white/50 text-xs italic mt-4">Memuat informasi request libur...</p>
+      </div>
+    );
+  }
+
+  const hasExistingRequest = currentRequests.length > 0;
+
+  if (hasExistingRequest) {
+    return (
+      <div className="space-y-6 mt-8 pb-12 text-white">
+        <div className="h-full flex flex-col items-center justify-center p-12 mt-12 bg-white/5 rounded-3xl border border-white/10 mx-auto max-w-2xl shadow-2xl relative overflow-hidden text-center">
+          <div className="absolute inset-0 mesh-bg opacity-30 mix-blend-overlay"></div>
+          <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mb-6 ring-8 ring-amber-500/10 relative z-10">
+            <LockIcon className="w-12 h-12 text-amber-400" />
+          </div>
+          <h3 className="text-xl font-black text-amber-400 mb-4 tracking-widest relative z-10 select-none">
+            AKSES DIBATASI
+          </h3>
+          <p className="text-white text-lg font-bold leading-relaxed max-w-md relative z-10 mb-2">
+            "Anda sudah request libur untuk periode ini. Buat apa masuk lagi."
+          </p>
+          <p className="text-white/60 text-sm leading-relaxed max-w-md relative z-10 italic">
+            "Hubungi Admin jika ingin melakukan perubahan informasi lebih lanjut."
           </p>
         </div>
       </div>
