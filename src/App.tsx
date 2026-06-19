@@ -16063,6 +16063,7 @@ function AdminLeave({
             <div className="flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
               {employees.filter(
                 (e) =>
+                  e.isActive !== false &&
                   (e.division || "Depan") === selectedDivision &&
                   e.role !== "admin" &&
                   !requests.some((r) => r.employeeId === e.id),
@@ -16070,6 +16071,7 @@ function AdminLeave({
                 employees
                   .filter(
                     (e) =>
+                      e.isActive !== false &&
                       (e.division || "Depan") === selectedDivision &&
                       e.role !== "admin" &&
                       !requests.some((r) => r.employeeId === e.id),
