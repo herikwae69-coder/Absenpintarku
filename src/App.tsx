@@ -12856,10 +12856,27 @@ function AdminPeriods({
   const combinedPeriods = getCombinedPeriods(controls);
 
   const updateStatus = async (periodId: string, status: string) => {
+    const updateData: any = {
+      status,
+      updatedAt: serverTimestamp(),
+    };
+    if (status === "open") {
+      updateData.bisaEditKembali = true;
+    } else if (status === "closed") {
+      updateData.bisaEditKembali = false;
+    }
+    await setDoc(
+      doc(db, "periodControls", periodId),
+      updateData,
+      { merge: true },
+    );
+  };
+
+  const updateBisaEditKembali = async (periodId: string, value: boolean) => {
     await setDoc(
       doc(db, "periodControls", periodId),
       {
-        status,
+        bisaEditKembali: value,
         updatedAt: serverTimestamp(),
       },
       { merge: true },
@@ -13261,6 +13278,20 @@ function AdminPeriods({
                     }
                   >
                     Tutup
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => updateBisaEditKembali(p.value, !ctrl.bisaEditKembali)}
+                    disabled={ctrl.isPermanentlyClosed}
+                    className={`text-[10px] font-bold h-9 px-3 rounded-md transition-all flex items-center gap-1 ${
+                      ctrl.bisaEditKembali
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/30"
+                        : "bg-white/5 text-white/30 border border-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    {ctrl.bisaEditKembali ? "Edit Karyawan: Buka" : "Edit Karyawan: Kunci"}
                   </Button>
 
                   <Popover>
@@ -14856,10 +14887,27 @@ function AdminLeave({
   });
 
   const updateStatus = async (periodId: string, status: string) => {
+    const updateData: any = {
+      status,
+      updatedAt: serverTimestamp(),
+    };
+    if (status === "open") {
+      updateData.bisaEditKembali = true;
+    } else if (status === "closed") {
+      updateData.bisaEditKembali = false;
+    }
+    await setDoc(
+      doc(db, "periodControls", periodId),
+      updateData,
+      { merge: true },
+    );
+  };
+
+  const updateBisaEditKembali = async (periodId: string, value: boolean) => {
     await setDoc(
       doc(db, "periodControls", periodId),
       {
-        status,
+        bisaEditKembali: value,
         updatedAt: serverTimestamp(),
       },
       { merge: true },
@@ -15685,6 +15733,21 @@ function AdminLeave({
                             </Button>
                          </div>
                          
+                         <Button
+                           size="sm"
+                           variant="ghost"
+                           onClick={() => updateBisaEditKembali(p.value, !ctrl.bisaEditKembali)}
+                           disabled={ctrl.isPermanentlyClosed}
+                           className={`h-8 px-3 rounded-lg text-[10px] font-black tracking-widest transition-all duration-300 flex items-center gap-1.5 ${
+                             ctrl.bisaEditKembali
+                               ? "bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.3)] animate-pulse"
+                               : "bg-white/5 text-white/30 border border-white/10 hover:border-white/20"
+                           }`}
+                         >
+                           <Edit className="w-3 h-3" />
+                           {ctrl.bisaEditKembali ? "KARYAWAN BISA EDIT" : "EDIT KARYAWAN DIKUNCI"}
+                         </Button>
+                         
                          <Popover>
                             <PopoverTrigger
                               render={
@@ -16132,6 +16195,7 @@ function EmployeeLeave({
     return unsub;
   }, []);
   const [showMusicPopup, setShowMusicPopup] = useState(false);
+  const [isSubmittingJustNow, setIsSubmittingJustNow] = useState(false);
   const [musicPopupText, setMusicPopupText] = useState(
     "Silakan ajukan request libur Anda.",
   );
@@ -16467,6 +16531,7 @@ function EmployeeLeave({
   const remainingInPeriod = Math.max(0, periodEffectiveQuota - usedCurrent);
 
   const doSubmit = async (finalSavingLeaveReason: string) => {
+    setIsSubmittingJustNow(true);
     const selectedDates = formData.dates.filter((d: string) => d !== "");
     const isSavingLeave = selectedDates.length < periodEffectiveQuota;
 
@@ -16526,11 +16591,13 @@ function EmployeeLeave({
         setTimeout(() => {
           setShowMusicPopup(false);
           isPostPopupRef.current = false;
+          setIsSubmittingJustNow(false);
           stopMusic();
         }, durationMs);
       } else {
         setShowAdd(false);
         stopMusic();
+        setIsSubmittingJustNow(false);
         const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
         setFormData({
           dates: Array(maxDaysFinal).fill(""),
@@ -16542,6 +16609,7 @@ function EmployeeLeave({
     } else {
       setShowAdd(false);
       stopMusic();
+      setIsSubmittingJustNow(false);
       const maxDaysFinal = periodControl?.maxDaysPerRequest || 6;
       setFormData({
         dates: Array(maxDaysFinal).fill(""),
@@ -16743,10 +16811,24 @@ function EmployeeLeave({
     );
   }
 
-  const hasExistingRequest = currentRequests.length > 0 && !showMusicPopup;
+  const hasExistingRequest = currentRequests.length > 0 && !showMusicPopup && !isPostPopupRef.current && !isSubmittingJustNow && !periodControl?.bisaEditKembali;
 
   if (hasExistingRequest) {
     const existingReq = currentRequests[0];
+    const formatIndoDate = (dStr: string) => {
+      if (!dStr) return "";
+      if (typeof dStr !== "string") return "";
+      if (dStr.startsWith("BEBAS")) return "Bebas";
+      try {
+        const parts = dStr.split("-");
+        if (parts.length === 3) {
+          const dateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          return format(dateObj, "dd MMM yyyy");
+        }
+      } catch (e) {}
+      return dStr;
+    };
+
     const requestedDates = existingReq ? (
       existingReq.dates || [
         existingReq.date1,
@@ -16756,7 +16838,7 @@ function EmployeeLeave({
         existingReq.date5,
         existingReq.date6,
       ]
-    ).filter(Boolean).map(d => typeof d === "string" && d.startsWith("BEBAS") ? "Bebas" : d)
+    ).filter(Boolean).map(formatIndoDate)
     : [];
 
     return (

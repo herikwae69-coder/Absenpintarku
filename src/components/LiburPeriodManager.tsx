@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { db } from "../lib/firebase";
 import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { toast } from "sonner";
-import { Trash2, CheckCircle, Plus, Pencil, X, Save } from "lucide-react";
+import { Trash2, CheckCircle, Plus, Pencil, X, Save, RotateCcw } from "lucide-react";
 import { useDialog } from "../App";
 
 export const LiburPeriodManager: React.FC = () => {
@@ -150,6 +150,23 @@ export const LiburPeriodManager: React.FC = () => {
         } catch (e) {
             console.error(e);
             toast.error("Gagal menutup periode. Silakan coba lagi.");
+        }
+    };
+
+    const handleReactivatePeriod = async (id: string, currentPeriod: any) => {
+        if (!await confirm(`Aktifkan kembali periode "${currentPeriod.name}"? Periode ini akan aktif kembali dan data request libur di periode ini bisa diedit kembali.`)) return;
+        
+        try {
+            await updateDoc(doc(db, "liburPeriods", id), { 
+                status: "active", 
+                reactivatedAt: serverTimestamp() 
+            });
+            
+            fetchPeriods();
+            toast.success(`Periode "${currentPeriod.name}" berhasil diaktifkan kembali.`);
+        } catch (e) {
+            console.error(e);
+            toast.error("Gagal mengaktifkan kembali periode. Silakan coba lagi.");
         }
     };
 
@@ -301,6 +318,15 @@ export const LiburPeriodManager: React.FC = () => {
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-1">
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm"
+                                            className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 bg-emerald-500/10 mr-1"
+                                            onClick={() => handleReactivatePeriod(p.id, p)}
+                                        >
+                                            <RotateCcw className="w-4 h-4 mr-2" />
+                                            Aktifkan Kembali
+                                        </Button>
                                         <Button 
                                             variant="ghost" 
                                             size="icon"
