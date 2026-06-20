@@ -15066,18 +15066,45 @@ function AdminLeave({
     return unsub;
   }, [selectedPeriod, selectedDivision]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     setExportLoading(true);
     try {
       const activePeriod = periodOptions.find(
         (p) => p.value === selectedPeriod,
       );
+
+      // Fetch all quotas and approved/pending leave requests from Firestore to calculate effective quotas
+      const quotasSnap = await getDocs(collection(db, "periodQuotas"));
+      const allQuotas = quotasSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      const leaveRequestsSnap = await getDocs(
+        query(
+          collection(db, "leaveRequests"),
+          where("status", "in", ["approved", "pending"])
+        )
+      );
+      const allLeaveRequests = leaveRequestsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
       const data = requests.map((r) => {
         const dArr = (
           r.dates || [r.date1, r.date2, r.date3, r.date4, r.date5, r.date6]
         ).filter(Boolean);
+        const emp = employees.find(
+          (e) => e.id === r.employeeId || e.name === r.employeeName
+        );
+        const displayName = emp?.nickname || emp?.name || r.employeeName;
+
+        const currentEffectiveQuota = calculateEffectiveQuota(
+          r.employeeId || emp?.id || "",
+          selectedPeriod,
+          periodOptions,
+          controls,
+          allQuotas,
+          allLeaveRequests
+        );
+
         const row: any = {
-          "Nama Karyawan": r.employeeName,
+          "Nama Karyawan": displayName,
           Bagian: sections.find((s) => s.id === r.sectionId)?.name || "-",
           Divisi: r.division,
           Alasan: r.reason,
@@ -15085,15 +15112,32 @@ function AdminLeave({
           Periode: activePeriod?.label || r.period,
         };
 
-        // Add each date into its own cell
+        // Add each date into its own cell and format it as dd-MM if it's a valid date
         for (let i = 0; i < 6; i++) {
           const originalVal = dArr[i];
           if (originalVal && typeof originalVal === "string" && originalVal.startsWith("BEBAS")) {
             row[`Tgl Libur ${i + 1}`] = "BEBAS";
+          } else if (originalVal) {
+            try {
+              const parsed = toDateSafe(originalVal);
+              if (!isNaN(parsed.getTime())) {
+                row[`Tgl Libur ${i + 1}`] = format(parsed, "dd-MM");
+              } else {
+                row[`Tgl Libur ${i + 1}`] = originalVal;
+              }
+            } catch (err) {
+              row[`Tgl Libur ${i + 1}`] = originalVal;
+            }
           } else {
-            row[`Tgl Libur ${i + 1}`] = originalVal || "-";
+            row[`Tgl Libur ${i + 1}`] = "-";
           }
         }
+
+        // Column 7 & Column 8: Jumlah Ambil Libur, Jumlah Libur yg Disimpan
+        const takenDays = dArr.length;
+        const savedDays = Math.max(0, currentEffectiveQuota - takenDays);
+        row["Jumlah Ambil Libur"] = takenDays;
+        row["Jumlah Libur yg Disimpan"] = savedDays;
 
         row["Dibuat Pada"] = r.createdAt
           ? format(toDateSafe(r.createdAt), "dd/MM/yyyy HH:mm")
@@ -15107,6 +15151,8 @@ function AdminLeave({
         wb,
         `Rekap_Liburan_${selectedDivision}_${activePeriod?.label || selectedPeriod}_${format(new Date(), "yyyyMMdd")}.xlsx`,
       );
+    } catch (error) {
+      console.error("Export error:", error);
     } finally {
       setExportLoading(false);
     }
