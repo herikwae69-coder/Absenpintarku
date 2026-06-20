@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { db } from "../lib/firebase";
-import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, deleteDoc, setDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { Trash2, CheckCircle, Plus, Pencil, X, Save, RotateCcw } from "lucide-react";
 import { useDialog } from "../App";
@@ -161,6 +161,13 @@ export const LiburPeriodManager: React.FC = () => {
                 status: "active", 
                 reactivatedAt: serverTimestamp() 
             });
+
+            // Set corresponding periodControl to open state and clear permanent locks
+            await setDoc(doc(db, "periodControls", id), {
+                status: "open",
+                isPermanentlyClosed: false,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
             
             fetchPeriods();
             toast.success(`Periode "${currentPeriod.name}" berhasil diaktifkan kembali.`);

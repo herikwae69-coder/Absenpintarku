@@ -12856,27 +12856,10 @@ function AdminPeriods({
   const combinedPeriods = getCombinedPeriods(controls);
 
   const updateStatus = async (periodId: string, status: string) => {
-    const updateData: any = {
-      status,
-      updatedAt: serverTimestamp(),
-    };
-    if (status === "open") {
-      updateData.bisaEditKembali = true;
-    } else if (status === "closed") {
-      updateData.bisaEditKembali = false;
-    }
-    await setDoc(
-      doc(db, "periodControls", periodId),
-      updateData,
-      { merge: true },
-    );
-  };
-
-  const updateBisaEditKembali = async (periodId: string, value: boolean) => {
     await setDoc(
       doc(db, "periodControls", periodId),
       {
-        bisaEditKembali: value,
+        status,
         updatedAt: serverTimestamp(),
       },
       { merge: true },
@@ -13278,20 +13261,6 @@ function AdminPeriods({
                     }
                   >
                     Tutup
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => updateBisaEditKembali(p.value, !ctrl.bisaEditKembali)}
-                    disabled={ctrl.isPermanentlyClosed}
-                    className={`text-[10px] font-bold h-9 px-3 rounded-md transition-all flex items-center gap-1 ${
-                      ctrl.bisaEditKembali
-                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/30"
-                        : "bg-white/5 text-white/30 border border-white/5 hover:bg-white/10"
-                    }`}
-                  >
-                    {ctrl.bisaEditKembali ? "Edit Karyawan: Buka" : "Edit Karyawan: Kunci"}
                   </Button>
 
                   <Popover>
@@ -14887,27 +14856,10 @@ function AdminLeave({
   });
 
   const updateStatus = async (periodId: string, status: string) => {
-    const updateData: any = {
-      status,
-      updatedAt: serverTimestamp(),
-    };
-    if (status === "open") {
-      updateData.bisaEditKembali = true;
-    } else if (status === "closed") {
-      updateData.bisaEditKembali = false;
-    }
-    await setDoc(
-      doc(db, "periodControls", periodId),
-      updateData,
-      { merge: true },
-    );
-  };
-
-  const updateBisaEditKembali = async (periodId: string, value: boolean) => {
     await setDoc(
       doc(db, "periodControls", periodId),
       {
-        bisaEditKembali: value,
+        status,
         updatedAt: serverTimestamp(),
       },
       { merge: true },
@@ -15135,7 +15087,12 @@ function AdminLeave({
 
         // Add each date into its own cell
         for (let i = 0; i < 6; i++) {
-          row[`Tgl Libur ${i + 1}`] = dArr[i] || "-";
+          const originalVal = dArr[i];
+          if (originalVal && typeof originalVal === "string" && originalVal.startsWith("BEBAS")) {
+            row[`Tgl Libur ${i + 1}`] = "BEBAS";
+          } else {
+            row[`Tgl Libur ${i + 1}`] = originalVal || "-";
+          }
         }
 
         row["Dibuat Pada"] = r.createdAt
@@ -15644,14 +15601,14 @@ function AdminLeave({
                 </Dialog>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {periodOptions.map((p) => {
                   const ctrl = controls[p.value] || { status: "open" };
                   const isCustom = p.value.startsWith("custom_");
                   return (
                       <div
                         key={p.value}
-                        className={`glass-panel p-4 border-white/5 bg-black/40 flex items-center justify-between gap-4 rounded-xl transition-all shadow-xl border-l-4 ${
+                        className={`glass-panel p-4 border-white/5 bg-black/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl transition-all shadow-xl border-l-4 ${
                           ctrl.status === "open"
                             ? "border-l-emerald-500 hover:border-emerald-400"
                             : ctrl.status === "closed"
@@ -15659,7 +15616,7 @@ function AdminLeave({
                               : "border-l-amber-500 hover:border-amber-400"
                         }`}
                       >
-                        <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="flex items-center gap-3 overflow-hidden w-full sm:w-auto">
                           <div
                             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
                               ctrl.status === "open"
@@ -15678,14 +15635,14 @@ function AdminLeave({
                             )}
                           </div>
                           <div className="overflow-hidden min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h4 className={`font-bold truncate ${ctrl.status === 'closed' ? 'text-white/40' : 'text-white'}`}>{p.label}</h4>
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <h4 className={`font-bold truncate max-w-[150px] sm:max-w-none ${ctrl.status === 'closed' ? 'text-white/40' : 'text-white'}`}>{p.label}</h4>
                               {isCustom && (
-                                <Badge className={`border-none text-[8px] h-4 ${ctrl.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/10 text-white/40'}`}>
+                                <Badge className={`border-none text-[8px] h-4 shrink-0 ${ctrl.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/10 text-white/40'}`}>
                                   Custom
                                 </Badge>
                               )}
-                              <Badge className={`border-none text-[8px] h-4 px-1 ${
+                              <Badge className={`border-none text-[8px] h-4 px-1 shrink-0 ${
                                 ctrl.status === "open"
                                   ? "bg-emerald-500 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]"
                                   : ctrl.status === "scheduled"
@@ -15711,7 +15668,7 @@ function AdminLeave({
                           </div>
                         </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start">
                          <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
                             <Button
                               size="sm"
@@ -15733,20 +15690,7 @@ function AdminLeave({
                             </Button>
                          </div>
                          
-                         <Button
-                           size="sm"
-                           variant="ghost"
-                           onClick={() => updateBisaEditKembali(p.value, !ctrl.bisaEditKembali)}
-                           disabled={ctrl.isPermanentlyClosed}
-                           className={`h-8 px-3 rounded-lg text-[10px] font-black tracking-widest transition-all duration-300 flex items-center gap-1.5 ${
-                             ctrl.bisaEditKembali
-                               ? "bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.3)] animate-pulse"
-                               : "bg-white/5 text-white/30 border border-white/10 hover:border-white/20"
-                           }`}
-                         >
-                           <Edit className="w-3 h-3" />
-                           {ctrl.bisaEditKembali ? "KARYAWAN BISA EDIT" : "EDIT KARYAWAN DIKUNCI"}
-                         </Button>
+
                          
                          <Popover>
                             <PopoverTrigger
@@ -16811,7 +16755,7 @@ function EmployeeLeave({
     );
   }
 
-  const hasExistingRequest = currentRequests.length > 0 && !showMusicPopup && !isPostPopupRef.current && !isSubmittingJustNow && !periodControl?.bisaEditKembali;
+  const hasExistingRequest = currentRequests.length > 0 && !showMusicPopup && !isPostPopupRef.current && !isSubmittingJustNow;
 
   if (hasExistingRequest) {
     const existingReq = currentRequests[0];
