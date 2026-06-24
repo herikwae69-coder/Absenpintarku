@@ -347,12 +347,13 @@ const calculateEffectiveQuota = (
   allQuotas: any[],
   allLeaveRequests: any[],
 ) => {
-  const currentIndex = periodOptions.findIndex(
+  const allPeriods = getCombinedPeriods(controls);
+  const currentIndex = allPeriods.findIndex(
     (p) => p.value === selectedPeriodId,
   );
   if (currentIndex === -1) return 4;
 
-  const chain = periodOptions.slice(currentIndex).reverse();
+  const chain = allPeriods.slice(currentIndex).reverse();
   let carryover = 0;
   let finalQuota = 4;
 
@@ -504,7 +505,7 @@ const getPeriodOptions = (
 
 const getCombinedPeriods = (firestoreControls: Record<string, any>) => {
   return Object.entries(firestoreControls)
-    .filter(([id, data]) => !data.hidden && data.name && data.active)
+    .filter(([id, data]) => !data.hidden && data.name)
     .map(([id, data]) => ({
       label: data.name,
       value: id,
